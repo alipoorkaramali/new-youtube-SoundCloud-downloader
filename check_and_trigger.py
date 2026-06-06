@@ -7,16 +7,28 @@ from pathlib import Path
 LOG_URL = "https://raw.githubusercontent.com/alipoorkaramali/youtube-news-watcher/main/logs/new_videos.txt"
 
 # فایل‌های وضعیت
-STATE_FILE = "processed.txt"               # هش لینک‌های پردازش‌شده
-TITLE_STATE_FILE = "processed_titles.txt"  # عناوین دانلودشده (جلوگیری از تکراری)
+STATE_FILE = "processed.txt"
+TITLE_STATE_FILE = "processed_titles.txt"
 
-# اطلاعات مخزن دانلودر
+# اطلاعات مخزن دانلودر (همان مخزن جدید)
 REPO_OWNER = "alipoorkaramali"
-REPO_NAME = "youtube-SoundCloud-downloader"
-WORKFLOW_FILE = "Multi-Platform Downloader-auto🔐.yml"   # <---- تغییر این خط
-GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+REPO_NAME = "new-youtube-SoundCloud-downloader"          # اصلاح شد: اضافه شدن new-
+WORKFLOW_FILE = "Multi-Platform Downloader-auto🔐.yml"
 
-# پوشهٔ مقصد برای دانلودهای خودکار (جدا از دانلودهای دستی)
+# توکن: اولویت با CROSS_REPO_PAT (PAT شخصی) است، در غیر این صورت از GITHUB_TOKEN استفاده می‌شود
+CROSS_REPO_PAT = os.environ.get("CROSS_REPO_PAT")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+
+if CROSS_REPO_PAT:
+    TOKEN = CROSS_REPO_PAT
+    print("✅ استفاده از توکن شخصی (CROSS_REPO_PAT)")
+elif GITHUB_TOKEN:
+    TOKEN = GITHUB_TOKEN
+    print("⚠️ استفاده از GITHUB_TOKEN پیش‌فرض (ممکن است دسترسی کافی نداشته باشد)")
+else:
+    raise Exception("❌ هیچ توکنی در متغیرهای محیطی CROSS_REPO_PAT یا GITHUB_TOKEN یافت نشد")
+
+# پوشهٔ مقصد برای دانلودهای خودکار
 AUTO_FOLDER = "audio_downloads"
 
 
@@ -46,17 +58,11 @@ def add_processed_title(title):
 
 
 def extract_info(line: str):
-    """
-    ساختار خط لاگ:
-    timestamp | platform | عنوان (ممکن است شامل | باشد) | relative_time | url
-    خروجی: (platform, title, url) یا None
-    """
     parts = line.split(" | ")
     if len(parts) < 4:
         return None
 
     platform = parts[1].strip()
-    # اگر platform غیر از youtube/soundcloud بود، از URL حدس بزن
     if platform not in ("youtube", "soundcloud"):
         url = parts[-1].strip()
         if "youtube.com" in url:
@@ -67,7 +73,6 @@ def extract_info(line: str):
             return None
 
     url = parts[-1].strip()
-    # عنوان = بخش‌های میانی تا یکی‌مانده‌به‌آخر (همان relative_time حذف می‌شود)
     title_parts = parts[2:-1]
     title = " | ".join(title_parts).strip() if title_parts else None
 
@@ -81,7 +86,7 @@ def trigger_download(video_url: str):
         f"/actions/workflows/{workflow_id}/dispatches"
     )
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
+        "Authorization": f"Bearer {TOKEN}",        # استفاده از Bearer برای PAT
         "Accept": "application/vnd.github.v3+json"
     }
     payload = {
@@ -90,7 +95,7 @@ def trigger_download(video_url: str):
             "platform": "youtube" if "youtube.com" in video_url else "soundcloud",
             "url": video_url,
             "format": "audio",
-            "folder": AUTO_FOLDER          # 👈 دانلودهای خودکار در audio_downloads
+            "folder": AUTO_FOLDER
         }
     }
     resp = requests.post(url, headers=headers, json=payload)
@@ -122,15 +127,13 @@ def main():
 
         platform, title, video_url = info
 
-        # ۱. بررسی تکراری بودن لینک (با MD5)
         link_hash = hashlib.md5(video_url.encode()).hexdigest()
         if link_hash in processed_hashes:
             continue
 
-        # ۲. بررسی تکراری بودن عنوان (جلوگیری از دانلود یک خبر از دو پلتفرم مختلف)
         if title and title in processed_titles:
             print(f"⏭️ عنوان تکراری از منبع دیگر («{title}») - دانلود نمی‌شود.")
-            processed_hashes.add(link_hash)   # لینک را هم علامت بزنیم که دوباره بررسی نشود
+            processed_hashes.add(link_hash)
             continue
 
         print(f"🎧 پردازش {video_url} (platform={platform}, title={title})")
@@ -140,11 +143,9 @@ def main():
             processed_hashes.add(link_hash)
             if title:
                 processed_titles.add(title)
-                add_processed_title(title)   # بلافاصله در فایل processed_titles.txt ذخیره می‌شود
+                add_processed_title(title)
             new_count += 1
-        # اگر dispatch ناموفق بود، لینک را ذخیره نمی‌کنیم تا دفعهٔ بعد دوباره تلاش شود
 
-    # ذخیرهٔ وضعیت نهایی هش‌ها (processed.txt)
     save_processed_hashes(processed_hashes)
 
     if new_count:
