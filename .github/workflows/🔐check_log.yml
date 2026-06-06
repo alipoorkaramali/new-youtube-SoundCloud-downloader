@@ -1,0 +1,59 @@
+name: 🔐🔎Check RSS Log and Trigger Downloads
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run check script (detects new items)
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python check_and_trigger.py
+
+      - name: Commit updated state files
+        id: commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          touch processed.txt processed_titles.txt
+          git add processed.txt processed_titles.txt
+          if git diff --staged --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            git commit -m "Update processed state"
+            git push
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ========== اضافه شده: فعال‌سازی ورک‌فلوهای رمزگشایی شده ==========
+      - name: 🚀 Trigger updated download workflows (decryption ready)
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # فراخوانی ورک‌فلو اتوماتیک (مخصوص صوت)
+          gh workflow run "Multi-Platform Downloader-auto🔐.yml" --ref main || echo "Workflow auto not found"
+          # فراخوانی ورک‌فلو دستی (برای موارد خاص - می‌توانید غیرفعال کنید)
+          # gh workflow run "Multi-Platform Downloader-costume🔐.yml" --ref main
+          echo "✅ ورک‌فلوهای جدید با پشتیبانی از کوکی رمزگشایی شده فعال شدند."
