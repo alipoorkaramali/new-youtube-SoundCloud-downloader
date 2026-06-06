@@ -1,32 +1,38 @@
-# ================== auto_audio_downloader.py ==================
 import os
-import subprocess
+import re
 import requests
 import hashlib
 from pathlib import Path
 
+# آدرس فایل لاگ در مخزن اسکنر
 LOG_URL = "https://raw.githubusercontent.com/alipoorkaramali/youtube-news-watcher/main/logs/new_videos.txt"
-STATE_FILE = "processed_audio.txt"
-TITLE_STATE_FILE = "processed_titles.txt"
-DEST_FOLDER = "audio_downloads"
 
-# ---------- تنظیمات فراخوانی ورک‌فلو ----------
-TARGET_WORKFLOW_FILENAME = "Multi-Platform Downloader-auto.yml"
-REPO = os.environ.get("GITHUB_REPOSITORY", "alipoorkaramali/youtube-news-watcher")
-GITHUB_TOKEN = os.environ.get("WORKFLOW_DISPATCH_TOKEN")
-REF = "main"
-# ------------------------------------------------
+# فایل‌های وضعیت
+STATE_FILE = "processed.txt"               # هش لینک‌های پردازش‌شده
+TITLE_STATE_FILE = "processed_titles.txt"  # عناوین دانلودشده (جلوگیری از تکراری)
 
-def get_processed():
+# اطلاعات مخزن دانلودر
+REPO_OWNER = "alipoorkaramali"
+REPO_NAME = "youtube-SoundCloud-downloader"
+WORKFLOW_FILE = "Multi-Platform Downloader-auto🔐.yml"
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+
+# پوشهٔ مقصد برای دانلودهای خودکار
+AUTO_FOLDER = "audio_downloads"
+
+
+def load_processed_hashes():
     if not Path(STATE_FILE).exists():
         return set()
     with open(STATE_FILE) as f:
         return set(line.strip() for line in f if line.strip())
 
-def save_processed(hashes):
+
+def save_processed_hashes(hashes):
     with open(STATE_FILE, "w") as f:
         for h in hashes:
             f.write(h + "\n")
+
 
 def load_processed_titles():
     if not Path(TITLE_STATE_FILE).exists():
@@ -34,16 +40,24 @@ def load_processed_titles():
     with open(TITLE_STATE_FILE, encoding='utf-8') as f:
         return set(line.strip() for line in f if line.strip())
 
+
 def add_processed_title(title):
     with open(TITLE_STATE_FILE, "a", encoding='utf-8') as f:
         f.write(title + "\n")
 
-def parse_log_line(line):
+
+def extract_info(line: str):
+    """
+    ساختار خط لاگ:
+    timestamp | platform | عنوان | relative_time | url
+    خروجی: (platform, title, url) یا None
+    """
     parts = line.split(" | ")
     if len(parts) < 4:
-        return None, None, None
+        return None
 
     platform = parts[1].strip()
+    # اگر platform غیر از youtube/soundcloud بود، از URL حدس بزن
     if platform not in ("youtube", "soundcloud"):
         url = parts[-1].strip()
         if "youtube.com" in url:
@@ -51,92 +65,62 @@ def parse_log_line(line):
         elif "soundcloud.com" in url:
             platform = "soundcloud"
         else:
-            return None, None, None
+            return None
 
     url = parts[-1].strip()
+    # عنوان = بخش‌های میانی تا یکی‌مانده‌به‌آخر (relative_time حذف می‌شود)
     title_parts = parts[2:-1]
     title = " | ".join(title_parts).strip() if title_parts else None
 
-    return platform, title, url
+    return (platform, title, url)
 
-def dispatch_workflow(platform, url, folder):
-    if not GITHUB_TOKEN:
-        raise RuntimeError("توکن WORKFLOW_DISPATCH_TOKEN تنظیم نشده است.")
 
-    api_url = f"https://api.github.com/repos/{REPO}/actions/workflows/{TARGET_WORKFLOW_FILENAME}/dispatches"
+def normalize_title(title: str) -> str:
+    """
+    نرمالایز کردن عنوان برای مقایسه بهتر بین یوتیوب و ساندکلاد:
+    - حذف کلمات اضافی مانند (Audio), (Official Video), [lyrics] و ...
+    - حذف کاراکترهای تکراری و فاصله‌های اضافی
+    - تبدیل به حروف کوچک
+    """
+    if not title:
+        return ""
+    # حذف محتوای داخل پرانتز و کروشه
+    title = re.sub(r'\s*[\(\[].*?[\)\]]\s*', ' ', title)
+    # حذف عبارات رایج
+    title = re.sub(r'(?i)\b(audio|official|video|music|clip|lyrics|hd|4k|mp3|download)\b', '', title)
+    # تبدیل چند فاصله به یک فاصله
+    title = re.sub(r'\s+', ' ', title)
+    # حذف فاصله از ابتدا و انتها و تبدیل به lowercase
+    return title.strip().lower()
+
+
+def trigger_download(video_url: str):
+    workflow_id = requests.utils.quote(WORKFLOW_FILE, safe='')
+    url = (
+        f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
+        f"/actions/workflows/{workflow_id}/dispatches"
+    )
     headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
-        "X-GitHub-Api-Version": "2022-11-28"
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
     }
     payload = {
-        "ref": REF,
+        "ref": "main",
         "inputs": {
-            "platform": platform,
+            "platform": "youtube" if "youtube.com" in video_url else "soundcloud",
+            "url": video_url,
             "format": "audio",
-            "url": url,
-            "folder": folder
+            "folder": AUTO_FOLDER
         }
     }
-
-    print(f"🚀 ارسال درخواست دانلود {platform} به ورک‌فلو: {url}")
-    resp = requests.post(api_url, json=payload, headers=headers)
-
+    resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code == 204:
-        print("✅ درخواست با موفقیت ثبت شد.")
+        print(f"✅ دانلود آغاز شد: {video_url}")
         return True
     else:
-        print(f"❌ خطا در فراخوانی ورک‌فلو ({resp.status_code}): {resp.text}")
+        print(f"❌ خطا برای {video_url}: {resp.status_code} {resp.text}")
         return False
 
-def download_audio_directly(platform, url):
-    Path(DEST_FOLDER).mkdir(parents=True, exist_ok=True)
-
-    # ========== اضافه شده: بررسی وجود فایل کوکی برای یوتیوب ==========
-    if platform == "youtube":
-        if not os.path.exists("cookies.txt"):
-            print("❌ خطا: فایل cookies.txt یافت نشد!")
-            print("لطفاً فایل cookies.txt را در همان پوشه برنامه قرار دهید.")
-            print("برای راهنما، فایل cookies.example.txt را ببینید.")
-            return False
-    # =================================================================
-
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-
-    if platform == "youtube":
-        cmd = [
-            "yt-dlp",
-            "-f", "bestaudio[ext=m4a]/bestaudio/best",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-            "--cookies", "cookies.txt",
-            "--user-agent", user_agent,
-            "--force-overwrites",
-            "--no-playlist",
-            url,
-            "-o", f"{DEST_FOLDER}/%(title)s.%(ext)s"
-        ]
-    else:  # soundcloud
-        cmd = [
-            "yt-dlp",
-            "-x",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-            "--no-playlist",
-            "--force-ipv4",
-            "--user-agent", user_agent,
-            url,
-            "-o", f"{DEST_FOLDER}/%(title)s.%(ext)s"
-        ]
-
-    print(f"⬇️ دانلود مستقیم صوت {platform}: {url}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        print("✅ دانلود موفق")
-        return True
-    else:
-        print(f"❌ خطا در دانلود:\n{result.stderr}")
-        return False
 
 def main():
     resp = requests.get(LOG_URL)
@@ -145,56 +129,62 @@ def main():
         return
 
     lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
-    processed_urls = get_processed()
+    processed_hashes = load_processed_hashes()
     processed_titles = load_processed_titles()
 
-    new_dispatches = 0
-    new_downloads = 0
+    # دیکشنری موقت برای عناوین نرمالایز شده در همین اجرا (جلوگیری از دانلود همزمان دو پلتفرم)
+    seen_normalized_titles = set()
+
+    new_count = 0
 
     for line in lines:
-        plat, title, url = parse_log_line(line)
-        if not url:
-            print(f"⚠️ نتوانستم لینکی از خط زیر استخراج کنم:\n{line}")
+        info = extract_info(line)
+        if info is None:
+            print(f"⚠️ نتوانستم اطلاعات را از خط زیر استخراج کنم:\n{line}")
             continue
 
-        url_hash = hashlib.md5(url.encode()).hexdigest()
-        if url_hash in processed_urls:
+        platform, title, video_url = info
+
+        # بررسی تکراری بودن لینک
+        link_hash = hashlib.md5(video_url.encode()).hexdigest()
+        if link_hash in processed_hashes:
             continue
 
+        # نرمالایز کردن عنوان (اگر عنوان داشته باشیم)
+        norm_title = normalize_title(title) if title else None
+
+        # بررسی تکراری بودن عنوان در فایل (اجراهای قبلی)
         if title and title in processed_titles:
-            print(f"⏭️ عنوان تکراری از منبع دیگر: {title}")
-            processed_urls.add(url_hash)
+            print(f"⏭️ عنوان تکراری از منبع دیگر (فایل): {title}")
+            processed_hashes.add(link_hash)
             continue
 
-        if plat == "youtube":
-            success = dispatch_workflow("youtube", url, DEST_FOLDER)
-            if success:
-                processed_urls.add(url_hash)
-                if title:
-                    processed_titles.add(title)
-                    add_processed_title(title)
-                new_dispatches += 1
-            else:
-                print(f"⚠️ ارسال ناموفق، لینک برای اجرای بعدی باقی می‌ماند: {url}")
-        else:
-            success = download_audio_directly(plat, url)
-            if success:
-                processed_urls.add(url_hash)
-                if title:
-                    processed_titles.add(title)
-                    add_processed_title(title)
-                new_downloads += 1
-            else:
-                processed_urls.add(url_hash)
+        # بررسی تکراری بودن عنوان نرمالایز شده در همین اجرا (یوتیوب و ساندکلاد همزمان)
+        if norm_title and norm_title in seen_normalized_titles:
+            print(f"⏭️ عنوان نرمالایز شده تکراری در همین اجرا: '{title}' -> '{norm_title}' - دانلود نمی‌شود.")
+            processed_hashes.add(link_hash)
+            continue
 
-    save_processed(processed_urls)
+        print(f"🎧 پردازش {video_url} (platform={platform}, title={title})")
+        success = trigger_download(video_url)
 
-    if new_dispatches:
-        print(f"🚀 {new_dispatches} درخواست دانلود یوتیوب به ورک‌فلو ارسال شد.")
-    if new_downloads:
-        print(f"🎉 {new_downloads} فایل صوتی (غیر یوتیوب) مستقیماً دانلود شد.")
-    if not new_dispatches and not new_downloads:
-        print("🔄 فایل جدیدی برای دانلود وجود ندارد.")
+        if success:
+            processed_hashes.add(link_hash)
+            if title:
+                processed_titles.add(title)
+                add_processed_title(title)
+            if norm_title:
+                seen_normalized_titles.add(norm_title)
+            new_count += 1
+        # اگر dispatch ناموفق بود، لینک را ذخیره نمی‌کنیم تا دفعهٔ بعد تلاش شود
+
+    save_processed_hashes(processed_hashes)
+
+    if new_count:
+        print(f"🎉 {new_count} ویدیوی جدید پردازش شد.")
+    else:
+        print("🔄 ویدیوی جدیدی برای پردازش وجود ندارد.")
+
 
 if __name__ == "__main__":
     main()
