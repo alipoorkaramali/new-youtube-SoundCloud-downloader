@@ -1,0 +1,219 @@
+name: 🎬🎵🔐👋 NEW3-costume-Multi-Platform Downloader (YouTube + SoundCloud + Split to 30 MB)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '🌐 پلتفرم'
+        required: true
+        default: 'youtube'
+        type: choice
+        options:
+          - 'youtube'
+          - 'soundcloud'
+      url:
+        description: '🔗 لینک ویدئو / آهنگ'
+        required: true
+      format:
+        description: '🎬 خروجی'
+        required: true
+        default: 'video'
+        type: choice
+        options:
+          - 'video'
+          - 'audio'
+      folder:
+        description: '📁 پوشهٔ ذخیره'
+        required: false
+        default: 'downloads'
+
+jobs:
+  download-and-split:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: 📥 دریافت فایل‌های مخزن
+        uses: actions/checkout@v4
+
+      # ============= رمزگشایی فایل کوکی =============
+      - name: 🔐 رمزگشایی فایل cookies.txt.gpg
+        run: |
+          if [ ! -f "cookies.txt.gpg" ]; then
+            echo "❌ خطا: فایل cookies.txt.gpg در مخزن یافت نشد!"
+            exit 1
+          fi
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt cookies.txt.gpg > cookies.txt
+          if [ -s cookies.txt ]; then
+            echo "✅ فایل cookies.txt با موفقیت رمزگشایی شد."
+          else
+            echo "❌ خطا: رمزگشایی ناموفق بود یا فایل کوکی خالی است."
+            exit 1
+          fi
+      # ==============================================
+
+      # ============= نصب و کش yt-dlp و ffmpeg =============
+      - name: ⚙️ نصب yt‑dlp و ffmpeg (با کش خودکار)
+        uses: AnimMouse/setup-yt-dlp@v3
+        with:
+          ejs-node: true
+          aria2: true
+          ffmpeg: true
+      # ====================================================
+
+      - name: 🧹 پاکسازی پوشهٔ دانلود (فقط برای دانلودهای دستی)
+        if: github.event.inputs.folder != 'audio_downloads'
+        run: rm -rf "${{ github.event.inputs.folder }}"/*
+
+      # ================= YouTube =================
+      - name: ▶️ یوتیوب | دانلود ویدئو (MP4)
+        if: github.event.inputs.platform == 'youtube' && github.event.inputs.format == 'video'
+        run: |
+          mkdir -p "${{ github.event.inputs.folder }}"
+          yt-dlp -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" \
+            --merge-output-format mp4 \
+            --cookies cookies.txt \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+            --sleep-interval 5 \
+            --max-sleep-interval 15 \
+            --sleep-requests 2 \
+            --force-overwrites \
+            "${{ github.event.inputs.url }}" \
+            -o "${{ github.event.inputs.folder }}/%(title)s.%(ext)s"
+
+      - name: ▶️ یوتیوب | دانلود صوت (MP3)
+        if: github.event.inputs.platform == 'youtube' && github.event.inputs.format == 'audio'
+        run: |
+          mkdir -p "${{ github.event.inputs.folder }}"
+          yt-dlp -f "bestaudio[ext=m4a]/bestaudio/best" \
+            --audio-format mp3 \
+            --audio-quality 0 \
+            --cookies cookies.txt \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+            --sleep-interval 5 \
+            --max-sleep-interval 15 \
+            --sleep-requests 2 \
+            --force-overwrites \
+            --no-playlist \
+            "${{ github.event.inputs.url }}" \
+            -o "${{ github.event.inputs.folder }}/%(title)s.%(ext)s"
+
+      # ================= SoundCloud =================
+      - name: ☁️ ساندکلاد | دانلود صوت (MP3)
+        if: github.event.inputs.platform == 'soundcloud' && github.event.inputs.format == 'audio'
+        run: |
+          mkdir -p "${{ github.event.inputs.folder }}"
+          yt-dlp -x --audio-format mp3 --audio-quality 0 \
+            --no-playlist \
+            --force-ipv4 \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+            --sleep-interval 5 \
+            --max-sleep-interval 15 \
+            --sleep-requests 2 \
+            "${{ github.event.inputs.url }}" \
+            -o "${{ github.event.inputs.folder }}/%(title)s.%(ext)s"
+
+      - name: ☁️ ساندکلاد | دانلود ویدئو (در صورت وجود)
+        if: github.event.inputs.platform == 'soundcloud' && github.event.inputs.format == 'video'
+        run: |
+          mkdir -p "${{ github.event.inputs.folder }}"
+          yt-dlp -f bestvideo+bestaudio/best --merge-output-format mp4 \
+            --no-playlist \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+            --sleep-interval 5 \
+            --max-sleep-interval 15 \
+            --sleep-requests 2 \
+            "${{ github.event.inputs.url }}" \
+            -o "${{ github.event.inputs.folder }}/%(title)s.%(ext)s"
+
+      # ================= تقسیم فایل‌های بزرگ به قطعات ۳۰ مگابایتی =================
+      - name: ✂️ تقسیم فایل‌های بزرگ (بیشتر از ۳۰MB) به ZIP چندبخشی
+        run: |
+          FOLDER="${{ github.event.inputs.folder }}"
+          # آستانه ۳۰ مگابایت
+          THRESHOLD=$((30 * 1024 * 1024))
+          find "$FOLDER" -type f -size +${THRESHOLD}c \( ! -name "*.zip" -o -name "*.mp4" -o -name "*.m4a" -o -name "*.mp3" \) | while read -r file; do
+            # از فایل‌هایی که قبلاً قطعه‌قطعه شده‌اند صرف نظر کن
+            if [[ "$file" =~ \.z[0-9]+$ ]] || [[ "$file" =~ \.part- ]]; then
+              continue
+            fi
+            SIZE=$(stat -c%s "$file")
+            BASENAME=$(basename "$file")
+            NAME="${BASENAME%.*}"
+            ZIPNAME="$FOLDER/${NAME}.zip"
+            echo "📦 تقسیم $file ($(numfmt --to=iec $SIZE)) به قطعات ۳۰ مگابایتی ..."
+            zip -s 30m -j "$ZIPNAME" "$file"
+            rm "$file"
+            echo "✅ فایل به قطعات ZIP تقسیم شد." > "$FOLDER/${NAME}_README.txt"
+          done
+
+      # ================= ثبت زمان آپلود =================
+      - name: 🕒 ثبت زمان آپلود فایل‌های جدید
+        run: python record_upload_time.py "${{ github.event.inputs.folder }}"
+
+      # ================= ثبت فایل‌ها در مخزن با retry =================
+      - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+          
+          for ((i=1; i<=MAX_RETRIES; i++)); do
+            echo "🔄 تلاش $i از $MAX_RETRIES برای commit و push..."
+            
+            git fetch origin main
+            git stash push --include-untracked -m "costume-stash-$i" || true
+            git reset --hard origin/main
+            git stash pop || true
+            
+            if git status --porcelain | grep -E '^UU.*upload_times_'; then
+              echo "⚠️ کانفلیکت در فایل رکورد زمان. استفاده از نسخه راه‌دور..."
+              git checkout --theirs upload_times_*.txt 2>/dev/null || true
+              git add upload_times_*.txt
+            fi
+            
+            git add "${{ github.event.inputs.folder }}" upload_times_*.txt || true
+            
+            if git diff --staged --quiet; then
+              echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
+              exit 0
+            fi
+            
+            git commit -m "افزودن فایل از ${{ github.event.inputs.platform }}"
+            
+            if git push origin main; then
+              echo "✅ پوش با موفقیت انجام شد."
+              exit 0
+            else
+              echo "⚠️ تداخل در push. ${RETRY_DELAY} ثانیه صبر می‌شود..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ پس از $MAX_RETRIES تلاش، پوش ناموفق بود."
+          exit 1
+
+      # ================= انتشار در Release (اختیاری) =================
+      - name: 📦 انتشار در Release (فایل‌های کوچک)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FILE=$(find "${{ github.event.inputs.folder }}" -maxdepth 1 -type f \( -name "*.mp3" -o -name "*.mp4" \) 2>/dev/null | head -1)
+          if [ -z "$FILE" ]; then
+            echo "فایل یکپارچه‌ای یافت نشد."
+            exit 0
+          fi
+          echo "آپلود فایل یکپارچه: $FILE"
+          if gh release view latest &> /dev/null; then
+            gh release upload latest "$FILE" --clobber
+          else
+            gh release create latest "$FILE" \
+              --title "مجموعه دانلودهای چندمنظوره" \
+              --notes "فایل‌های یکپارچه (زیر 30MB) اینجا قرار می‌گیرند."
+          fi
+          echo "📎 لینک Release: https://github.com/${{ github.repository }}/releases/tag/latest"
