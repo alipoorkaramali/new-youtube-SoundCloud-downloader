@@ -1,0 +1,108 @@
+name: 📥 دانلود اینستاگرام (ذخیره در مخزن)
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  download:
+    if: contains(github.event.comment.body, '/download')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write          # برای push به مخزن
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # برای جلوگیری از مشکلات rebase
+
+      - name: استخراج shortcode
+        id: sc
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          SHORTCODE=$(echo "$COMMENT" | grep -oE '/download[[:space:]]+([A-Za-z0-9_-]+)' | awk '{print $2}')
+          if [ -z "$SHORTCODE" ]; then
+            echo "❌ فرمت صحیح نیست. از /download <shortcode> استفاده کنید."
+            exit 1
+          fi
+          echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
+
+      - name: نصب Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install yt-dlp requests
+
+      - name: دانلود پست (با جستجو در instagram_data)
+        run: python .github/scripts/download_instagram_by_index.py ${{ steps.sc.outputs.shortcode }}
+
+      - name: خواندن نام کاربری از فایل post_info.json
+        id: username
+        run: |
+          SHORTCODE="${{ steps.sc.outputs.shortcode }}"
+          INFO_FILE="instagram_downloads/${SHORTCODE}/post_info.json"
+          if [ -f "$INFO_FILE" ]; then
+            USERNAME=$(jq -r '.username' "$INFO_FILE")
+            echo "username=$USERNAME" >> $GITHUB_OUTPUT
+          else
+            echo "username=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      # ========== commit و push به مخزن ==========
+      - name: بررسی و commit فایل‌های دانلود شده
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          SHORTCODE="${{ steps.sc.outputs.shortcode }}"
+          # فقط فایل‌های مربوط به این shortcode را اضافه کن
+          git add "instagram_downloads/${SHORTCODE}"
+          # اگر تغییری وجود داشت commit کن
+          if git diff --staged --quiet; then
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+            echo "⚠️ هیچ فایل جدیدی برای commit یافت نشد."
+          else
+            git commit -m "📥 افزودن پست اینستاگرام shortcode: ${SHORTCODE}"
+            echo "no_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: push به مخزن
+        if: steps.commit.outputs.no_changes == 'false'
+        run: |
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin ${{ github.ref_name }}
+
+      - name: ساخت لینک فایل در GitHub
+        id: filelink
+        run: |
+          SHORTCODE="${{ steps.sc.outputs.shortcode }}"
+          DOWNLOAD_DIR="instagram_downloads/${SHORTCODE}"
+          # پیدا کردن فایل اصلی (اولین فایل غیر از info.txt و post_info.json)
+          FILE=$(ls -1 "$DOWNLOAD_DIR" | grep -Ev 'info\.txt|post_info\.json' | head -1)
+          if [ -z "$FILE" ]; then
+            echo "link=⚠️ فایلی یافت نشد" >> $GITHUB_OUTPUT
+          else
+            # لینک خام فایل در GitHub
+            REPO="${{ github.repository }}"
+            BRANCH="${{ github.ref_name }}"
+            RAW_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${DOWNLOAD_DIR}/${FILE}"
+            echo "link=${RAW_URL}" >> $GITHUB_OUTPUT
+            echo "filename=${FILE}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment success
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(mktemp)
+          echo "✅ پست ${{ steps.sc.outputs.shortcode }} با موفقیت دانلود و به مخزن اضافه شد." >> $BODY
+          echo "🔗 لینک فایل: ${{ steps.filelink.outputs.link }}" >> $BODY
+          echo "📁 مسیر در مخزن: \`instagram_downloads/${{ steps.username.outputs.username }}/${{ steps.sc.outputs.shortcode }}/\`" >> $BODY
+          gh issue comment "${{ github.event.issue.number }}" --body-file $BODY
+
+      - name: Comment error
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "❌ خطا در shortcode ${{ steps.sc.outputs.shortcode }}. لطفاً لاگ را بررسی کنید."
