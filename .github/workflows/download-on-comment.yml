@@ -51,6 +51,7 @@ jobs:
 
       # ========== commit و push به مخزن ==========
       - name: بررسی و commit فایل‌های دانلود شده
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -69,7 +70,7 @@ jobs:
       - name: push به مخزن
         if: steps.commit.outputs.no_changes == 'false'
         run: |
-          git pull --rebase origin ${{ github.ref_name }}
+          git pull --rebase --autostash origin ${{ github.ref_name }}
           git push origin ${{ github.ref_name }}
 
       - name: ساخت لینک فایل در GitHub
