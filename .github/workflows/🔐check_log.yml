@@ -36,8 +36,10 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          touch processed.txt processed_titles.txt
-          git add processed.txt processed_titles.txt
+          # اطمینان از وجود پوشه State
+          mkdir -p State
+          touch State/processed.txt State/processed_titles.txt
+          git add State/processed.txt State/processed_titles.txt
           if git diff --staged --quiet; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
@@ -46,7 +48,7 @@ jobs:
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
-      # ========== اضافه شده: فعال‌سازی ورک‌فلوهای رمزگشایی شده ==========
+      # ========== فعال‌سازی ورک‌فلوهای رمزگشایی شده ==========
       - name: 🚀 Trigger updated download workflows (decryption ready)
         if: steps.commit.outputs.changed == 'true'
         env:
