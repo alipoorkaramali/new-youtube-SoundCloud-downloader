@@ -129,12 +129,14 @@ def main():
     username = "unknown"
     post_type = ""
     media_urls = []
+    video_url = None
 
     if post:
         post_type = post.get("post_type", "")
         media_urls = post.get("media_urls", [])
+        video_url = post.get("video_url")   # کلیدی برای تشخیص ویدیو
         username = post.get("owner_username", "unknown")
-        print(f"📄 پست در JSON یافت شد. owner: {username}, type: {post_type}, media_urls: {len(media_urls)}")
+        print(f"📄 پست در JSON یافت شد. owner: {username}, type: {post_type}, media_urls: {len(media_urls)}, video_url: {'yes' if video_url else 'no'}")
         metadata = extract_simple_metadata(post)
     else:
         print("⚠️ پست در فایل‌های JSON یافت نشد. مستقیماً به yt-dlp می‌رویم...")
@@ -145,14 +147,14 @@ def main():
     success = False
     method = ""
 
-    # ========== مرحله ۱: اگر عکس یا کاروسل است، از media_urls دانلود کن ==========
-    if post and post_type != "VIDEO" and media_urls:
-        print("📸 پست عکس/کاروسل است – تلاش با media_urls")
+    # ========== مرحله ۱: فقط اگر ویدیو نباشد و media_urls موجود باشد ==========
+    if post and not video_url and media_urls:
+        print("📸 پست عکس/کاروسل است (بدون video_url) – تلاش با media_urls")
         if download_media_urls(media_urls, download_dir, shortcode, post_type):
             success = True
             method = "media_urls"
 
-    # ========== مرحله ۲: در غیر این صورت (ویدیو یا عدم موفقیت مرحله ۱) => yt-dlp بدون کوکی ==========
+    # ========== مرحله ۲: در غیر این صورت (ویدیو یا عدم موفقیت) => yt-dlp بدون کوکی ==========
     if not success:
         print("🔄 مرحله ۲: تلاش با yt-dlp (بدون کوکی)...")
         if download_ytdlp(shortcode, download_dir):
