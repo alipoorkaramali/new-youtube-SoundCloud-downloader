@@ -1,10 +1,11 @@
 import os
-import time
+import sys
 from datetime import datetime, timedelta, timezone
 
 def cleanup(folder):
     safe_name = folder.replace('/', '_')
-    times_file = f"upload_times_{safe_name}.txt"
+    times_file = f"State/upload_times_{safe_name}.txt"
+    
     if not os.path.exists(times_file):
         print("هیچ فایل رکوردی یافت نشد.")
         return
@@ -27,15 +28,14 @@ def cleanup(folder):
                 file_path = os.path.join(folder, fname)
                 if os.path.exists(file_path):
                     to_delete.append(file_path)
-        except:
-            pass
+        except Exception as e:
+            print(f"⚠️ خطا در پردازش خط '{line}': {e}")
 
     for path in to_delete:
         os.remove(path)
         print(f"🗑️ حذف فایل قدیمی: {path}")
 
 if __name__ == "__main__":
-    import sys
     if len(sys.argv) > 1:
         cleanup(sys.argv[1])
     else:
