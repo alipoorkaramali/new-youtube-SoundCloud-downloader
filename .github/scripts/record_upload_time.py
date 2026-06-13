@@ -10,7 +10,10 @@ def main():
     folder = sys.argv[1].rstrip('/')  # حذف اسلش اضافی
     # نام فایل رکورد بر اساس نام پوشه (با جایگزینی / با _)
     safe_folder_name = folder.replace('/', '_')
-    times_file = f"upload_times_{safe_folder_name}.txt"
+    times_file = f"State/upload_times_{safe_folder_name}.txt"
+
+    # اطمینان از وجود پوشه State
+    os.makedirs("State", exist_ok=True)
 
     # خواندن رکوردهای موجود برای این پوشه
     existing = {}
