@@ -29,7 +29,7 @@ jobs:
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python check_and_trigger.py
+        run: python .github/scripts/check_and_trigger.py
 
       - name: Commit updated state files
         id: commit
