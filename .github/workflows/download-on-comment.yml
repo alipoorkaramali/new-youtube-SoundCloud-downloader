@@ -1,50 +1,3 @@
-name: 📥 دانلود اینستاگرام و ذخیره در مخزن
-
-on:
-  issue_comment:
-    types: [created]
-
-jobs:
-  download:
-    if: contains(github.event.comment.body, '/download')
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      contents: write        # برای push به مخزن نیاز است
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: استخراج shortcode
-        id: sc
-        run: |
-          COMMENT="${{ github.event.comment.body }}"
-          SHORTCODE=$(echo "$COMMENT" | grep -oE '/download[[:space:]]+([A-Za-z0-9_-]+)' | awk '{print $2}')
-          if [ -z "$SHORTCODE" ]; then
-            echo "❌ فرمت صحیح نیست. از /download <shortcode> استفاده کنید."
-            exit 1
-          fi
-          echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
-
-      - name: 🔐 رمزگشایی کوکی اینستاگرام از فایل INSTAGRAM_COOKIES.gpg
-        run: |
-          if [ ! -f config/cookies.txt.gpg ]; then
-            echo "⚠️ فایل config/INSTAGRAM_COOKIES.gpg یافت نشد. کوکی در دسترس نیست."
-            exit 0
-          fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/cookies.txt.gpg > cookies.txt
-          if [ ! -s cookies.txt ]; then
-            echo "❌ رمزگشایی کوکی ناموفق بود یا فایل خالی است"
-            exit 1
-          fi
-          echo "✅ کوکی با موفقیت رمزگشایی شد"
-          echo "INSTAGRAM_COOKIES_PATH=$(pwd)/cookies.txt" >> $GITHUB_ENV
-      - name: نصب Python و کتابخانه‌ها
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install --upgrade yt-dlp requests
-
       - name: ایجاد اسکریپت دانلود (فقط caption, like_count, comment_count)
         run: |
           mkdir -p .github/scripts
@@ -171,23 +124,24 @@ jobs:
               if len(sys.argv) != 2:
                   print("Usage: python download_with_fallback.py <shortcode>")
                   sys.exit(1)
+
               shortcode = sys.argv[1]
               print(f"🔍 شروع دانلود برای shortcode: {shortcode}")
 
               post = find_post_by_shortcode(shortcode)
               metadata = None
-              media_urls = []
               username = "unknown"
-              post_type = ""
+              media_urls = []
+              video_url = None
 
               if post:
-                  metadata = extract_simple_metadata(post)
                   media_urls = post.get("media_urls", [])
-                  username = metadata.get("username", "unknown")
-                  post_type = post.get("post_type", "")
-                  print(f"📄 پست در JSON یافت شد. owner: {username}, media_urls: {len(media_urls)}")
+                  video_url = post.get("video_url")
+                  username = post.get("owner_username", "unknown")
+                  print(f"📄 پست در JSON یافت شد. owner: {username}, media_urls: {len(media_urls)}, video_url: {'yes' if video_url else 'no'}")
+                  metadata = extract_simple_metadata(post)
               else:
-                  print("⚠️ پست در فایل‌های JSON یافت نشد. تلاش برای دریافت متادیتا از yt-dlp...")
+                  print("⚠️ پست در فایل‌های JSON یافت نشد. مستقیماً به yt-dlp می‌رویم...")
 
               download_dir = Path("instagram_downloads") / shortcode
               download_dir.mkdir(parents=True, exist_ok=True)
@@ -195,8 +149,10 @@ jobs:
               success = False
               method = ""
 
-              if media_urls:
-                  if download_media_urls(media_urls, download_dir, shortcode, post_type):
+              # فقط اگر ویدیو نباشد و media_urls موجود باشد
+              if post and not video_url and media_urls:
+                  print("📸 پست عکس/کاروسل است – تلاش با media_urls")
+                  if download_media_urls(media_urls, download_dir, shortcode, post.get("post_type", "")):
                       success = True
                       method = "media_urls"
 
@@ -241,57 +197,3 @@ jobs:
               main()
           EOF
           chmod +x .github/scripts/download_with_fallback.py
-
-      - name: دانلود پست (سه مرحله + ذخیره متادیتا)
-        run: python .github/scripts/download_with_fallback.py ${{ steps.sc.outputs.shortcode }}
-
-      - name: خواندن نام کاربری از فایل post_info.json
-        id: username
-        run: |
-          SHORTCODE="${{ steps.sc.outputs.shortcode }}"
-          INFO_FILE="instagram_downloads/${SHORTCODE}/post_info.json"
-          if [ -f "$INFO_FILE" ]; then
-            USERNAME=$(jq -r '.username' "$INFO_FILE")
-            echo "username=$USERNAME" >> $GITHUB_OUTPUT
-          else
-            echo "username=unknown" >> $GITHUB_OUTPUT
-          fi
-
-      # ========== ذخیره فایل‌ها در خود مخزن ==========
-      - name: Commit and push downloaded files
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add instagram_downloads/
-          git diff --staged --quiet || git commit -m "Add downloaded Instagram post ${{ steps.sc.outputs.shortcode }}"
-          git push
-
-      - name: Comment success
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SHORTCODE="${{ steps.sc.outputs.shortcode }}"
-          USERNAME="${{ steps.username.outputs.username }}"
-          REPO="${{ github.repository }}"
-          BRANCH="${{ github.ref_name }}"
-          FOLDER_PATH="instagram_downloads/${SHORTCODE}"
-          # ساخت لینک دایرکت به فایل‌ها (مثلاً اولین فایل)
-          FIRST_FILE=$(ls -1 $FOLDER_PATH | head -1)
-          if [ -n "$FIRST_FILE" ]; then
-            FILE_URL="https://github.com/${REPO}/blob/${BRANCH}/${FOLDER_PATH}/${FIRST_FILE}"
-          else
-            FILE_URL="https://github.com/${REPO}/tree/${BRANCH}/${FOLDER_PATH}"
-          fi
-          BODY=$(mktemp)
-          echo "✅ پست $SHORTCODE با موفقیت در مخزن ذخیره شد." >> $BODY
-          echo "📁 مسیر: \`${FOLDER_PATH}/\`" >> $BODY
-          echo "🔗 مشاهده فایل‌ها: ${FILE_URL}" >> $BODY
-          gh issue comment "${{ github.event.issue.number }}" --body-file $BODY
-
-      - name: Comment error
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh issue comment "${{ github.event.issue.number }}" --body "❌ خطا در shortcode ${{ steps.sc.outputs.shortcode }}. لطفاً لاگ را بررسی کنید."
