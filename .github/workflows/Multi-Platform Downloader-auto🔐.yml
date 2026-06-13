@@ -25,7 +25,11 @@ on:
         description: '📁 پوشهٔ ذخیره'
         required: false
         default: 'downloads'
-
+        
+concurrency:
+  group: main-branch
+  cancel-in-progress: false
+  
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -110,47 +114,50 @@ jobs:
 
       # ================= ثبت فایل‌ها در مخزن با retry و حل کانفلیکت =================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          MAX_RETRIES=5
-          RETRY_DELAY=10
-          
-          for ((i=1; i<=MAX_RETRIES; i++)); do
-            echo "🔄 تلاش $i از $MAX_RETRIES برای commit و push..."
-            
-            git fetch origin main
-            git stash push --include-untracked -m "auto-stash-$i" || true
-            git reset --hard origin/main
-            git stash pop || true
-            
-            if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
-              echo "⚠️ کانفلیکت در فایل رکورد زمان. استفاده از نسخه راه‌دور..."
-              git checkout --theirs State/upload_times_*.txt 2>/dev/null || true
-              git add State/upload_times_*.txt
-            fi
-            
-            git add "Download/${{ github.event.inputs.folder }}" State/upload_times_*.txt || true
-            
-            if git diff --staged --quiet; then
-              echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
-              exit 0
-            fi
-            
-            git commit -m "افزودن فایل از ${{ github.event.inputs.platform }}"
-            
-            if git push origin main; then
-              echo "✅ پوش با موفقیت انجام شد."
-              exit 0
-            else
-              echo "⚠️ تداخل در push. ${RETRY_DELAY} ثانیه صبر می‌شود..."
-              sleep $RETRY_DELAY
-            fi
-          done
-          
-          echo "❌ پس از $MAX_RETRIES تلاش، پوش ناموفق بود."
-          exit 1
+  run: |
+    git config user.name "github-actions[bot]"
+    git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    MAX_RETRIES=5
+    RETRY_DELAY=10
+    
+    for ((i=1; i<=MAX_RETRIES; i++)); do
+      echo "🔄 تلاش $i از $MAX_RETRIES برای commit و push..."
+      
+      git fetch origin main
+      # ذخیره تغییرات محلی (شامل فایل‌های جدید)
+      git stash push --include-untracked -m "auto-stash-$i" || true
+      # دریافت آخرین تغییرات از راه‌دور با rebase (به جای reset hard)
+      git pull --rebase origin main || { echo "⚠️ rebase failed, trying merge"; git pull --no-ff origin main; }
+      # بازیابی تغییرات محلی
+      git stash pop || true
+      
+      if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
+        echo "⚠️ کانفلیکت در فایل رکورد زمان. استفاده از نسخه راه‌دور..."
+        git checkout --theirs State/upload_times_*.txt 2>/dev/null || true
+        git add State/upload_times_*.txt
+      fi
+      
+      git add "Download/${{ github.event.inputs.folder }}" State/upload_times_*.txt || true
+      
+      if git diff --staged --quiet; then
+        echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
+        exit 0
+      fi
+      
+      git commit -m "افزودن فایل از ${{ github.event.inputs.platform }}"
+      
+      if git push origin main; then
+        echo "✅ پوش با موفقیت انجام شد."
+        exit 0
+      else
+        echo "⚠️ تداخل در push. ${RETRY_DELAY} ثانیه صبر می‌شود..."
+        sleep $RETRY_DELAY
+      fi
+    done
+    
+    echo "❌ پس از $MAX_RETRIES تلاش، پوش ناموفق بود."
+    exit 1
 
       - name: 🧹 پاکسازی فایل‌های صوتی کهنه (بیش از ۲۴ ساعت)
         run: python .github/scripts/cleanup_audio.py "Download/${{ github.event.inputs.folder }}"
