@@ -126,28 +126,18 @@ def main():
 
     post = find_post_by_shortcode(shortcode)
     metadata = None
-    media_urls = []
     username = "unknown"
     post_type = ""
-    is_video = False
+    media_urls = []
 
     if post:
         post_type = post.get("post_type", "")
-        # بررسی وجود video_url به عنوان نشانه ویدیو
-        video_url = post.get("video_url")
-        if video_url:
-            is_video = True
-            print("📹 پست ویدیویی است (video_url موجود)؛ مرحله اول رد می‌شود.")
-            media_urls = []   # خالی می‌کنیم تا به yt-dlp برود
-        else:
-            media_urls = post.get("media_urls", [])
-            # اگر media_urls خالی بود ولی شاید ویدیو با پسوند ویدیویی (نادر)
-            pass
+        media_urls = post.get("media_urls", [])
         username = post.get("owner_username", "unknown")
-        print(f"📄 پست در JSON یافت شد. owner: {username}, post_type: {post_type}, media_urls: {len(media_urls)}, is_video: {is_video}")
+        print(f"📄 پست در JSON یافت شد. owner: {username}, type: {post_type}, media_urls: {len(media_urls)}")
         metadata = extract_simple_metadata(post)
     else:
-        print("⚠️ پست در فایل‌های JSON یافت نشد. تلاش برای دریافت متادیتا از yt-dlp...")
+        print("⚠️ پست در فایل‌های JSON یافت نشد. مستقیماً به yt-dlp می‌رویم...")
 
     download_dir = Path("instagram_downloads") / shortcode
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -155,13 +145,14 @@ def main():
     success = False
     method = ""
 
-    # مرحله ۱: فقط اگر media_urls دارد و ویدیو نیست
-    if media_urls and not is_video:
+    # ========== مرحله ۱: اگر عکس یا کاروسل است، از media_urls دانلود کن ==========
+    if post and post_type != "VIDEO" and media_urls:
+        print("📸 پست عکس/کاروسل است – تلاش با media_urls")
         if download_media_urls(media_urls, download_dir, shortcode, post_type):
             success = True
             method = "media_urls"
 
-    # مرحله ۲: yt-dlp بدون کوکی
+    # ========== مرحله ۲: در غیر این صورت (ویدیو یا عدم موفقیت مرحله ۱) => yt-dlp بدون کوکی ==========
     if not success:
         print("🔄 مرحله ۲: تلاش با yt-dlp (بدون کوکی)...")
         if download_ytdlp(shortcode, download_dir):
@@ -170,7 +161,7 @@ def main():
             if metadata is None:
                 metadata = extract_metadata_from_ytdlp(shortcode)
 
-    # مرحله ۳: yt-dlp با کوکی
+    # ========== مرحله ۳: yt-dlp با کوکی ==========
     if not success:
         cookies_path = os.environ.get("INSTAGRAM_COOKIES_PATH")
         if cookies_path and Path(cookies_path).exists():
