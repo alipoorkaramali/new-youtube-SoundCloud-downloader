@@ -6,9 +6,9 @@ from pathlib import Path
 # آدرس فایل لاگ در مخزن اسکنر
 LOG_URL = "https://raw.githubusercontent.com/alipoorkaramali/youtube-news-watcher/main/logs/new_videos.txt"
 
-# فایل‌های وضعیت
-STATE_FILE = "processed.txt"
-TITLE_STATE_FILE = "processed_titles.txt"
+# فایل‌های وضعیت (داخل پوشه State)
+STATE_FILE = "State/processed.txt"
+TITLE_STATE_FILE = "State/processed_titles.txt"
 
 # اطلاعات مخزن دانلودر (همان مخزن جدید)
 REPO_OWNER = "alipoorkaramali"
@@ -30,6 +30,9 @@ else:
 
 # پوشهٔ مقصد برای دانلودهای خودکار
 AUTO_FOLDER = "audio_downloads"
+
+# اطمینان از وجود پوشه State (برای جلوگیری از خطا در اولین اجرا)
+os.makedirs("State", exist_ok=True)
 
 
 def load_processed_hashes():
