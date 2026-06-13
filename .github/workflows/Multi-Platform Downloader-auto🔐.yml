@@ -41,11 +41,11 @@ jobs:
       # ============= رمزگشایی فایل کوکی =============
       - name: 🔐 رمزگشایی فایل cookies.txt.gpg
         run: |
-          if [ ! -f "cookies.txt.gpg" ]; then
+          if [ ! -f "config/cookies.txt.gpg" ]; then
             echo "❌ خطا: فایل cookies.txt.gpg در مخزن یافت نشد!"
             exit 1
           fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt cookies.txt.gpg > cookies.txt
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/cookies.txt.gpg > cookies.txt
           if [ -s cookies.txt ]; then
             echo "✅ فایل cookies.txt با موفقیت رمزگشایی شد."
           else
@@ -65,12 +65,14 @@ jobs:
 
       - name: 🧹 پاکسازی پوشهٔ دانلود (فقط برای دانلودهای دستی)
         if: github.event.inputs.folder != 'audio_downloads'
-        run: rm -rf "${{ github.event.inputs.folder }}"/*
+        run: rm -rf "Download/${{ github.event.inputs.folder }}"/*
 
       - name: ▶️ یوتیوب | دانلود صوت (MP3)
         if: github.event.inputs.platform == 'youtube'
         run: |
-          mkdir -p "${{ github.event.inputs.folder }}"
+          DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
+          mkdir -p "$DOWNLOAD_DIR"
+          yt-dlp ... -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
           yt-dlp -f "bestaudio[ext=m4a]/bestaudio/best" \
             --audio-format mp3 \
             --audio-quality 0 \
@@ -87,7 +89,9 @@ jobs:
       - name: ☁️ ساندکلاد | دانلود صوت (MP3)
         if: github.event.inputs.platform == 'soundcloud'
         run: |
-          mkdir -p "${{ github.event.inputs.folder }}"
+          DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
+          mkdir -p "$DOWNLOAD_DIR"
+          yt-dlp ... -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
           yt-dlp -x --audio-format mp3 --audio-quality 0 \
             --no-playlist \
             --force-ipv4 \
@@ -104,8 +108,7 @@ jobs:
         run: echo "نیازی به تقسیم فایل صوتی نیست"
 
       - name: 🕒 ثبت زمان آپلود فایل‌های جدید
-        run: python record_upload_time.py "${{ github.event.inputs.folder }}"
-
+        run: python record_upload_time.py "Download/${{ github.event.inputs.folder }}"
       # ================= ثبت فایل‌ها در مخزن با retry و حل کانفلیکت =================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت)
         run: |
@@ -123,13 +126,13 @@ jobs:
             git reset --hard origin/main
             git stash pop || true
             
-            if git status --porcelain | grep -E '^UU.*upload_times_'; then
+            if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
               echo "⚠️ کانفلیکت در فایل رکورد زمان. استفاده از نسخه راه‌دور..."
-              git checkout --theirs upload_times_*.txt 2>/dev/null || true
-              git add upload_times_*.txt
+              git checkout --theirs State/upload_times_*.txt 2>/dev/null || true
+              git add State/upload_times_*.txt
             fi
             
-            git add "${{ github.event.inputs.folder }}" upload_times_*.txt || true
+            git add "${{ github.event.inputs.folder }}" State/upload_times_*.txt || true
             
             if git diff --staged --quiet; then
               echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
@@ -151,7 +154,7 @@ jobs:
           exit 1
 
       - name: 🧹 پاکسازی فایل‌های صوتی کهنه (بیش از ۲۴ ساعت)
-        run: python cleanup_audio.py
+        run: python .github/scripts/cleanup_audio.py "Download/${{ github.event.inputs.folder }}"
 
       # ================= مرحله پاکسازی با retry و حل کانفلیکت =================
       - name: 📌 ذخیره‌سازی حذف‌ها (در صورت وجود)
