@@ -28,11 +28,11 @@ jobs:
 
       - name: 🔐 رمزگشایی کوکی اینستاگرام از فایل config/INSTAGRAM_COOKIES.gpg
         run: |
-          if [ ! -f "config/INSTAGRAM_COOKIES.gpg" ]; then
+          if [ ! -f "config/cookies.txt.gpg" ]; then
             echo "⚠️ فایل config/INSTAGRAM_COOKIES.gpg یافت نشد. کوکی در دسترس نیست."
             exit 0
           fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/INSTAGRAM_COOKIES.gpg > cookies.txt
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/cookies.txt.gpg > cookies.txt
           if [ ! -s cookies.txt ]; then
             echo "❌ رمزگشایی کوکی ناموفق بود یا فایل خالی است"
             exit 1
