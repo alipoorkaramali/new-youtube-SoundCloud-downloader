@@ -28,11 +28,11 @@ jobs:
 
       - name: 🔐 رمزگشایی کوکی اینستاگرام از فایل config/INSTAGRAM_COOKIES.gpg
         run: |
-          if [ ! -f "config/cookies.txt.gpg" ]; then
+          if [ ! -f "config/INSTAGRAM_COOKIES.gpg" ]; then
             echo "⚠️ فایل config/INSTAGRAM_COOKIES.gpg یافت نشد. کوکی در دسترس نیست."
             exit 0
           fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/cookies.txt.gpg > cookies.txt
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/INSTAGRAM_COOKIES.gpg > cookies.txt
           if [ ! -s cookies.txt ]; then
             echo "❌ رمزگشایی کوکی ناموفق بود یا فایل خالی است"
             exit 1
@@ -46,7 +46,7 @@ jobs:
           python-version: '3.10'
       - run: pip install --upgrade yt-dlp requests
 
-      - name: ایجاد اسکریپت دانلود (با تشخیص ویدیو و پوشه username)
+      - name: ایجاد اسکریپت دانلود (با تشخیص ویدیو و پوشه username داخل Download)
         run: |
           mkdir -p .github/scripts
           cat > .github/scripts/download_with_fallback.py << 'EOF'
@@ -191,8 +191,8 @@ jobs:
               else:
                   print("⚠️ پست در فایل‌های JSON یافت نشد. مستقیماً به yt-dlp می‌رویم...")
 
-              # ساختار پوشه: instagram_downloads/{username}/{shortcode}
-              download_dir = Path("instagram_downloads") / username / shortcode
+              # ساختار پوشه: Download/instagram_downloads/{username}/{shortcode}
+              download_dir = Path("Download") / "instagram_downloads" / username / shortcode
               download_dir.mkdir(parents=True, exist_ok=True)
 
               success = False
@@ -261,15 +261,15 @@ jobs:
         id: info
         run: |
           SHORTCODE="${{ steps.sc.outputs.shortcode }}"
-          # پیدا کردن مسیر واقعی (با username)
-          USERNAME_DIR=$(find instagram_downloads -maxdepth 2 -type d -name "$SHORTCODE" -printf '%P\n' | head -1)
+          # پیدا کردن مسیر واقعی داخل Download/instagram_downloads
+          USERNAME_DIR=$(find Download/instagram_downloads -maxdepth 2 -type d -name "$SHORTCODE" -printf '%P\n' | head -1)
           if [ -z "$USERNAME_DIR" ]; then
             echo "username=unknown" >> $GITHUB_OUTPUT
-            echo "fullpath=instagram_downloads/unknown/$SHORTCODE" >> $GITHUB_OUTPUT
+            echo "fullpath=Download/instagram_downloads/unknown/$SHORTCODE" >> $GITHUB_OUTPUT
           else
             USERNAME=$(echo "$USERNAME_DIR" | cut -d'/' -f1)
             echo "username=$USERNAME" >> $GITHUB_OUTPUT
-            echo "fullpath=instagram_downloads/$USERNAME_DIR" >> $GITHUB_OUTPUT
+            echo "fullpath=Download/instagram_downloads/$USERNAME_DIR" >> $GITHUB_OUTPUT
           fi
           echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
 
@@ -277,7 +277,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add instagram_downloads/
+          git add Download/instagram_downloads/
           git diff --staged --quiet || git commit -m "Add downloaded Instagram post ${{ steps.sc.outputs.shortcode }}"
           git push
 
@@ -291,7 +291,6 @@ jobs:
           FULLPATH="${{ steps.info.outputs.fullpath }}"
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
-          # پیدا کردن اولین فایل در پوشه برای لینک مستقیم
           FIRST_FILE=$(ls -1 $FULLPATH | head -1)
           if [ -n "$FIRST_FILE" ]; then
             FILE_URL="https://github.com/${REPO}/blob/${BRANCH}/${FULLPATH}/${FIRST_FILE}"
