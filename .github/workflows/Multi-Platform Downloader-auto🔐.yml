@@ -42,7 +42,7 @@ jobs:
       - name: 🔐 رمزگشایی فایل cookies.txt.gpg
         run: |
           if [ ! -f "config/cookies.txt.gpg" ]; then
-            echo "❌ خطا: فایل cookies.txt.gpg در مخزن یافت نشد!"
+            echo "❌ خطا: فایل config/cookies.txt.gpg در مخزن یافت نشد!"
             exit 1
           fi
           gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/cookies.txt.gpg > cookies.txt
@@ -60,7 +60,7 @@ jobs:
         with:
           ejs-node: true
           aria2: true
-          ffmpeg: true          # درست شد
+          ffmpeg: true
       # ====================================================
 
       - name: 🧹 پاکسازی پوشهٔ دانلود (فقط برای دانلودهای دستی)
@@ -72,7 +72,6 @@ jobs:
         run: |
           DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
           mkdir -p "$DOWNLOAD_DIR"
-          yt-dlp ... -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
           yt-dlp -f "bestaudio[ext=m4a]/bestaudio/best" \
             --audio-format mp3 \
             --audio-quality 0 \
@@ -84,14 +83,13 @@ jobs:
             --force-overwrites \
             --no-playlist \
             "${{ github.event.inputs.url }}" \
-            -o "${{ github.event.inputs.folder }}/%(title)s.%(ext)s"
+            -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
       - name: ☁️ ساندکلاد | دانلود صوت (MP3)
         if: github.event.inputs.platform == 'soundcloud'
         run: |
           DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
           mkdir -p "$DOWNLOAD_DIR"
-          yt-dlp ... -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
           yt-dlp -x --audio-format mp3 --audio-quality 0 \
             --no-playlist \
             --force-ipv4 \
@@ -100,15 +98,16 @@ jobs:
             --max-sleep-interval 15 \
             --sleep-requests 2 \
             "${{ github.event.inputs.url }}" \
-            -o "${{ github.event.inputs.folder }}/%(title)s.%(ext)s"
+            -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
-      # این بخش چون format همیشه audio است، ویدئویی وجود ندارد. فقط برای تطابق ساختار قبلی گذاشته شده.
+      # این بخش چون format همیشه audio است، ویدئویی وجود ندارد
       - name: ✂️ تبدیل فایل‌های بزرگ به ZIP (غیرفعال)
         if: false
         run: echo "نیازی به تقسیم فایل صوتی نیست"
 
       - name: 🕒 ثبت زمان آپلود فایل‌های جدید
-        run: python record_upload_time.py "Download/${{ github.event.inputs.folder }}"
+        run: python .github/scripts/record_upload_time.py "Download/${{ github.event.inputs.folder }}"
+
       # ================= ثبت فایل‌ها در مخزن با retry و حل کانفلیکت =================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت)
         run: |
@@ -132,7 +131,7 @@ jobs:
               git add State/upload_times_*.txt
             fi
             
-            git add "${{ github.event.inputs.folder }}" State/upload_times_*.txt || true
+            git add "Download/${{ github.event.inputs.folder }}" State/upload_times_*.txt || true
             
             if git diff --staged --quiet; then
               echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
@@ -172,9 +171,9 @@ jobs:
             git reset --hard origin/main
             git stash pop || true
             
-            if git status --porcelain | grep -E '^UU.*upload_times_'; then
-              git checkout --theirs upload_times_*.txt 2>/dev/null || true
-              git add upload_times_*.txt
+            if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
+              git checkout --theirs State/upload_times_*.txt 2>/dev/null || true
+              git add State/upload_times_*.txt
             fi
             
             git add -A
@@ -198,7 +197,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FILE=$(find "${{ github.event.inputs.folder }}" -maxdepth 1 -type f \( -name "*.mp3" -o -name "*.mp4" \) 2>/dev/null | head -1)
+          DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
+          FILE=$(find "$DOWNLOAD_DIR" -maxdepth 1 -type f \( -name "*.mp3" -o -name "*.mp4" \) 2>/dev/null | head -1)
           if [ -z "$FILE" ]; then
             echo "فایل یکپارچه‌ای یافت نشد؛ از انتشار صرف‌نظر می‌شود."
             exit 0
