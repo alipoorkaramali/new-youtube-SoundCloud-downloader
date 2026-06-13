@@ -1,3 +1,0 @@
-Method: yt-dlp_no_cookie
-Shortcode: DY2HCxxMDUs
-Username: mohammadjavadhosseinii
