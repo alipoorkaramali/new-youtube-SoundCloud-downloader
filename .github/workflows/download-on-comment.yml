@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: write        # برای push به مخزن نیاز است
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
           python-version: '3.10'
       - run: pip install --upgrade yt-dlp requests
 
-      - name: ایجاد اسکریپت دانلود (با تشخیص ویدیو)
+      - name: ایجاد اسکریپت دانلود (با تشخیص ویدیو و پوشه username)
         run: |
           mkdir -p .github/scripts
           cat > .github/scripts/download_with_fallback.py << 'EOF'
@@ -191,7 +191,8 @@ jobs:
               else:
                   print("⚠️ پست در فایل‌های JSON یافت نشد. مستقیماً به yt-dlp می‌رویم...")
 
-              download_dir = Path("instagram_downloads") / shortcode
+              # ساختار پوشه: instagram_downloads/{username}/{shortcode}
+              download_dir = Path("instagram_downloads") / username / shortcode
               download_dir.mkdir(parents=True, exist_ok=True)
 
               success = False
@@ -211,6 +212,8 @@ jobs:
                       method = "yt-dlp_no_cookie"
                       if metadata is None:
                           metadata = extract_metadata_from_ytdlp(shortcode)
+                          if metadata and metadata.get("username"):
+                              username = metadata["username"]
 
               if not success:
                   cookies_path = os.environ.get("INSTAGRAM_COOKIES_PATH")
@@ -221,6 +224,8 @@ jobs:
                           method = "yt-dlp_with_cookie"
                           if metadata is None:
                               metadata = extract_metadata_from_ytdlp(shortcode, cookies_path)
+                              if metadata and metadata.get("username"):
+                                  username = metadata["username"]
                   else:
                       print("⚠️ فایل کوکی در دسترس نیست. مرحله ۳ رد شد.")
 
@@ -236,7 +241,10 @@ jobs:
                   save_metadata(download_dir, metadata)
                   with open(download_dir / "info.txt", "w", encoding="utf-8") as f:
                       f.write(f"Method: {method}\nShortcode: {shortcode}\nUsername: {metadata.get('username')}\n")
-                  print(f"🎉 دانلود نهایی موفق برای {shortcode}")
+                  # نوشتن نام کاربری در فایل مخصوص برای مرحله بعد
+                  with open(download_dir / "username.txt", "w", encoding="utf-8") as f:
+                      f.write(metadata.get("username", "unknown"))
+                  print(f"🎉 دانلود نهایی موفق برای {shortcode} در مسیر {download_dir}")
               else:
                   print(f"💥 همه روش‌ها شکست خوردند: {shortcode}")
                   sys.exit(1)
@@ -249,19 +257,22 @@ jobs:
       - name: دانلود پست (سه مرحله + ذخیره متادیتا)
         run: python .github/scripts/download_with_fallback.py ${{ steps.sc.outputs.shortcode }}
 
-      - name: خواندن نام کاربری از فایل post_info.json
-        id: username
+      - name: خواندن نام کاربری و shortcode از فایل post_info.json
+        id: info
         run: |
           SHORTCODE="${{ steps.sc.outputs.shortcode }}"
-          INFO_FILE="instagram_downloads/${SHORTCODE}/post_info.json"
-          if [ -f "$INFO_FILE" ]; then
-            USERNAME=$(jq -r '.username' "$INFO_FILE")
-            echo "username=$USERNAME" >> $GITHUB_OUTPUT
-          else
+          # پیدا کردن مسیر واقعی (با username)
+          USERNAME_DIR=$(find instagram_downloads -maxdepth 2 -type d -name "$SHORTCODE" -printf '%P\n' | head -1)
+          if [ -z "$USERNAME_DIR" ]; then
             echo "username=unknown" >> $GITHUB_OUTPUT
+            echo "fullpath=instagram_downloads/unknown/$SHORTCODE" >> $GITHUB_OUTPUT
+          else
+            USERNAME=$(echo "$USERNAME_DIR" | cut -d'/' -f1)
+            echo "username=$USERNAME" >> $GITHUB_OUTPUT
+            echo "fullpath=instagram_downloads/$USERNAME_DIR" >> $GITHUB_OUTPUT
           fi
+          echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
 
-      # ========== ذخیره فایل‌ها در خود مخزن ==========
       - name: Commit and push downloaded files
         run: |
           git config user.name "github-actions[bot]"
@@ -276,19 +287,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SHORTCODE="${{ steps.sc.outputs.shortcode }}"
-          USERNAME="${{ steps.username.outputs.username }}"
+          USERNAME="${{ steps.info.outputs.username }}"
+          FULLPATH="${{ steps.info.outputs.fullpath }}"
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
-          FOLDER_PATH="instagram_downloads/${SHORTCODE}"
-          FIRST_FILE=$(ls -1 $FOLDER_PATH | head -1)
+          # پیدا کردن اولین فایل در پوشه برای لینک مستقیم
+          FIRST_FILE=$(ls -1 $FULLPATH | head -1)
           if [ -n "$FIRST_FILE" ]; then
-            FILE_URL="https://github.com/${REPO}/blob/${BRANCH}/${FOLDER_PATH}/${FIRST_FILE}"
+            FILE_URL="https://github.com/${REPO}/blob/${BRANCH}/${FULLPATH}/${FIRST_FILE}"
           else
-            FILE_URL="https://github.com/${REPO}/tree/${BRANCH}/${FOLDER_PATH}"
+            FILE_URL="https://github.com/${REPO}/tree/${BRANCH}/${FULLPATH}"
           fi
           BODY=$(mktemp)
           echo "✅ پست $SHORTCODE با موفقیت در مخزن ذخیره شد." >> $BODY
-          echo "📁 مسیر: \`${FOLDER_PATH}/\`" >> $BODY
+          echo "👤 کاربر: $USERNAME" >> $BODY
+          echo "📁 مسیر: \`${FULLPATH}/\`" >> $BODY
           echo "🔗 مشاهده فایل‌ها: ${FILE_URL}" >> $BODY
           gh issue comment "${{ github.event.issue.number }}" --body-file $BODY
 
