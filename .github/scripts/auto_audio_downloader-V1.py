@@ -7,18 +7,21 @@ from pathlib import Path
 # آدرس فایل لاگ در مخزن اسکنر
 LOG_URL = "https://raw.githubusercontent.com/alipoorkaramali/youtube-news-watcher/main/logs/new_videos.txt"
 
-# فایل‌های وضعیت
-STATE_FILE = "processed.txt"               # هش لینک‌های پردازش‌شده
-TITLE_STATE_FILE = "processed_titles.txt"  # عناوین دانلودشده (جلوگیری از تکراری)
+# فایل‌های وضعیت (داخل پوشه State)
+STATE_FILE = "State/processed.txt"               # هش لینک‌های پردازش‌شده
+TITLE_STATE_FILE = "State/processed_titles.txt"  # عناوین دانلودشده (جلوگیری از تکراری)
 
 # اطلاعات مخزن دانلودر
 REPO_OWNER = "alipoorkaramali"
 REPO_NAME = "youtube-SoundCloud-downloader"
 WORKFLOW_FILE = "Multi-Platform Downloader-auto🔐.yml"
-GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
-# پوشهٔ مقصد برای دانلودهای خودکار
+# پوشهٔ مقصد برای دانلودهای خودکار (در ریشه مخزن)
 AUTO_FOLDER = "audio_downloads"
+
+# اطمینان از وجود پوشه State (برای جلوگیری از خطا در اولین اجرا)
+os.makedirs("State", exist_ok=True)
 
 
 def load_processed_hashes():
@@ -95,6 +98,10 @@ def normalize_title(title: str) -> str:
 
 
 def trigger_download(video_url: str):
+    if not GITHUB_TOKEN:
+        print("❌ GITHUB_TOKEN موجود نیست. اسکریپت باید در GitHub Actions اجرا شود.")
+        return False
+
     workflow_id = requests.utils.quote(WORKFLOW_FILE, safe='')
     url = (
         f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
@@ -123,6 +130,10 @@ def trigger_download(video_url: str):
 
 
 def main():
+    if not GITHUB_TOKEN:
+        print("⚠️ GITHUB_TOKEN تنظیم نشده. خروج.")
+        return
+
     resp = requests.get(LOG_URL)
     if resp.status_code != 200:
         print(f"⚠️ دریافت لاگ ناموفق: {resp.status_code}")
