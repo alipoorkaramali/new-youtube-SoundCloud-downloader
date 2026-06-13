@@ -28,7 +28,7 @@ jobs:
 
       - name: 🔐 رمزگشایی کوکی اینستاگرام از فایل INSTAGRAM_COOKIES.gpg
         run: |
-          if [ ! -f config/INSTAGRAM_COOKIES.gpg ]; then
+          if [ ! -f config/cookies.txt.gpg ]; then
             echo "⚠️ فایل config/INSTAGRAM_COOKIES.gpg یافت نشد. کوکی در دسترس نیست."
             exit 0
           fi
