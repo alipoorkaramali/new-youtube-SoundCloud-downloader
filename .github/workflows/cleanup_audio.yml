@@ -1,4 +1,4 @@
-name: Cleanup old audio files
+name: 🧹Cleanup old audio files
 
 on:
   schedule:
