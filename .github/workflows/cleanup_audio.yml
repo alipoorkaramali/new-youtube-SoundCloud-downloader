@@ -1,72 +1,37 @@
-# وورک‌فلو پاکسازی خودکار فایل‌های صوتی قدیمی (بیش از ۱۲ ساعت)
-# این وورک‌فلو هر ۲۴ ساعت یک بار اجرا می‌شود و فایل‌های صوتی منسوخ شده را حذف می‌کند.
-
-name: 🧹Cleanup old audio files (older than 12 hours)
+name: 🧹Cleanup old audio files
 
 on:
-  # اجرای زمان‌بندی شده: هر روز ساعت 00:00 UTC (هر ۲۴ ساعت)
   schedule:
     - cron: '0 0 * * *'
-  
-  # امکان اجرای دستی از طریق برگه Actions در GitHub
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'حالت Dry-run (فقط نمایش، بدون حذف)'
+        description: 'فقط نمایش (بدون حذف)'
         required: false
         default: false
         type: boolean
       max_age_hours:
-        description: 'حداکثر سن مجاز به ساعت (پیش‌فرض 12)'
+        description: 'حداکثر سن بر حسب ساعت (پیش‌فرض 12)'
         required: false
         default: 12
         type: number
 
 jobs:
   cleanup:
-    name: حذف فایل‌های صوتی قدیمی
     runs-on: ubuntu-latest
-    
     steps:
-      - name: دریافت کد مخزن
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1  # فقط آخرین commit برای سرعت بیشتر
-
-      - name: نصب پایتون
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'  # کش برای وابستگی‌ها (در صورت وجود requirements.txt)
-
-      - name: نصب وابستگی‌ها (در صورت نیاز)
-        run: |
-          # اگر فایل requirements.txt وجود دارد، وابستگی‌ها را نصب کن
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
       - name: اجرای اسکریپت پاکسازی
         run: |
+          CMD="python .github/scripts/cleanup_audio_by_age.py"
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
-            python .github/scripts/cleanup_audio_by_age.py --dry-run
-          elif [[ -n "${{ github.event.inputs.max_age_hours }}" ]]; then
-            # توجه: اسکریپت فعلاً از آرگومان max_age_hours پشتیبانی نمی‌کند،
-            # می‌توانید داخل اسکریپت مقدار را تغییر دهید یا این بخش را حذف کنید.
-            python .github/scripts/cleanup_audio_by_age.py
-          else
-            python .github/scripts/cleanup_audio_by_age.py
+            CMD="$CMD --dry-run"
           fi
-        env:
-          # در صورت نیاز به متغیرهای محیطی (مثلاً برای دیباگ)
-          PYTHONUNBUFFERED: 1
-
-      - name: ذخیره گزارش (اختیاری)
-        if: always()
-        run: |
-          echo "پاکسازی در تاریخ $(date -u '+%Y-%m-%d %H:%M:%S UTC') انجام شد." >> cleanup_log.txt
-      - name: آپلود گزارش (اختیاری)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cleanup-log
-          path: cleanup_log.txt
-          retention-days: 7
+          if [[ -n "${{ github.event.inputs.max_age_hours }}" ]]; then
+            CMD="$CMD --max-age ${{ github.event.inputs.max_age_hours }}"
+          fi
+          echo "Running: $CMD"
+          $CMD
