@@ -1,4 +1,4 @@
-name: Cleanup audio files older than 12 hours
+name: 🧹Cleanup audio files older than 12 hours
 
 on:
   schedule:
