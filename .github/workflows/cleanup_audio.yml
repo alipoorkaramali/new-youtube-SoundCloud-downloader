@@ -38,15 +38,16 @@ jobs:
           fi
           echo "Running: $CMD"
           $CMD
-      - name: Commit changes to upload times file
-        if: github.event.inputs.dry_run != 'true'   # فقط در حالت واقعی
+      - name: Commit changes to upload times file and audio deletions
+        if: github.event.inputs.dry_run != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add State/upload_times_Download_audio_downloads.txt
+          git add -u Download/audio_download   # stage حذف فایل‌های صوتی
           if git diff --cached --quiet; then
-            echo "هیچ تغییری در فایل زمان‌بندی ایجاد نشده است."
+            echo "هیچ تغییری برای commit وجود ندارد."
           else
-            git commit -m "Auto-cleanup: update upload times file (removed old records)"
+            git commit -m "Auto-cleanup: remove old audio files and update upload times"
             git push
           fi
