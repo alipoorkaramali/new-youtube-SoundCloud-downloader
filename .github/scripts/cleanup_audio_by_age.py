@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-اسکریپت حذف فایل‌های صوتی قدیمی (بیش از ۱۲ ساعت)
-بر اساس فایل زمان‌بندی ذخیره شده در State/upload_times_Download_audio_downloads.txt
+اسکریپت حذف فایل‌های صوتی قدیمی (بیش از ۱۲ ساعت) و حذف رکوردهای مربوطه
 """
 
 import os
@@ -12,137 +11,116 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ========== تنظیمات ==========
-# مسیر فایل زمان‌بندی (نسبت به ریشه مخزن)
 TIMES_FILE = Path("State/upload_times_Download_audio_downloads.txt")
-
-# مسیر پوشه حاوی فایل‌های صوتی
 AUDIO_FOLDER = Path("Download/audio_download")
-
-# حداکثر سن مجاز به ساعت (بیشتر از این مقدار حذف می‌شوند)
 MAX_AGE_HOURS = 12
-
-# حالت Dry-run: اگر True باشد، فقط نمایش می‌دهد و هیچ فایلی حذف نمی‌شود
-DRY_RUN = False  # برای اجرای واقعی مقدار False بگذارید
+DRY_RUN = False  # برای اجرای واقعی False بگذارید
 # =============================
 
 
 def cleanup_old_audio(max_age_hours=MAX_AGE_HOURS, dry_run=DRY_RUN):
-    """
-    حذف فایل‌های صوتی که سن آن‌ها بیشتر از max_age_hours ساعت است.
-    
-    Args:
-        max_age_hours (int): حداکثر سن مجاز به ساعت
-        dry_run (bool): اگر True باشد، فقط گزارش می‌دهد و حذف نمی‌کند
-    """
     print("=" * 60)
-    print("پاکسازی خودکار فایل‌های صوتی قدیمی")
+    print("پاکسازی فایل‌های صوتی قدیمی و حذف رکوردها")
     print(f"زمان اجرا: {datetime.now(timezone.utc).isoformat()}")
     print(f"حداکثر سن مجاز: {max_age_hours} ساعت")
     print(f"حالت Dry-run: {dry_run}")
     print("=" * 60)
 
-    # بررسی وجود فایل زمان‌بندی
     if not TIMES_FILE.exists():
         print(f"⚠️ فایل زمان‌بندی یافت نشد: {TIMES_FILE}")
-        print("   (هیچ فایلی برای پاکسازی وجود ندارد)")
         return
 
-    # محاسبه زمان برش (cutoff): زمان فعلی منهای حداکثر سن
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=max_age_hours)
-    print(f"زمان حال (UTC): {now.isoformat()}")
-    print(f"مرز سنی (UTC): {cutoff.isoformat()}")
-    print("-" * 60)
 
-    # خواندن فایل زمان‌بندی
-    try:
-        with open(TIMES_FILE, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except Exception as e:
-        print(f"❌ خطا در خواندن فایل زمان‌بندی: {e}")
-        return
+    # خواندن همه خطوط
+    with open(TIMES_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
-    if not lines:
-        print("⚠️ فایل زمان‌بندی خالی است.")
-        return
-
+    new_lines = []          # خطوطی که باید نگهداری شوند (فایل‌های جوان)
     deleted_count = 0
-    skipped_count = 0
-    error_count = 0
+    removed_records_count = 0
 
-    # پردازش هر خط
-    for line_num, line in enumerate(lines, 1):
+    for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # جداسازی نام فایل و زمان با استفاده از جداکننده " | "
         if " | " not in line:
-            print(f"⚠️ خط {line_num}: فرمت نامعتبر (بدون جداکننده ' | '): {line[:50]}")
-            error_count += 1
+            print(f"⚠️ فرمت نامعتبر (رد شد): {line[:50]}")
+            removed_records_count += 1
             continue
 
         filename, time_str = line.split(" | ", 1)
-        
-        # اعتبارسنجی زمان
         try:
             file_time = datetime.fromisoformat(time_str)
         except Exception as e:
-            print(f"⚠️ خط {line_num}: زمان نامعتبر '{time_str}' - {e}")
-            error_count += 1
+            print(f"⚠️ زمان نامعتبر (رد شد): {line[:50]} - {e}")
+            removed_records_count += 1
             continue
 
-        # محاسبه سن فایل
         age = now - file_time
         age_hours = age.total_seconds() / 3600
-
-        # ساخت مسیر کامل فایل
         file_path = AUDIO_FOLDER / filename
 
-        # تصمیم‌گیری برای حذف یا نگهداری
+        # تصمیم‌گیری
         if file_time < cutoff:
-            # فایل قدیمی‌تر از مرز سنی است
-            if file_path.exists():
-                if not dry_run:
+            # فایل قدیمی است → باید حذف شود (هم فایل صوتی، هم رکورد)
+            if not dry_run:
+                # حذف فایل صوتی اگر وجود داشته باشد
+                if file_path.exists():
                     try:
                         os.remove(file_path)
-                        print(f"🗑️ حذف شد: {file_path} | سن: {age_hours:.1f} ساعت | ثبت: {time_str}")
+                        print(f"🗑️ حذف فایل: {file_path} (سن: {age_hours:.1f} ساعت)")
                         deleted_count += 1
                     except Exception as e:
-                        print(f"❌ خطا در حذف {file_path}: {e}")
-                        error_count += 1
+                        print(f"❌ خطا در حذف فایل {file_path}: {e}")
+                        # حتی اگر حذف فایل خطا داد، باز هم رکورد را حذف می‌کنیم تا دوباره تلاش نکند
                 else:
-                    print(f"🔍 [DRY-RUN] حذف خواهد شد: {file_path} | سن: {age_hours:.1f} ساعت")
-                    deleted_count += 1
+                    print(f"⚠️ فایل از قبل وجود ندارد (حذف رکورد): {file_path}")
+                # رکورد را به new_lines اضافه نمی‌کنیم → حذف می‌شود
+                removed_records_count += 1
             else:
-                print(f"⚠️ فایل وجود ندارد (ممکن است قبلاً حذف شده باشد): {file_path}")
-                skipped_count += 1
+                # حالت dry-run: فقط نمایش
+                print(f"🔍 [DRY-RUN] حذف خواهد شد: فایل {file_path} و رکورد آن (سن: {age_hours:.1f} ساعت)")
+                removed_records_count += 1
+                if file_path.exists():
+                    deleted_count += 1  # فقط برای آمار در dry-run
         else:
-            # فایل جوان‌تر از مرز سنی است
-            print(f"⏳ نگهداری: {file_path} | سن: {age_hours:.1f} ساعت | ثبت: {time_str}")
-            skipped_count += 1
+            # فایل جوان است → نگهداری فایل و رکورد
+            new_lines.append(line)
+            print(f"⏳ نگهداری: {file_path} (سن: {age_hours:.1f} ساعت)")
+
+    # بازنویسی فایل زمان‌بندی با خطوط نگهداری شده (در صورت عدم dry-run)
+    if not dry_run:
+        # ابتدا یک بکاپ (اختیاری) - می‌توانید حذف کنید
+        backup_file = TIMES_FILE.with_suffix(".txt.bak")
+        TIMES_FILE.rename(backup_file)
+        with open(TIMES_FILE, "w", encoding="utf-8") as f:
+            f.writelines(line + "\n" for line in new_lines if line)
+        print(f"📝 فایل زمان‌بندی به‌روزرسانی شد. {len(new_lines)} رکورد باقی ماند.")
+        # حذف بکاپ (یا می‌توانید نگه دارید)
+        if backup_file.exists():
+            os.remove(backup_file)
 
     # گزارش نهایی
     print("-" * 60)
     print("گزارش نهایی:")
-    print(f"  - فایل‌های حذف شده (یا آماده حذف): {deleted_count}")
-    print(f"  - فایل‌های نگهداری شده (جوان‌تر از {max_age_hours} ساعت): {skipped_count}")
-    print(f"  - خطاها / خطوط نامعتبر: {error_count}")
+    print(f"  - فایل‌های صوتی حذف شده: {deleted_count}")
+    print(f"  - رکوردهای حذف شده از فایل زمان‌بندی: {removed_records_count}")
+    print(f"  - رکوردهای باقی‌مانده (فایل‌های جوان): {len(new_lines)}")
     if dry_run:
-        print("⚠️ حالت DRY_RUN فعال بود – هیچ فایلی واقعاً حذف نشد.")
+        print("⚠️ حالت DRY_RUN فعال بود – هیچ تغییری واقعاً اعمال نشد.")
     else:
-        print("✅ پاکسازی با موفقیت انجام شد.")
+        print("✅ پاکسازی و به‌روزرسانی فایل زمان‌بندی با موفقیت انجام شد.")
     print("=" * 60)
 
 
 def main():
-    """نقطه ورودی اصلی"""
-    # پشتیبانی از آرگومان خط فرمان برای تنظیم dry-run
     global DRY_RUN
     if len(sys.argv) > 1 and sys.argv[1].lower() in ["--dry-run", "-n"]:
         DRY_RUN = True
-        print("🔧 حالت Dry-run از طریق آرگومان خط فرمان فعال شد.")
-    
+        print("🔧 حالت Dry-run فعال شد.")
     cleanup_old_audio(max_age_hours=MAX_AGE_HOURS, dry_run=DRY_RUN)
 
 
