@@ -1,4 +1,4 @@
-name: 🧹Cleanup old audio files
+name: Cleanup old audio files
 
 on:
   schedule:
@@ -19,12 +19,15 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # اجازه push به مخزن
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: اجرای اسکریپت پاکسازی
+        id: cleanup
         run: |
           CMD="python .github/scripts/cleanup_audio_by_age.py"
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
@@ -35,3 +38,15 @@ jobs:
           fi
           echo "Running: $CMD"
           $CMD
+      - name: Commit changes to upload times file
+        if: github.event.inputs.dry_run != 'true'   # فقط در حالت واقعی
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add State/upload_times_Download_audio_downloads.txt
+          if git diff --cached --quiet; then
+            echo "هیچ تغییری در فایل زمان‌بندی ایجاد نشده است."
+          else
+            git commit -m "Auto-cleanup: update upload times file (removed old records)"
+            git push
+          fi
