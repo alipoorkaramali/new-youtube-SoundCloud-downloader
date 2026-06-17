@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import os
 import sys
+from waitress import serve
 
 app = Flask(__name__)
 
@@ -30,10 +31,9 @@ def webhook():
     if not url or not platform:
         return jsonify({"error": "Missing 'url' or 'platform'"}), 400
 
-    # فعلاً برای تست
     return jsonify({"message": "Workflow triggered successfully"}), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    print(f"🚀 Starting Flask on port {port}...", file=sys.stderr)
-    app.run(host='0.0.0.0', port=port)
+    print(f"🚀 Starting Waitress on port {port}...", file=sys.stderr)
+    serve(app, host='0.0.0.0', port=port, threads=4)
