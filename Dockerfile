@@ -22,7 +22,5 @@ RUN chmod -R 755 . 2>/dev/null || true
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# دستور پیش‌فرض (بعدا تغییر می‌دیم)
-CMD ["echo", "Railway deployment ready. Configure your start command."]
-
+# دستور اجرای اصلی
 CMD ["python", ".github/scripts/check_and_trigger.py"]
