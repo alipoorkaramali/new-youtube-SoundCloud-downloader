@@ -2,3 +2,5 @@ requests
 PyGithub
 python-dotenv
 schedule
+flask
+requests
