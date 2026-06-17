@@ -4,7 +4,6 @@ import sys
 
 app = Flask(__name__)
 
-# لاگ برای هر درخواست
 @app.before_request
 def log_request():
     print(f"📥 Received: {request.method} {request.path}", file=sys.stderr)
@@ -31,6 +30,7 @@ def webhook():
     if not url or not platform:
         return jsonify({"error": "Missing 'url' or 'platform'"}), 400
 
+    # فعلاً برای تست
     return jsonify({"message": "Workflow triggered successfully"}), 200
 
 if __name__ == '__main__':
