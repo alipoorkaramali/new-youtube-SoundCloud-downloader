@@ -9,5 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# اجرا با Gunicorn (timeout بالا برای اطمینان)
+# اجرا با Gunicorn با timeout 120 ثانیه
 CMD gunicorn --bind 0.0.0.0:$PORT --timeout 120 listener:app
