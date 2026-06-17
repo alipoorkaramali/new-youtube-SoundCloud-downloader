@@ -1,9 +1,9 @@
-name: 🔐🔎Check RSS Log and Trigger Downloads
+name: 🔐🔎Check RSS Log and Trigger Downloads (DISABLED on Railway)
 
-on:
-  schedule:
-    - cron: '*/10 * * * *'
-  workflow_dispatch:
+# on:
+#   schedule:
+#     - cron: '*/10 * * * *'
+#   workflow_dispatch:
 
 permissions:
   contents: write
