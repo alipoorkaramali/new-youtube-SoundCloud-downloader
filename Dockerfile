@@ -9,5 +9,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# ✅ حالا که listener.py در ریشه است، از listener:app استفاده می‌کنیم
 CMD gunicorn --bind 0.0.0.0:$PORT listener:app
