@@ -1,15 +1,12 @@
 from flask import Flask, request, jsonify
-import requests
 import os
 
 app = Flask(__name__)
 
-# فقط یک تابع home داریم
 @app.route('/')
 def home():
     return "✅ Webhook server is running!"
 
-# Webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
@@ -22,8 +19,8 @@ def webhook():
     if not url or not platform:
         return jsonify({"error": "Missing 'url' or 'platform'"}), 400
 
-    # فعلاً برای تست، همینجا پاسخ موفق بده
-    # بعداً کد trigger_download رو اضافه کن
+    # برای تست، همینجا پاسخ موفق می‌دهیم
+    # بعداً کد کامل trigger_download را اضافه می‌کنیم
     return jsonify({"message": "Workflow triggered successfully"}), 200
 
 if __name__ == '__main__':
