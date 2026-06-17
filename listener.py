@@ -29,6 +29,10 @@ def trigger_download():
 def home():
     return "Downloader Listener is running..."
 
+@app.route('/')
+def home():
+    return "✅ Webhook server is running!"
+    
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 Downloader Listener started on port {port}")
