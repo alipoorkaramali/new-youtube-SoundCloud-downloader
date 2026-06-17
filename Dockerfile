@@ -14,8 +14,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # کپی کل پروژه
 COPY . .
 
-# نصب yt-dlp (اگر نیاز است که worker مستقیماً دانلود کند، ولی الان از GitHub Actions استفاده می‌کند، لذا اختیاری است)
-RUN pip install yt-dlp
-
-# دستور اجرا (worker اصلی)
-CMD ["python", "listener.py"]
+# اجرای Webhook Receiver (مسیر درست)
+CMD ["python", ".github/scripts/listener.py"]
