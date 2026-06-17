@@ -8,5 +8,12 @@
     "restartPolicyMaxRetries": 3,
     "healthcheckPath": "/ping",
     "healthcheckTimeout": 10
-  }
+  },
+  "services": [
+    {
+      "type": "web",
+      "name": "webhook-listener",
+      "port": 8080
+    }
+  ]
 }
