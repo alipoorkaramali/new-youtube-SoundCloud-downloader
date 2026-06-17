@@ -18,4 +18,4 @@ COPY . .
 RUN pip install yt-dlp
 
 # دستور اجرا (worker اصلی)
-CMD ["python", ".github/scripts/check_and_trigger.py"]
+CMD ["python", "listener.py"]
