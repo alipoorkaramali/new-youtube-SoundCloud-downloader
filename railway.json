@@ -1,0 +1,10 @@
+{
+  "$schema": "https://railway.app/json-schema.json",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
+  "deploy": {
+    "startCommand": "echo 'Ready - set your actual command later'",
+    "restartPolicy": "ON_FAILURE"
+  }
+}
