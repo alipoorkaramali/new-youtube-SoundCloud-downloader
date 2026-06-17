@@ -4,7 +4,8 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "echo 'Ready - set your actual command later'",
-    "restartPolicy": "ON_FAILURE"
+    "startCommand": "python .github/scripts/check_and_trigger.py",
+    "restartPolicy": "ON_FAILURE",
+    "restartDelay": 30
   }
 }
