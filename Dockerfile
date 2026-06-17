@@ -9,4 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", ".github.scripts.listener:app"]
+# ✅ فرم Shell (درست) - متغیر PORT به‌درستی جایگزین می‌شود
+CMD gunicorn --bind 0.0.0.0:$PORT .github.scripts.listener:app
