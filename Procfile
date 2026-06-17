@@ -1,1 +1,1 @@
-worker: python -c "print('Worker started - configure your main script')"
+worker: python .github/scripts/check_and_trigger.py
