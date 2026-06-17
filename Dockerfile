@@ -24,3 +24,5 @@ ENV PYTHONUNBUFFERED=1 \
 
 # دستور پیش‌فرض (بعدا تغییر می‌دیم)
 CMD ["echo", "Railway deployment ready. Configure your start command."]
+
+CMD ["python", ".github/scripts/check_and_trigger.py"]
