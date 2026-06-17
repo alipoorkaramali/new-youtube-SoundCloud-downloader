@@ -1,0 +1,1 @@
+worker: python -c "print('Worker started - configure your main script')"
