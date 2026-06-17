@@ -8,6 +8,8 @@ def home():
     return "✅ Webhook server is running!"
 
 @app.route('/health')
+@app.route('/healthz')
+@app.route('/ping')
 def health():
     return "OK", 200
 
