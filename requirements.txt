@@ -1,4 +1,4 @@
 requests
 PyGithub
 python-dotenv
-schedule   # اگر بعداً برای cron داخلی نیاز شد
+schedule
