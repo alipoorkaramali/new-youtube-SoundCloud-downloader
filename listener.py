@@ -19,10 +19,10 @@ def webhook():
     if not url or not platform:
         return jsonify({"error": "Missing 'url' or 'platform'"}), 400
 
-    # برای تست، همینجا پاسخ موفق می‌دهیم
-    # بعداً کد کامل trigger_download را اضافه می‌کنیم
+    # برای تست، فقط پیام موفقیت برگردان
     return jsonify({"message": "Workflow triggered successfully"}), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    # استفاده از development server برای اطمینان از اجرا
+    app.run(host='0.0.0.0', port=port, debug=False)
