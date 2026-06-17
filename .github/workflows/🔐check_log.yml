@@ -1,4 +1,8 @@
-name: 🔐🔎Check RSS Log and Trigger Downloads (DISABLED on Railway)
+name: 🔐🔎Check RSS Log and Trigger Downloads (DISABLED - Railway is handling it)
+
+# =============================================
+# این workflow فعلاً غیرفعال شده چون Railway Worker فعال است
+# =============================================
 
 # on:
 #   schedule:
@@ -12,46 +16,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    if: false   # کاملاً غیرفعال
     steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install requests
-        run: pip install requests
-
-      - name: Run check script (detects new items)
-        id: check
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}   # در صورت نیاز
-        run: python .github/scripts/check_and_trigger.py
-
-      - name: Commit updated state files
-        id: commit
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          mkdir -p State
-          touch State/processed.txt State/processed_titles.txt State/normalized_titles.txt State/failed_soundcloud_titles.txt
-          git add State/processed.txt State/processed_titles.txt State/normalized_titles.txt State/failed_soundcloud_titles.txt
-          if git diff --staged --quiet; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            git commit -m "Update processed state, normalized titles, and failed SC titles"
-            git push
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 🚀 Trigger updated download workflows
-        if: steps.commit.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run "Multi-Platform Downloader-auto🔐.yml" --ref main || echo "Workflow auto not found"
-          echo "✅ ورک‌فلوهای جدید با پشتیبانی از کوکی رمزگشایی شده فعال شدند."
+      - name: Disabled workflow
+        run: echo "This workflow is disabled on railway-test branch"
