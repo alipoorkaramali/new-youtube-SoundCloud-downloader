@@ -9,5 +9,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# استفاده از --preload برای بارگذاری اولیه و پاسخ‌دهی سریع‌تر
-CMD gunicorn --bind 0.0.0.0:$PORT --timeout 120 --preload --log-level debug listener:app
+CMD ["python", "listener.py"]
