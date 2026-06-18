@@ -34,7 +34,7 @@ on:
     types: [trigger-download]
 
 concurrency:
-  group: main-branch
+  group: railway-test-branch
   cancel-in-progress: false
 
 jobs:
@@ -162,10 +162,10 @@ jobs:
           for ((i=1; i<=MAX_RETRIES; i++)); do
             echo "🔄 تلاش $i از $MAX_RETRIES برای commit و push..."
       
-            git fetch origin main
-            git pull --rebase origin main || {
+            git fetch origin railway-test
+            git pull --rebase origin railway-test || {
               echo "⚠️ rebase failed, trying merge"
-              git pull --no-ff origin main -X theirs --no-edit || {
+              git pull --no-ff origin railway-test -X theirs --no-edit || {
                 echo "❌ خطا در merge"
                 exit 1
               }
@@ -195,7 +195,7 @@ jobs:
       
             git commit -m "افزودن فایل از ${{ steps.vars.outputs.platform }}"
       
-            if git push origin main; then
+            if git push origin railway-test; then
               echo "✅ پوش با موفقیت انجام شد."
               exit 0
             else
@@ -223,10 +223,10 @@ jobs:
           
           for ((i=1; i<=MAX_RETRIES; i++)); do
             echo "🔄 تلاش $i برای commit پاکسازی..."
-            git fetch origin main
-            git pull --rebase origin main || {
+            git fetch origin railway-test
+            git pull --rebase origin railway-test || {
               echo "⚠️ rebase failed, trying merge"
-              git pull --no-ff origin main -X theirs --no-edit
+              git pull --no-ff origin railway-test -X theirs --no-edit
             }
             
             if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
@@ -249,7 +249,7 @@ jobs:
               exit 0
             fi
             git commit -m "پاکسازی فایل‌های صوتی قدیمی (>24h)"
-            if git push origin main; then
+            if git push origin railway-test; then
               echo "✅ پوش پاکسازی موفق بود."
               exit 0
             else
