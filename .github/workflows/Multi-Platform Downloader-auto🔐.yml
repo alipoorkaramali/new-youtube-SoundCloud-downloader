@@ -146,7 +146,10 @@ jobs:
       - name: 🕒 ثبت زمان آپلود فایل‌های جدید
         if: steps.check.outputs.duplicate == 'false'
         run: python .github/scripts/record_upload_time.py "Download/${{ steps.vars.outputs.folder }}"
-
+      - name: 🐞 نمایش مقدار duplicate
+        run: |
+         echo "duplicate = '${{ steps.check.outputs.duplicate }}'"
+         echo "length = ${#duplicate}"
       # ================= ثبت فایل‌ها در مخزن =================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت)
         if: steps.check.outputs.duplicate == 'false'
