@@ -1,0 +1,1 @@
+worker: python .github/scripts/check_and_trigger.py

@@ -25,11 +25,18 @@ on:
         description: '📁 پوشهٔ ذخیره'
         required: false
         default: 'downloads'
-        
+      keyword:
+        description: '🔑 کلیدواژه (برای تشخیص تکراری)'
+        required: false
+        default: ''
+
+  repository_dispatch:
+    types: [trigger-download]
+
 concurrency:
-  group: main-branch
+  group: railway-test-branch
   cancel-in-progress: false
-  
+
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -67,14 +74,44 @@ jobs:
           ffmpeg: true
       # ====================================================
 
+      # ============= تعیین پارامترها (سازگار با هر دو نوع تریگر) =============
+      - name: 🛠️ تنظیم متغیرها بر اساس نوع رویداد
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "platform=${{ github.event.client_payload.platform }}" >> $GITHUB_OUTPUT
+            echo "url=${{ github.event.client_payload.url }}" >> $GITHUB_OUTPUT
+            echo "folder=${{ github.event.client_payload.mega_folder || 'YoutubeDownloads' }}" >> $GITHUB_OUTPUT
+            echo "format=audio" >> $GITHUB_OUTPUT
+            echo "keyword=${{ github.event.client_payload.keyword }}" >> $GITHUB_OUTPUT
+          else
+            echo "platform=${{ github.event.inputs.platform }}" >> $GITHUB_OUTPUT
+            echo "url=${{ github.event.inputs.url }}" >> $GITHUB_OUTPUT
+            echo "folder=${{ github.event.inputs.folder || 'downloads' }}" >> $GITHUB_OUTPUT
+            echo "format=${{ github.event.inputs.format }}" >> $GITHUB_OUTPUT
+            echo "keyword=${{ github.event.inputs.keyword || '' }}" >> $GITHUB_OUTPUT
+          fi
+      # ==============================================================
+
+      # ============= بررسی تکراری بودن و اولویت ساندکلاد =============
+      - name: 🧐 بررسی تکراری بودن و اولویت ساندکلاد
+        id: check
+        run: |
+          python .github/scripts/duplicate_checker.py
+        env:
+          INPUT_KEYWORD: ${{ steps.vars.outputs.keyword }}
+          INPUT_PLATFORM: ${{ steps.vars.outputs.platform }}
+          INPUT_URL: ${{ steps.vars.outputs.url }}
+      # ================================================================
+
       - name: 🧹 پاکسازی پوشهٔ دانلود (فقط برای دانلودهای دستی)
-        if: github.event.inputs.folder != 'audio_downloads'
-        run: rm -rf "Download/${{ github.event.inputs.folder }}"/*
+        if: github.event_name != 'repository_dispatch' && steps.check.outputs.duplicate == 'false'
+        run: rm -rf "Download/${{ steps.vars.outputs.folder }}"/*
 
       - name: ▶️ یوتیوب | دانلود صوت (MP3)
-        if: github.event.inputs.platform == 'youtube'
+        if: steps.vars.outputs.platform == 'youtube' && steps.check.outputs.duplicate == 'false'
         run: |
-          DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
+          DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
           mkdir -p "$DOWNLOAD_DIR"
           yt-dlp -f "bestaudio[ext=m4a]/bestaudio/best" \
             --audio-format mp3 \
@@ -86,13 +123,13 @@ jobs:
             --sleep-requests 2 \
             --force-overwrites \
             --no-playlist \
-            "${{ github.event.inputs.url }}" \
+            "${{ steps.vars.outputs.url }}" \
             -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
       - name: ☁️ ساندکلاد | دانلود صوت (MP3)
-        if: github.event.inputs.platform == 'soundcloud'
+        if: steps.vars.outputs.platform == 'soundcloud' && steps.check.outputs.duplicate == 'false'
         run: |
-          DOWNLOAD_DIR="Download/${{ github.event.inputs.folder }}"
+          DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
           mkdir -p "$DOWNLOAD_DIR"
           yt-dlp -x --audio-format mp3 --audio-quality 0 \
             --no-playlist \
@@ -101,19 +138,20 @@ jobs:
             --sleep-interval 5 \
             --max-sleep-interval 15 \
             --sleep-requests 2 \
-            "${{ github.event.inputs.url }}" \
+            "${{ steps.vars.outputs.url }}" \
             -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
-      # این بخش چون format همیشه audio است، ویدئویی وجود ندارد
       - name: ✂️ تبدیل فایل‌های بزرگ به ZIP (غیرفعال)
         if: false
         run: echo "نیازی به تقسیم فایل صوتی نیست"
 
       - name: 🕒 ثبت زمان آپلود فایل‌های جدید
-        run: python .github/scripts/record_upload_time.py "Download/${{ github.event.inputs.folder }}"
+        if: steps.check.outputs.duplicate == 'false'
+        run: python .github/scripts/record_upload_time.py "Download/${{ steps.vars.outputs.folder }}"
 
       # ================= ثبت فایل‌ها در مخزن با retry و حل کانفلیکت =================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت - نسخه اصلاح شده)
+        if: steps.check.outputs.duplicate == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -124,27 +162,22 @@ jobs:
           for ((i=1; i<=MAX_RETRIES; i++)); do
             echo "🔄 تلاش $i از $MAX_RETRIES برای commit و push..."
       
-            git fetch origin main
-            # دریافت آخرین تغییرات با rebase (بدون stash)
-            git pull --rebase origin main || {
+            git fetch origin railway-test
+            git pull --rebase origin railway-test || {
               echo "⚠️ rebase failed, trying merge"
-              git pull --no-ff origin main -X theirs --no-edit || {
+              git pull --no-ff origin railway-test -X theirs --no-edit || {
                 echo "❌ خطا در merge"
                 exit 1
               }
             }
       
-            # اگر کانفلیکت در فایل زمان وجود دارد، خطوط را ادغام کنیم
             if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
               echo "⚠️ کانفلیکت در فایل رکورد زمان. ادغام خطوط..."
-              # برای هر فایل زمان با کانفلیکت:
               for f in State/upload_times_*.txt; do
                 if [ -f "$f" ]; then
-                  # استخراج نسخه محلی و راه‌دور
                   git show :1:"$f" > "$f.base" 2>/dev/null || true
                   git show :2:"$f" > "$f.local" 2>/dev/null || true
                   git show :3:"$f" > "$f.remote" 2>/dev/null || true
-                  # ترکیب ساده: همه خطوط از local + remote (بدون تکرار)
                   cat "$f.local" "$f.remote" 2>/dev/null | sort -u > "$f.merged"
                   mv "$f.merged" "$f"
                   rm -f "$f.base" "$f.local" "$f.remote"
@@ -153,16 +186,16 @@ jobs:
               done
             fi
       
-            git add "Download/${{ github.event.inputs.folder }}" State/upload_times_*.txt || true
+            git add "Download/${{ steps.vars.outputs.folder }}" State/upload_times_*.txt || true
       
             if git diff --staged --quiet; then
               echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
               exit 0
             fi
       
-            git commit -m "افزودن فایل از ${{ github.event.inputs.platform }}"
+            git commit -m "افزودن فایل از ${{ steps.vars.outputs.platform }}"
       
-            if git push origin main; then
+            if git push origin railway-test; then
               echo "✅ پوش با موفقیت انجام شد."
               exit 0
             else
@@ -173,11 +206,14 @@ jobs:
     
           echo "❌ پس از $MAX_RETRIES تلاش، پوش ناموفق بود."
           exit 1
+
       - name: 🧹 پاکسازی فایل‌های صوتی کهنه (بیش از ۲۴ ساعت)
-        run: python .github/scripts/cleanup_audio.py "Download/${{ github.event.inputs.folder }}"
+        if: steps.check.outputs.duplicate == 'false'
+        run: python .github/scripts/cleanup_audio.py "Download/${{ steps.vars.outputs.folder }}"
 
       # ================= مرحله پاکسازی با retry و حل کانفلیکت =================
       - name: 📌 ذخیره‌سازی حذف‌ها (در صورت وجود) - نسخه اصلاح شده
+        if: steps.check.outputs.duplicate == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -187,14 +223,12 @@ jobs:
           
           for ((i=1; i<=MAX_RETRIES; i++)); do
             echo "🔄 تلاش $i برای commit پاکسازی..."
-            git fetch origin main
-            # به جای reset --hard، از rebase استفاده می‌کنیم
-            git pull --rebase origin main || {
+            git fetch origin railway-test
+            git pull --rebase origin railway-test || {
               echo "⚠️ rebase failed, trying merge"
-              git pull --no-ff origin main -X theirs --no-edit
+              git pull --no-ff origin railway-test -X theirs --no-edit
             }
             
-            # حل کانفلیکت فایل زمان در صورت وجود
             if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
               echo "⚠️ کانفلیکت در فایل رکورد زمان. ادغام خطوط..."
               for f in State/upload_times_*.txt; do
@@ -215,7 +249,7 @@ jobs:
               exit 0
             fi
             git commit -m "پاکسازی فایل‌های صوتی قدیمی (>24h)"
-            if git push origin main; then
+            if git push origin railway-test; then
               echo "✅ پوش پاکسازی موفق بود."
               exit 0
             else
@@ -225,3 +259,14 @@ jobs:
           done
           echo "❌ پس از تلاش مجدد، پوش پاکسازی ناموفق بود."
           exit 1
+
+      # ================= ثبت آیتم جدید در لیست دانلود شده‌ها =================
+      - name: 📝 ثبت آیتم جدید در لیست دانلود شده‌ها
+        if: steps.check.outputs.duplicate == 'false'
+        run: |
+          python .github/scripts/add_downloaded_item.py
+        env:
+          INPUT_KEYWORD: ${{ steps.vars.outputs.keyword }}
+          INPUT_PLATFORM: ${{ steps.vars.outputs.platform }}
+          INPUT_URL: ${{ steps.vars.outputs.url }}
+      # ========================================================================
