@@ -25,8 +25,11 @@ on:
         description: '📁 پوشهٔ ذخیره'
         required: false
         default: 'downloads'
+      keyword:
+        description: '🔑 کلیدواژه (برای تشخیص تکراری)'
+        required: false
+        default: ''
 
-  # 👇 اضافه شده برای دریافت درخواست از اسکنر
   repository_dispatch:
     types: [trigger-download]
 
@@ -79,21 +82,34 @@ jobs:
             echo "platform=${{ github.event.client_payload.platform }}" >> $GITHUB_OUTPUT
             echo "url=${{ github.event.client_payload.url }}" >> $GITHUB_OUTPUT
             echo "folder=${{ github.event.client_payload.mega_folder || 'YoutubeDownloads' }}" >> $GITHUB_OUTPUT
-            echo "format=audio" >> $GITHUB_OUTPUT   # مقدار ثابت چون فقط صوتی است
+            echo "format=audio" >> $GITHUB_OUTPUT
+            echo "keyword=${{ github.event.client_payload.keyword }}" >> $GITHUB_OUTPUT
           else
             echo "platform=${{ github.event.inputs.platform }}" >> $GITHUB_OUTPUT
             echo "url=${{ github.event.inputs.url }}" >> $GITHUB_OUTPUT
             echo "folder=${{ github.event.inputs.folder || 'downloads' }}" >> $GITHUB_OUTPUT
             echo "format=${{ github.event.inputs.format }}" >> $GITHUB_OUTPUT
+            echo "keyword=${{ github.event.inputs.keyword || '' }}" >> $GITHUB_OUTPUT
           fi
       # ==============================================================
 
+      # ============= بررسی تکراری بودن و اولویت ساندکلاد =============
+      - name: 🧐 بررسی تکراری بودن و اولویت ساندکلاد
+        id: check
+        run: |
+          python .github/scripts/duplicate_checker.py
+        env:
+          INPUT_KEYWORD: ${{ steps.vars.outputs.keyword }}
+          INPUT_PLATFORM: ${{ steps.vars.outputs.platform }}
+          INPUT_URL: ${{ steps.vars.outputs.url }}
+      # ================================================================
+
       - name: 🧹 پاکسازی پوشهٔ دانلود (فقط برای دانلودهای دستی)
-        if: github.event_name != 'repository_dispatch'
+        if: github.event_name != 'repository_dispatch' && steps.check.outputs.duplicate == 'false'
         run: rm -rf "Download/${{ steps.vars.outputs.folder }}"/*
 
       - name: ▶️ یوتیوب | دانلود صوت (MP3)
-        if: steps.vars.outputs.platform == 'youtube'
+        if: steps.vars.outputs.platform == 'youtube' && steps.check.outputs.duplicate == 'false'
         run: |
           DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
           mkdir -p "$DOWNLOAD_DIR"
@@ -111,7 +127,7 @@ jobs:
             -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
       - name: ☁️ ساندکلاد | دانلود صوت (MP3)
-        if: steps.vars.outputs.platform == 'soundcloud'
+        if: steps.vars.outputs.platform == 'soundcloud' && steps.check.outputs.duplicate == 'false'
         run: |
           DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
           mkdir -p "$DOWNLOAD_DIR"
@@ -125,16 +141,17 @@ jobs:
             "${{ steps.vars.outputs.url }}" \
             -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
-      # این بخش چون format همیشه audio است، ویدئویی وجود ندارد (غیرفعال)
       - name: ✂️ تبدیل فایل‌های بزرگ به ZIP (غیرفعال)
         if: false
         run: echo "نیازی به تقسیم فایل صوتی نیست"
 
       - name: 🕒 ثبت زمان آپلود فایل‌های جدید
+        if: steps.check.outputs.duplicate == 'false'
         run: python .github/scripts/record_upload_time.py "Download/${{ steps.vars.outputs.folder }}"
 
       # ================= ثبت فایل‌ها در مخزن با retry و حل کانفلیکت =================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت - نسخه اصلاح شده)
+        if: steps.check.outputs.duplicate == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -191,10 +208,12 @@ jobs:
           exit 1
 
       - name: 🧹 پاکسازی فایل‌های صوتی کهنه (بیش از ۲۴ ساعت)
+        if: steps.check.outputs.duplicate == 'false'
         run: python .github/scripts/cleanup_audio.py "Download/${{ steps.vars.outputs.folder }}"
 
       # ================= مرحله پاکسازی با retry و حل کانفلیکت =================
       - name: 📌 ذخیره‌سازی حذف‌ها (در صورت وجود) - نسخه اصلاح شده
+        if: steps.check.outputs.duplicate == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -240,3 +259,14 @@ jobs:
           done
           echo "❌ پس از تلاش مجدد، پوش پاکسازی ناموفق بود."
           exit 1
+
+      # ================= ثبت آیتم جدید در لیست دانلود شده‌ها =================
+      - name: 📝 ثبت آیتم جدید در لیست دانلود شده‌ها
+        if: steps.check.outputs.duplicate == 'false'
+        run: |
+          python .github/scripts/add_downloaded_item.py
+        env:
+          INPUT_KEYWORD: ${{ steps.vars.outputs.keyword }}
+          INPUT_PLATFORM: ${{ steps.vars.outputs.platform }}
+          INPUT_URL: ${{ steps.vars.outputs.url }}
+      # ========================================================================
