@@ -1,1 +1,1 @@
-worker: python .github/scripts/check_and_trigger.py
+worker: python run_checker.py
