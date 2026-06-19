@@ -7,7 +7,6 @@ import time
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
-# دریافت از متغیرهای محیطی (Secrets + ورودی‌های workflow)
 APIFY_TOKEN = os.environ['APIFY_TOKEN']
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
@@ -15,14 +14,13 @@ START_ID = int(os.environ.get('START_ID', '0'))
 
 ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
 
-# مسیر ذخیره‌سازی مطابق خواسته‌ی شما
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
 
 def download_file(url, save_path):
-    """دانلود فایل با ۳ بار تلاش در صورت خطا"""
+    """دانلود فایل با ۳ تلاش"""
     for attempt in range(3):
         try:
             r = requests.get(url, stream=True, timeout=30)
@@ -49,42 +47,38 @@ def main():
     }
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
-    run = client.actor(ACTOR_ID).call(run_input=run_input, timeout_secs=300)
 
-    if not run or run.get('status') != 'SUCCEEDED':
-        print("❌ Run failed!")
+    # شروع اجرای Actor و انتظار برای پایان (با تایم‌اوت)
+    run = client.actor(ACTOR_ID).start(run_input=run_input)
+    # timeout_secs حداکثر زمان انتظار برای اتمام موفقیت‌آمیز است
+    finished_run = run.wait_for_finish(timeout_secs=300)
+
+    if finished_run is None or finished_run.get('status') != 'SUCCEEDED':
+        print("❌ Run failed or did not finish in time!")
         sys.exit(1)
 
-    dataset_id = run['defaultDatasetId']
+    dataset_id = finished_run['defaultDatasetId']
     print(f"✅ Run succeeded. Dataset: {dataset_id}")
 
-    # دریافت همهٔ آیتم‌ها (پست‌ها)
     dataset = client.dataset(dataset_id)
     items = list(dataset.iterate_items())
 
-    # دانلود رسانه‌ها (عکس، ویدئو و ...)
+    # دانلود رسانه‌ها
     for item in items:
         msg_id = item.get('Id', 'unknown')
-
-        # خروجی Actor جدید: فیلد 'media' یک لیست است
         media_list = item.get('media', [])
         if not media_list:
-            # سازگاری با خروجی‌های قدیمی‌تر
             if item.get('MediaUrl'):
                 media_list = [{
                     'mediaType': item.get('MediaType', 'unknown'),
                     'url': item['MediaUrl']
                 }]
-            elif item.get('MediaType') and item.get('MediaType') != 'text':
-                # نوع رسانه هست اما لینک دانلود در دسترس نیست
-                pass
 
         for idx, media in enumerate(media_list):
             url = media.get('url')
             if not url:
                 continue
 
-            # تعیین پسوند فایل
             ext = 'unknown'
             parsed = urlparse(url)
             path = unquote(parsed.path)
@@ -114,15 +108,12 @@ def main():
             else:
                 print(f"   ❌ Failed to download {url}")
 
-    # ذخیره‌ی فایل‌های JSON و CSV
-    posts_json_path = os.path.join(BASE_DIR, 'posts.json')
-    posts_csv_path = os.path.join(BASE_DIR, 'posts.csv')
-
-    with open(posts_json_path, 'w', encoding='utf-8') as f:
+    # ذخیره‌سازی JSON و CSV
+    with open(os.path.join(BASE_DIR, 'posts.json'), 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
     if items:
-        with open(posts_csv_path, 'w', encoding='utf-8', newline='') as f:
+        with open(os.path.join(BASE_DIR, 'posts.csv'), 'w', encoding='utf-8', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=items[0].keys())
             writer.writeheader()
             writer.writerows(items)
@@ -131,6 +122,7 @@ def main():
     if items:
         last = items[-1]
         print(f"🔗 Latest ID: {last.get('Id')} | Date: {last.get('Date')} | URL: {last.get('Url')}")
+
 
 if __name__ == "__main__":
     main()
