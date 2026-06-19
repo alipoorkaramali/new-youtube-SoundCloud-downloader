@@ -9,7 +9,7 @@ from pathlib import Path
 
 # ========== تنظیمات پیش‌فرض ==========
 TIMES_FILE = Path("State/upload_times_Download_YoutubeDownloads.txt")
-AUDIO_FOLDER = Path("Download/YouTubeDownloads")
+AUDIO_FOLDER = Path("Download/YoutubeDownloads")
 DEFAULT_MAX_AGE_HOURS = 12
 # =====================================
 
