@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ========== تنظیمات پیش‌فرض ==========
-TIMES_FILE = Path("State/upload_times_Download_audio_downloads.txt")
-AUDIO_FOLDER = Path("Download/audio_downloads")
+TIMES_FILE = Path("State/upload_times_Download_YoutubeDownloads.txt")
+AUDIO_FOLDER = Path("Download/YouTubeDownloads")
 DEFAULT_MAX_AGE_HOURS = 12
 # =====================================
 
