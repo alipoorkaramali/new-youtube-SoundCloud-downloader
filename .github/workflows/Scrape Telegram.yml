@@ -39,7 +39,7 @@ jobs:
 
       - name: Run Apify scraper
         env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          APIFY_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
           START_ID: ${{ github.event.inputs.start_id }}
