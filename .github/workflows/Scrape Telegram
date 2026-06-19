@@ -1,0 +1,55 @@
+name: Scrape Telegram & Save to Repo (Apify)
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Channel username (without @)'
+        required: true
+        default: 'durov'
+      limit:
+        description: 'Number of recent posts'
+        required: false
+        default: '10'
+      start_id:
+        description: 'Start after message ID'
+        required: false
+        default: '0'
+
+permissions:
+  contents: write   # برای git commit و push لازم است
+
+jobs:
+  scrape-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # کل تاریخچه برای push لازم است
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install apify-client requests
+
+      - name: Run Apify Scraper
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          CHANNEL: ${{ github.event.inputs.channel }}
+          POST_LIMIT: ${{ github.event.inputs.limit }}
+          START_ID: ${{ github.event.inputs.start_id }}
+        run: python scraper.py
+
+      - name: Commit and push results
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "📥 Update posts for @${{ github.event.inputs.channel }}"
+          file_pattern: "downloads/${{ github.event.inputs.channel }}/*"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_author: "GitHub Actions <actions@github.com>"
