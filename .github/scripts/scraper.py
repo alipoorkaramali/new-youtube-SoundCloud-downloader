@@ -7,7 +7,7 @@ import time
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
-# متغیرهای محیطی (از Secrets و ورودی‌ها)
+# دریافت از متغیرهای محیطی (Secrets + ورودی‌های workflow)
 APIFY_TOKEN = os.environ['APIFY_TOKEN']
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
@@ -15,13 +15,14 @@ START_ID = int(os.environ.get('START_ID', '0'))
 
 ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
 
-# تنظیم مسیر ذخیره‌سازی
-BASE_DIR = os.path.join("downloads", CHANNEL)
+# مسیر ذخیره‌سازی مطابق خواسته‌ی شما
+BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
+
 def download_file(url, save_path):
-    """دانلود فایل با چند تلاش در صورت خطا"""
+    """دانلود فایل با ۳ بار تلاش در صورت خطا"""
     for attempt in range(3):
         try:
             r = requests.get(url, stream=True, timeout=30)
@@ -34,6 +35,7 @@ def download_file(url, save_path):
             print(f"⚠️ Download error (attempt {attempt+1}): {e}")
             time.sleep(2)
     return False
+
 
 def main():
     client = ApifyClient(APIFY_TOKEN)
@@ -56,14 +58,15 @@ def main():
     dataset_id = run['defaultDatasetId']
     print(f"✅ Run succeeded. Dataset: {dataset_id}")
 
-    # دریافت همه آیتم‌ها
+    # دریافت همهٔ آیتم‌ها (پست‌ها)
     dataset = client.dataset(dataset_id)
     items = list(dataset.iterate_items())
 
-    # پردازش رسانه‌ها و دانلود آن‌ها
+    # دانلود رسانه‌ها (عکس، ویدئو و ...)
     for item in items:
         msg_id = item.get('Id', 'unknown')
-        # استخراج رسانه‌ها از فیلد 'media' (لیست) یا fallback روی فیلدهای قدیمی‌تر
+
+        # خروجی Actor جدید: فیلد 'media' یک لیست است
         media_list = item.get('media', [])
         if not media_list:
             # سازگاری با خروجی‌های قدیمی‌تر
@@ -73,21 +76,21 @@ def main():
                     'url': item['MediaUrl']
                 }]
             elif item.get('MediaType') and item.get('MediaType') != 'text':
-                # ممکن است فقط نوع باشد، اما URL نباشد (رد می‌کنیم)
+                # نوع رسانه هست اما لینک دانلود در دسترس نیست
                 pass
 
         for idx, media in enumerate(media_list):
             url = media.get('url')
             if not url:
                 continue
-            # تعیین پسوند
+
+            # تعیین پسوند فایل
             ext = 'unknown'
             parsed = urlparse(url)
             path = unquote(parsed.path)
             if '.' in path.split('/')[-1]:
                 ext = path.split('/')[-1].split('.')[-1].split('?')[0][:10]
             else:
-                # بر اساس نوع
                 mtype = media.get('mediaType', '')
                 if 'photo' in mtype:
                     ext = 'jpg'
@@ -111,18 +114,20 @@ def main():
             else:
                 print(f"   ❌ Failed to download {url}")
 
-    # ذخیره JSON و CSV (بدون تغییر)
-    with open(os.path.join(BASE_DIR, 'posts.json'), 'w', encoding='utf-8') as f:
+    # ذخیره‌ی فایل‌های JSON و CSV
+    posts_json_path = os.path.join(BASE_DIR, 'posts.json')
+    posts_csv_path = os.path.join(BASE_DIR, 'posts.csv')
+
+    with open(posts_json_path, 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
     if items:
-        with open(os.path.join(BASE_DIR, 'posts.csv'), 'w', encoding='utf-8', newline='') as f:
+        with open(posts_csv_path, 'w', encoding='utf-8', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=items[0].keys())
             writer.writeheader()
             writer.writerows(items)
 
     print(f"\n📊 {len(items)} posts, media saved in '{BASE_DIR}'")
-    # چاپ خلاصه آخرین پست
     if items:
         last = items[-1]
         print(f"🔗 Latest ID: {last.get('Id')} | Date: {last.get('Date')} | URL: {last.get('Url')}")
