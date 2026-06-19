@@ -6,6 +6,7 @@ import requests
 import time
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
+from datetime import timedelta
 
 # تنظیم توکن
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
@@ -52,10 +53,10 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # روش پیشنهادی و ساده Apify (start + wait)
+    # روش سازگار با نسخه‌های جدید apify-client
     run = client.actor(ACTOR_ID).call(
         run_input=run_input,
-        timeout_secs=300   # اینجا timeout کار می‌کند
+        wait_duration=timedelta(minutes=5)   # حداکثر ۵ دقیقه صبر
     )
 
     if run is None or run.get('status') != 'SUCCEEDED':
@@ -89,10 +90,11 @@ def main():
             ext = 'unknown'
             parsed = urlparse(url)
             path = unquote(parsed.path)
-            if '.' in path.split('/')[-1]:
-                ext = path.split('/')[-1].split('.')[-1].split('?')[0][:10]
+            filename_part = path.split('/')[-1]
+            if '.' in filename_part:
+                ext = filename_part.split('.')[-1].split('?')[0][:10]
             else:
-                mtype = media.get('mediaType', '').lower()
+                mtype = str(media.get('mediaType', '')).lower()
                 if 'photo' in mtype or 'image' in mtype:
                     ext = 'jpg'
                 elif 'video' in mtype:
@@ -109,19 +111,22 @@ def main():
                 print(f"📁 Skipped existing: {filename}")
                 continue
 
-            print(f"⬇️ Downloading: {filename} from {url[:80]}...")
+            print(f"⬇️ Downloading: {filename}")
             if download_file(url, filepath):
                 print(f"   ✅ Done")
                 downloaded_count += 1
             else:
-                print(f"   ❌ Failed")
+                print(f"   ❌ Failed to download")
 
     # ذخیره JSON و CSV
-    with open(os.path.join(BASE_DIR, 'posts.json'), 'w', encoding='utf-8') as f:
+    json_path = os.path.join(BASE_DIR, 'posts.json')
+    csv_path = os.path.join(BASE_DIR, 'posts.csv')
+
+    with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
     if items:
-        with open(os.path.join(BASE_DIR, 'posts.csv'), 'w', encoding='utf-8', newline='') as f:
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=items[0].keys())
             writer.writeheader()
             writer.writerows(items)
