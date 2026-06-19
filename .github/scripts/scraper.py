@@ -53,28 +53,28 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # روش سازگار با نسخه‌های جدید apify-client
+    # اجرای Actor (روش سازگار با نسخه جدید)
     run = client.actor(ACTOR_ID).call(
         run_input=run_input,
-        wait_duration=timedelta(minutes=5)   # حداکثر ۵ دقیقه صبر
+        wait_duration=timedelta(minutes=5)
     )
 
-    if run is None or run.get('status') != 'SUCCEEDED':
+    if run is None or run.status != 'SUCCEEDED':
         print("❌ Run failed or did not finish in time!")
-        print(f"Run status: {run.get('status') if run else 'None'}")
+        print(f"Run status: {run.status if run else 'None'}")
         sys.exit(1)
 
-    dataset_id = run['defaultDatasetId']
-    print(f"✅ Run succeeded. Dataset: {dataset_id}")
+    print(f"✅ Run succeeded. Dataset ID: {run.defaultDatasetId}")
 
-    dataset = client.dataset(dataset_id)
+    # دریافت داده‌ها
+    dataset = client.dataset(run.defaultDatasetId)
     items = list(dataset.iterate_items())
 
     # دانلود رسانه‌ها
     downloaded_count = 0
     for item in items:
         msg_id = item.get('Id', 'unknown')
-        media_list = item.get('media', [])
+        media_list = item.get('media', []) or []
         if not media_list and item.get('MediaUrl'):
             media_list = [{
                 'mediaType': item.get('MediaType', 'unknown'),
@@ -86,7 +86,7 @@ def main():
             if not url:
                 continue
 
-            # تشخیص پسوند فایل
+            # تشخیص پسوند
             ext = 'unknown'
             parsed = urlparse(url)
             path = unquote(parsed.path)
@@ -116,9 +116,9 @@ def main():
                 print(f"   ✅ Done")
                 downloaded_count += 1
             else:
-                print(f"   ❌ Failed to download")
+                print(f"   ❌ Failed")
 
-    # ذخیره JSON و CSV
+    # ذخیره فایل‌ها
     json_path = os.path.join(BASE_DIR, 'posts.json')
     csv_path = os.path.join(BASE_DIR, 'posts.csv')
 
