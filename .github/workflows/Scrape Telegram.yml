@@ -1,4 +1,4 @@
-name: Scrape Telegram & Save to Repo (Apify)
+name: Scrape Telegram & Save to Repo
 
 on:
   workflow_dispatch:
@@ -12,12 +12,12 @@ on:
         required: false
         default: '10'
       start_id:
-        description: 'Start after message ID'
+        description: 'Start after message ID (incremental)'
         required: false
         default: '0'
 
 permissions:
-  contents: write   # برای git commit و push لازم است
+  contents: write   # برای commit و push خودکار
 
 jobs:
   scrape-and-commit:
@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # کل تاریخچه برای push لازم است
+          fetch-depth: 0   # کل تاریخچه برای push لازم است
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,19 +37,19 @@ jobs:
       - name: Install dependencies
         run: pip install apify-client requests
 
-      - name: Run Apify Scraper
+      - name: Run Apify scraper
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
           START_ID: ${{ github.event.inputs.start_id }}
-        run: python scraper.py
+        run: python .github/scripts/scraper.py
 
       - name: Commit and push results
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update posts for @${{ github.event.inputs.channel }}"
-          file_pattern: "downloads/${{ github.event.inputs.channel }}/*"
+          file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/*"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           commit_author: "GitHub Actions <actions@github.com>"
