@@ -7,7 +7,7 @@ import time
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
-APIFY_TOKEN = os.environ['APIFY_TOKEN']
+APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '') or os.environ.get('APIFY_API_TOKEN', '')
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 START_ID = int(os.environ.get('START_ID', '0'))
