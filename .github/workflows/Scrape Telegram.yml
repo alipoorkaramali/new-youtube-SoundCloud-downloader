@@ -1,4 +1,4 @@
-name: Scrape Telegram & Save to Repo
+name: 🌀Scrape Telegram & Save to Repo
 
 on:
   workflow_dispatch:
