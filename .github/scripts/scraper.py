@@ -8,6 +8,10 @@ from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '') or os.environ.get('APIFY_API_TOKEN', '')
+if not APIFY_TOKEN:
+    print("❌ APIFY_TOKEN is empty! Make sure the secret is set correctly.")
+    sys.exit(1)
+
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 START_ID = int(os.environ.get('START_ID', '0'))
@@ -18,9 +22,7 @@ BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-
 def download_file(url, save_path):
-    """دانلود فایل با ۳ تلاش"""
     for attempt in range(3):
         try:
             r = requests.get(url, stream=True, timeout=30)
@@ -33,7 +35,6 @@ def download_file(url, save_path):
             print(f"⚠️ Download error (attempt {attempt+1}): {e}")
             time.sleep(2)
     return False
-
 
 def main():
     client = ApifyClient(APIFY_TOKEN)
@@ -48,10 +49,14 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # شروع اجرای Actor و انتظار برای پایان (با تایم‌اوت)
+    # شروع اجرا
     run = client.actor(ACTOR_ID).start(run_input=run_input)
-    # timeout_secs حداکثر زمان انتظار برای اتمام موفقیت‌آمیز است
-    finished_run = run.wait_for_finish(timeout_secs=300)
+    run_id = run["id"]
+    print(f"🆔 Run ID: {run_id}")
+
+    # صبر برای پایان
+    run_client = client.run(run_id)
+    finished_run = run_client.wait_for_finish(timeout_secs=300)
 
     if finished_run is None or finished_run.get('status') != 'SUCCEEDED':
         print("❌ Run failed or did not finish in time!")
@@ -122,7 +127,6 @@ def main():
     if items:
         last = items[-1]
         print(f"🔗 Latest ID: {last.get('Id')} | Date: {last.get('Date')} | URL: {last.get('Url')}")
-
 
 if __name__ == "__main__":
     main()
