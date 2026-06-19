@@ -51,14 +51,21 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # اجرای Actor و منتظر ماندن تا پایان (حداکثر 300 ثانیه)
-    run = client.actor(ACTOR_ID).call(run_input=run_input, wait_secs=300)
+    # شروع اجرا
+    run = client.actor(ACTOR_ID).start(run_input=run_input)
+    # run یک شیء Pydantic است؛ id را با اتریبیوت می‌گیریم
+    run_id = run.id
+    print(f"🆔 Run ID: {run_id}")
 
-    if run is None or run.get('status') != 'SUCCEEDED':
+    # صبر کردن برای پایان (حداکثر ۳۰۰ ثانیه)
+    run_client = client.run(run_id)
+    finished_run = run_client.wait_for_finish(timeout_secs=300)
+
+    if finished_run is None or finished_run.get('status') != 'SUCCEEDED':
         print("❌ Run failed or did not finish in time!")
         sys.exit(1)
 
-    dataset_id = run['defaultDatasetId']
+    dataset_id = finished_run['defaultDatasetId']
     print(f"✅ Run succeeded. Dataset: {dataset_id}")
 
     dataset = client.dataset(dataset_id)
