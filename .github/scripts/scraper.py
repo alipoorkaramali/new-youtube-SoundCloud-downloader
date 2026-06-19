@@ -53,7 +53,7 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # اجرای Actor (روش سازگار با نسخه جدید)
+    # اجرای Actor
     run = client.actor(ACTOR_ID).call(
         run_input=run_input,
         wait_duration=timedelta(minutes=5)
@@ -64,10 +64,10 @@ def main():
         print(f"Run status: {run.status if run else 'None'}")
         sys.exit(1)
 
-    print(f"✅ Run succeeded. Dataset ID: {run.defaultDatasetId}")
+    print(f"✅ Run succeeded. Dataset ID: {run.default_dataset_id}")
 
     # دریافت داده‌ها
-    dataset = client.dataset(run.defaultDatasetId)
+    dataset = client.dataset(run.default_dataset_id)
     items = list(dataset.iterate_items())
 
     # دانلود رسانه‌ها
@@ -86,7 +86,7 @@ def main():
             if not url:
                 continue
 
-            # تشخیص پسوند
+            # تشخیص پسوند فایل
             ext = 'unknown'
             parsed = urlparse(url)
             path = unquote(parsed.path)
