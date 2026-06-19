@@ -22,6 +22,7 @@ BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
+
 def download_file(url, save_path):
     for attempt in range(3):
         try:
@@ -36,6 +37,7 @@ def download_file(url, save_path):
             time.sleep(2)
     return False
 
+
 def main():
     client = ApifyClient(APIFY_TOKEN)
 
@@ -49,20 +51,14 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # شروع اجرا
-    run = client.actor(ACTOR_ID).start(run_input=run_input)
-    run_id = run["id"]
-    print(f"🆔 Run ID: {run_id}")
+    # اجرای Actor و منتظر ماندن تا پایان (حداکثر 300 ثانیه)
+    run = client.actor(ACTOR_ID).call(run_input=run_input, wait_secs=300)
 
-    # صبر برای پایان
-    run_client = client.run(run_id)
-    finished_run = run_client.wait_for_finish(timeout_secs=300)
-
-    if finished_run is None or finished_run.get('status') != 'SUCCEEDED':
+    if run is None or run.get('status') != 'SUCCEEDED':
         print("❌ Run failed or did not finish in time!")
         sys.exit(1)
 
-    dataset_id = finished_run['defaultDatasetId']
+    dataset_id = run['defaultDatasetId']
     print(f"✅ Run succeeded. Dataset: {dataset_id}")
 
     dataset = client.dataset(dataset_id)
@@ -127,6 +123,7 @@ def main():
     if items:
         last = items[-1]
         print(f"🔗 Latest ID: {last.get('Id')} | Date: {last.get('Date')} | URL: {last.get('Url')}")
+
 
 if __name__ == "__main__":
     main()
