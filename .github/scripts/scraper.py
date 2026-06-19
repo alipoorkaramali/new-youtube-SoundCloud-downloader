@@ -7,7 +7,8 @@ import time
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
-APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '') or os.environ.get('APIFY_API_TOKEN', '')
+# تنظیم توکن
+APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
 if not APIFY_TOKEN:
     print("❌ APIFY_TOKEN is empty! Make sure the secret is set correctly.")
     sys.exit(1)
@@ -51,50 +52,48 @@ def main():
 
     print(f"🚀 Scraping @{CHANNEL} | Limit: {LIMIT} | Start ID: {START_ID}")
 
-    # شروع اجرا
-    run = client.actor(ACTOR_ID).start(run_input=run_input)
-    # run یک شیء Pydantic است؛ id را با اتریبیوت می‌گیریم
-    run_id = run.id
-    print(f"🆔 Run ID: {run_id}")
+    # روش پیشنهادی و ساده Apify (start + wait)
+    run = client.actor(ACTOR_ID).call(
+        run_input=run_input,
+        timeout_secs=300   # اینجا timeout کار می‌کند
+    )
 
-    # صبر کردن برای پایان (حداکثر ۳۰۰ ثانیه)
-    run_client = client.run(run_id)
-    finished_run = run_client.wait_for_finish(timeout_secs=300)
-
-    if finished_run is None or finished_run.get('status') != 'SUCCEEDED':
+    if run is None or run.get('status') != 'SUCCEEDED':
         print("❌ Run failed or did not finish in time!")
+        print(f"Run status: {run.get('status') if run else 'None'}")
         sys.exit(1)
 
-    dataset_id = finished_run['defaultDatasetId']
+    dataset_id = run['defaultDatasetId']
     print(f"✅ Run succeeded. Dataset: {dataset_id}")
 
     dataset = client.dataset(dataset_id)
     items = list(dataset.iterate_items())
 
     # دانلود رسانه‌ها
+    downloaded_count = 0
     for item in items:
         msg_id = item.get('Id', 'unknown')
         media_list = item.get('media', [])
-        if not media_list:
-            if item.get('MediaUrl'):
-                media_list = [{
-                    'mediaType': item.get('MediaType', 'unknown'),
-                    'url': item['MediaUrl']
-                }]
+        if not media_list and item.get('MediaUrl'):
+            media_list = [{
+                'mediaType': item.get('MediaType', 'unknown'),
+                'url': item['MediaUrl']
+            }]
 
         for idx, media in enumerate(media_list):
             url = media.get('url')
             if not url:
                 continue
 
+            # تشخیص پسوند فایل
             ext = 'unknown'
             parsed = urlparse(url)
             path = unquote(parsed.path)
             if '.' in path.split('/')[-1]:
                 ext = path.split('/')[-1].split('.')[-1].split('?')[0][:10]
             else:
-                mtype = media.get('mediaType', '')
-                if 'photo' in mtype:
+                mtype = media.get('mediaType', '').lower()
+                if 'photo' in mtype or 'image' in mtype:
                     ext = 'jpg'
                 elif 'video' in mtype:
                     ext = 'mp4'
@@ -110,13 +109,14 @@ def main():
                 print(f"📁 Skipped existing: {filename}")
                 continue
 
-            print(f"⬇️ Downloading: {filename}")
+            print(f"⬇️ Downloading: {filename} from {url[:80]}...")
             if download_file(url, filepath):
                 print(f"   ✅ Done")
+                downloaded_count += 1
             else:
-                print(f"   ❌ Failed to download {url}")
+                print(f"   ❌ Failed")
 
-    # ذخیره‌سازی JSON و CSV
+    # ذخیره JSON و CSV
     with open(os.path.join(BASE_DIR, 'posts.json'), 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
@@ -126,10 +126,10 @@ def main():
             writer.writeheader()
             writer.writerows(items)
 
-    print(f"\n📊 {len(items)} posts, media saved in '{BASE_DIR}'")
+    print(f"\n🎉 Finished! {len(items)} posts | {downloaded_count} media files saved in '{BASE_DIR}'")
     if items:
         last = items[-1]
-        print(f"🔗 Latest ID: {last.get('Id')} | Date: {last.get('Date')} | URL: {last.get('Url')}")
+        print(f"🔗 Latest: ID {last.get('Id')} | Date: {last.get('Date')} | URL: {last.get('Url')}")
 
 
 if __name__ == "__main__":
