@@ -150,7 +150,8 @@ def generate_html(posts, channel_name, channel_info, media_paths):
                 hashtag_html = " ".join([f'<span class="hashtag">{h}</span>' for h in hashtags])
                 html += f'<span>🏷️ {hashtag_html}</span>'
             if outlinks:
-                html += f'<span>🌐 لینک‌ها: {", ".join([f"<a href=\"{l}\">لینک</a>" for l in outlinks])}</span>'
+                links_html = ", ".join([f'<a href="{l}">لینک</a>' for l in outlinks])
+                html += f'<span>🌐 لینک‌ها: {links_html}</span>'
             html += '</div>'
 
         if str(post_id) in media_paths:
@@ -219,4 +220,50 @@ def main():
 
             filename = f"post_{msg_id}_{idx}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
-            rel_path = f
+            rel_path = f"media/{filename}"
+
+            if os.path.exists(filepath):
+                local_paths.append(rel_path)
+                continue
+
+            print(f"⬇️ Downloading: {filename}")
+            success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
+            if success:
+                downloaded_count += 1
+                local_paths.append(rel_path)
+            else:
+                skipped_count += 1
+
+        return msg_id, local_paths
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(download_media_for_post, item): item for item in items}
+        for future in as_completed(futures):
+            msg_id, paths = future.result()
+            if paths:
+                media_map[msg_id] = paths
+
+    # ذخیره خروجی
+    json_path = os.path.join(BASE_DIR, 'posts.json')
+    csv_path = os.path.join(BASE_DIR, 'posts.csv')
+    html_path = os.path.join(BASE_DIR, 'posts.html')
+
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(items, f, indent=2, ensure_ascii=False)
+
+    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=items[0].keys())
+        writer.writeheader()
+        writer.writerows(items)
+
+    html_content = generate_html(items, CHANNEL, channel_info, media_map)
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    print(f"\n🎉 Finished @{CHANNEL}!")
+    print(f"   📊 Posts: {len(items)}")
+    print(f"   🖼️ Media downloaded: {downloaded_count}")
+    print(f"   ⏩ Skipped: {skipped_count}")
+
+if __name__ == "__main__":
+    main()
