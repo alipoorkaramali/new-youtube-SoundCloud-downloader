@@ -40,8 +40,8 @@ def get_remote_file_size(url):
         length = resp.headers.get('Content-Length')
         if length and length.isdigit():
             return int(length)
-    except:
-        pass
+    except Exception as e:
+        print(f"   ⚠️ Head failed: {e}")
     return None
 
 def download_file(url, save_path, max_bytes=None):
@@ -65,11 +65,11 @@ def download_file(url, save_path, max_bytes=None):
                             return False, downloaded
                 return True, downloaded
             else:
-                print(f"   ⚠️ HTTP {r.status_code}")
+                print(f"   ⚠️ HTTP {r.status_code} (attempt {attempt+1})")
         except Exception as e:
             print(f"   ⚠️ Download error (attempt {attempt+1}): {e}")
             time.sleep(2 ** attempt)
-    print(f"   ❌ Failed: {url[:120]}...")
+    print(f"   ❌ Failed after retries: {url[:100]}...")
     return False, 0
 
 def format_iran_time(iso_date_str):
@@ -209,20 +209,27 @@ def main():
         msg_id = str(item.get('Id') or item.get('messageId') or 'unknown')
         local_paths = []
 
-        # === تشخیص تمام حالت‌های ممکن مدیا ===
+        # تمام حالت‌های ممکن برای پیدا کردن URL مدیا
         media_list = item.get('media', []) or []
 
-        # حالت‌های رایج Actor thescrapelab
-        if item.get('MediaUrl'):
-            media_list.append({'url': item.get('MediaUrl'), 'mediaType': item.get('MediaType')})
-        if item.get('photoUrl'):
-            media_list.append({'url': item.get('photoUrl')})
-        if item.get('videoUrl'):
-            media_list.append({'url': item.get('videoUrl')})
+        # حالت‌های تک فیلد
+        single_media_keys = ['MediaUrl', 'mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'LinkPreview_Image_Url']
+        for key in single_media_keys:
+            if item.get(key):
+                media_list.append({'url': item.get(key)})
 
         for idx, media in enumerate(media_list):
-            url = media.get('url') or media.get('MediaUrl') or media.get('photoUrl') or media.get('videoUrl')
-            if not url:
+            url = None
+            if isinstance(media, dict):
+                url = (media.get('url') or 
+                       media.get('MediaUrl') or 
+                       media.get('photoUrl') or 
+                       media.get('videoUrl') or 
+                       media.get('fileUrl'))
+            elif isinstance(media, str) and media.startswith('http'):
+                url = media
+
+            if not url or not url.startswith('http'):
                 continue
 
             parsed = urlparse(url)
@@ -234,6 +241,7 @@ def main():
             rel_path = f"media/{filename}"
 
             if os.path.exists(filepath):
+                print(f"📁 Skipped existing: {filename}")
                 local_paths.append(rel_path)
                 continue
 
@@ -242,7 +250,7 @@ def main():
             if success:
                 downloaded_count += 1
                 local_paths.append(rel_path)
-                print(f"   ✅ Success ({size / 1024 / 1024:.1f} MB)")
+                print(f"   ✅ Done ({size / 1024 / 1024:.1f} MB)")
             else:
                 skipped_count += 1
                 print(f"   ❌ Failed")
@@ -257,7 +265,7 @@ def main():
             if paths:
                 media_map[msg_id] = paths
 
-    # ذخیره فایل‌ها
+    # تولید خروجی‌ها
     json_path = os.path.join(BASE_DIR, 'posts.json')
     csv_path = os.path.join(BASE_DIR, 'posts.csv')
     html_path = os.path.join(BASE_DIR, 'posts.html')
@@ -279,7 +287,7 @@ def main():
     print(f"   🖼️ Media downloaded: {downloaded_count}")
     print(f"   ⏩ Skipped/Failed: {skipped_count}")
     if downloaded_count == 0:
-        print("   ⚠️ نکته: اگر پست‌ها مدیا داشتند ولی دانلود نشد، لاگ بالا را چک کن.")
+        print("   ⚠️ نکته: اگر پست‌ها مدیا داشتند ولی دانلود نشد، لاگ‌های Downloading را چک کن.")
 
 if __name__ == "__main__":
     main()
