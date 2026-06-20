@@ -2,8 +2,10 @@ import os
 import sys
 import json
 import csv
+import requests
 import time
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -17,17 +19,59 @@ CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '20'))
 START_ID = int(os.environ.get('START_ID', '0'))
 
-# Actor بهتر با قابلیت دانلود مدیا
-ACTOR_ID = "webfinity/telegram-channel-content-media-scraper"
+# Actor خوب و ارزان با پشتیبانی خوب از مدیا
+ACTOR_ID = "automation-lab/telegram-scraper"
 
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))  # افزایش برای تست
+MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
 
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+}
+
 # ═══════════════════ توابع کمکی ═══════════════════
+
+def get_remote_file_size(url):
+    try:
+        resp = requests.head(url, timeout=20, allow_redirects=True, headers=HEADERS)
+        length = resp.headers.get('Content-Length')
+        if length and length.isdigit():
+            return int(length)
+    except:
+        pass
+    return None
+
+def download_file(url, save_path, max_bytes=None):
+    if max_bytes:
+        size = get_remote_file_size(url)
+        if size is not None and size > max_bytes:
+            print(f"⏩ Skipped (size {size / 1024 / 1024:.1f} MB > limit)")
+            return False, size
+
+    for attempt in range(6):
+        try:
+            r = requests.get(url, stream=True, timeout=90, headers=HEADERS)
+            if r.status_code == 200:
+                downloaded = 0
+                with open(save_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=16384):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if max_bytes and downloaded > max_bytes:
+                            os.remove(save_path)
+                            return False, downloaded
+                return True, downloaded
+            else:
+                print(f"   ⚠️ HTTP {r.status_code} (attempt {attempt+1})")
+        except Exception as e:
+            print(f"   ⚠️ Download error (attempt {attempt+1}): {e}")
+            time.sleep(2 ** attempt)
+    print(f"   ❌ Failed: {url[:100]}...")
+    return False, 0
 
 def format_iran_time(iso_date_str):
     try:
@@ -36,32 +80,6 @@ def format_iran_time(iso_date_str):
         return iran_dt.strftime('%Y/%m/%d - %H:%M')
     except:
         return iso_date_str
-
-def download_from_kvs(client, kvs_id, key, save_path, max_bytes=None):
-    """دانلود از Key-Value Store Apify"""
-    for attempt in range(5):
-        try:
-            record = client.key_value_store(kvs_id).get_record(key)
-            if not record or 'value' not in record:
-                print(f"   ⚠️ Record {key} not found in KVS")
-                return False, 0
-
-            data = record['value']
-            size = len(data)
-
-            if max_bytes and size > max_bytes:
-                print(f"⏩ Skipped (size {size / 1024 / 1024:.1f} MB > limit)")
-                return False, size
-
-            with open(save_path, 'wb') as f:
-                f.write(data)
-
-            print(f"   ✅ Downloaded from KVS: {key} ({size / 1024 / 1024:.1f} MB)")
-            return True, size
-        except Exception as e:
-            print(f"   ⚠️ KVS download error (attempt {attempt+1}): {e}")
-            time.sleep(2 ** attempt)
-    return False, 0
 
 def generate_html(posts, channel_name, channel_info, media_paths):
     iran_date = datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)
@@ -108,14 +126,14 @@ def generate_html(posts, channel_name, channel_info, media_paths):
 '''
 
     for post in posts:
-        post_id = str(post.get('postId') or post.get('Id', '?'))
+        post_id = str(post.get('id') or post.get('Id') or post.get('messageId', '?'))
         date = format_iran_time(post.get('date') or post.get('Date', ''))
         body = post.get('text') or post.get('Body', '')
-        url = post.get('postUrl') or post.get('Url', '#')
+        url = post.get('url') or post.get('Url', '#')
 
         mentions = post.get('mentions', []) or []
         hashtags = post.get('hashtags', []) or []
-        links = post.get('links', []) or []
+        outlinks = post.get('outlinks', []) or post.get('links', [])
 
         html += f'''
 <div class="post">
@@ -126,28 +144,27 @@ def generate_html(posts, channel_name, channel_info, media_paths):
     <div class="post-body">{body}</div>
 '''
 
-        if mentions or hashtags or links:
+        if mentions or hashtags or outlinks:
             html += '<div class="meta">'
             if mentions:
                 html += f'<span>🔗 منشن‌ها: {", ".join(mentions)}</span>'
             if hashtags:
                 hashtag_html = " ".join([f'<span class="hashtag">{h}</span>' for h in hashtags])
                 html += f'<span>🏷️ {hashtag_html}</span>'
-            if links:
-                links_html = ", ".join([f'<a href="{l}">لینک</a>' for l in links])
+            if outlinks:
+                links_html = ", ".join([f'<a href="{l}">لینک</a>' for l in outlinks])
                 html += f'<span>🌐 لینک‌ها: {links_html}</span>'
             html += '</div>'
 
-        # نمایش همه مدیاها
-        if post_id in media_paths:
-            for m_path in media_paths[post_id]:
+        if str(post_id) in media_paths:
+            for m_path in media_paths[str(post_id)]:
                 ext = m_path.split('.')[-1].lower()
                 if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
                     html += f'<div class="media-container"><img src="{m_path}" loading="lazy" alt="media"></div>'
                 elif ext in ['mp4', 'webm', 'mov']:
                     html += f'<div class="media-container"><video controls><source src="{m_path}" type="video/{ext}"></video></div>'
                 else:
-                    html += f'<div class="media-container"><a href="{m_path}" target="_blank" style="color:#2a6df4;">📎 دانلود فایل ({ext.upper()})</a></div>'
+                    html += f'<div class="media-container"><a href="{m_path}" target="_blank">📎 دانلود فایل ({ext.upper()})</a></div>'
 
         html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
         html += '</div>\n'
@@ -166,23 +183,19 @@ def main():
     client = ApifyClient(APIFY_TOKEN)
 
     run_input = {
-        "channels": CHANNEL,
-        "maxPosts": LIMIT,
-        "daysRange": 30,
-        "includeText": True,
-        "mediaOnly": False,
-        "downloadMedia": True   # مهم‌ترین گزینه
+        "channels": [CHANNEL],
+        "limit": LIMIT,
+        "includeMedia": True,
+        "includeReactions": True,
     }
 
-    print(f"🚀 Starting scrape with better Actor @{CHANNEL} | Limit: {LIMIT}")
+    print(f"🚀 Starting scrape with good Actor @{CHANNEL} | Limit: {LIMIT}")
 
-    run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=15))
+    run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=12))
 
     if not run or run.status != 'SUCCEEDED':
         print(f"❌ Run failed! Status: {run.status if run else 'None'}")
         sys.exit(1)
-
-    print(f"✅ Scrape succeeded. Dataset: {run.default_dataset_id} | KVS: {run.default_key_value_store_id}")
 
     dataset = client.dataset(run.default_dataset_id)
     items = list(dataset.iterate_items())
@@ -191,28 +204,41 @@ def main():
         print("⚠️ No posts found!")
         return
 
+    print(f"📥 Received {len(items)} posts from Apify")
+
     channel_info = items[0]
     media_map = {}
     downloaded_count = 0
     skipped_count = 0
-    kvs_id = run.default_key_value_store_id
 
     def download_media_for_post(item):
         nonlocal downloaded_count, skipped_count
-        msg_id = str(item.get('postId') or item.get('Id', 'unknown'))
+        msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
-        media_items = item.get('media', []) or item.get('mediaAttachments', [])
+        # استخراج همه مدیاها
+        media_list = item.get('media', []) or []
+        if item.get('mediaUrl'):
+            media_list.append({'url': item.get('mediaUrl')})
+        if item.get('photoUrl') or item.get('image'):
+            media_list.append({'url': item.get('photoUrl') or item.get('image')})
+        if item.get('videoUrl'):
+            media_list.append({'url': item.get('videoUrl')})
 
-        for idx, media in enumerate(media_items):
-            key = media.get('storeKey') or media.get('key') or None
-            if not key:
-                url = media.get('url') or media.get('mediaUrl')
-                if url and url.startswith('http'):
-                    print(f"   ⚠️ No KVS key, trying direct URL for post {msg_id}")
+        for idx, media in enumerate(media_list):
+            url = None
+            if isinstance(media, dict):
+                url = media.get('url') or media.get('mediaUrl') or media.get('photoUrl') or media.get('videoUrl')
+            elif isinstance(media, str) and media.startswith('http'):
+                url = media
+
+            if not url or not url.startswith('http'):
                 continue
 
-            ext = key.split('.')[-1].lower() if '.' in key else 'bin'
+            parsed = urlparse(url)
+            path_part = unquote(parsed.path).split('/')[-1]
+            ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'jpg'
+
             filename = f"post_{msg_id}_{idx}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
             rel_path = f"media/{filename}"
@@ -221,17 +247,19 @@ def main():
                 local_paths.append(rel_path)
                 continue
 
-            print(f"⬇️ Downloading from KVS for post {msg_id}: {filename}")
-            success, size = download_from_kvs(client, kvs_id, key, filepath, MAX_MEDIA_SIZE_BYTES)
+            print(f"⬇️ Downloading for post {msg_id}: {filename}")
+            success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
                 local_paths.append(rel_path)
+                print(f"   ✅ Done ({size / 1024 / 1024:.1f} MB)")
             else:
                 skipped_count += 1
+                print(f"   ❌ Failed")
 
         return msg_id, local_paths
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(download_media_for_post, item): item for item in items}
         for future in as_completed(futures):
             msg_id, paths = future.result()
