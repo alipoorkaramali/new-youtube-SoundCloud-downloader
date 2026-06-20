@@ -40,9 +40,7 @@ jobs:
 
       - name: Run Telegram Scraper
         env:
-          APIFY_TOKEN_1: ${{ secrets.APIFY_API_TOKEN }}
-          APIFY_TOKEN_2: ${{ secrets.APIFY_API_TOKEN_2 }}
-          # در صورت نیاز می‌توانید توکن‌های بیشتری اضافه کنید: APIFY_TOKEN_3, ...
+          APIFY_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
           MAX_MEDIA_SIZE_MB: ${{ github.event.inputs.max_media_size_mb }}
