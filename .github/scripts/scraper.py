@@ -19,11 +19,11 @@ if not APIFY_TOKEN:
     sys.exit(1)
 
 CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
-LIMIT = int(os.environ.get('POST_LIMIT', '10'))   # کاربر دقیقاً همین تعداد رو میگیره
+LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
-# ═══════ اکتور جدید (ارزان‌تر، بدون لاگین، دقیق) ═══════
-ACTOR_ID = "ahaham_bytiz/telegram-channel-scraper"
+# ═══════ برگشت به اکتور قبلی ═══════
+ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
 
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
@@ -32,7 +32,7 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-# ═══════════════════ توابع کمکی (بدون تغییر) ═══════════════════
+# ═══════════════════ توابع کمکی ═══════════════════
 
 def get_remote_file_size(url):
     try:
@@ -119,13 +119,13 @@ def generate_html(posts, channel_name, media_map):
 '''
 
     for post in posts:
-        post_id = post.get('id') or post.get('Id') or '?'
+        post_id = post.get('messageId') or post.get('id') or '?'
         date = format_iran_time(post.get('date') or post.get('Date', ''))
         body = post.get('text') or post.get('Body', '')
         url = post.get('url') or post.get('Url', '#')
-        mentions = post.get('mentions') or post.get('Mentions', [])
-        hashtags = post.get('hashtags') or post.get('Hashtags', [])
-        outlinks = post.get('outlinks') or post.get('Outlinks', [])
+        mentions = post.get('mentions') or []
+        hashtags = post.get('hashtags') or []
+        outlinks = post.get('outlinks') or []
 
         html += f'''
 <div class="post">
@@ -193,13 +193,11 @@ def main():
 
     client = ApifyClient(APIFY_TOKEN)
 
-    # ═══════ ورودی دقیق با maxMessages ═══════
+    # ═══════ ساختار درست برای thescrapelab ═══════
     run_input = {
-        "channels": [CHANNEL],
-        "maxMessages": LIMIT,          # دقیقاً همون عددی که کاربر وارد کرده
-        "includeMedia": True,
-        "enableReactions": False,
-        "enableViews": True
+        "channel": CHANNEL,           # به جای channels
+        "limit": LIMIT,              # تعداد پست دقیقاً همین
+        "includeMedia": True
     }
 
     run = client.actor(ACTOR_ID).call(
@@ -220,26 +218,20 @@ def main():
         return
 
     items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
-    print(f"📥 Received {len(items)} posts")   # اینجا دقیقاً تعداد درخواستی رو نشون میده
+    print(f"📥 Received {len(items)} posts")
 
     # ─── دانلود مدیاها ───
     media_map = {}
     downloaded_count = 0
 
     for item in items:
-        post_id = str(item.get('id') or item.get('Id') or 'unknown')
+        post_id = str(item.get('messageId') or item.get('id') or 'unknown')
         media_list = []
 
-        for key in ['photos', 'videos', 'documents', 'audio']:
-            if key in item and item[key]:
-                if isinstance(item[key], list):
-                    for m in item[key]:
-                        if isinstance(m, dict) and m.get('url'):
-                            media_list.append(m)
-                        elif isinstance(m, str) and m.startswith('http'):
-                            media_list.append({'url': m})
-                elif isinstance(item[key], str) and item[key].startswith('http'):
-                    media_list.append({'url': item[key]})
+        # بررسی فیلدهای مختلف برای مدیا
+        for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl']:
+            if item.get(key):
+                media_list.append({'url': item[key], 'type': key})
 
         if not media_list and 'media' in item:
             if isinstance(item['media'], list):
@@ -251,7 +243,7 @@ def main():
             if isinstance(media, str):
                 url = media
             else:
-                url = media.get('url') or media.get('Url') or media.get('link') or ''
+                url = media.get('url') or media.get('Url') or ''
 
             if not url:
                 continue
@@ -302,7 +294,7 @@ def main():
         sample_keys = set()
         for item in items:
             sample_keys.update(item.keys())
-        important_fields = ['id', 'date', 'text', 'url', 'views', 'forwards', 'replies']
+        important_fields = ['messageId', 'date', 'text', 'url', 'views', 'forwards']
         fieldnames = [f for f in important_fields if f in sample_keys]
         for f in ['mentions', 'hashtags', 'outlinks']:
             if f in sample_keys:
