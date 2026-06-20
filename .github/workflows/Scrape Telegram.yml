@@ -11,10 +11,6 @@ on:
         description: 'Number of posts to scrape'
         required: false
         default: '10'
-      start_id:
-        description: 'Start after message ID (optional)'
-        required: false
-        default: '0'
       max_media_size_mb:
         description: 'Max media size per file (MB)'
         required: false
@@ -33,9 +29,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1
-          sparse-checkout: |
-            .github/scripts/
-            Download/
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,16 +36,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install apify-client requests
-          sudo apt-get update && sudo apt-get install -y rar
+        run: pip install apify-client requests
 
-      - name: Run Telegram Scraper + Media Download + RAR Archive
+      - name: Run Telegram Scraper + Media + ZIP Archive
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
-          START_ID: ${{ github.event.inputs.start_id }}
           MAX_MEDIA_SIZE_MB: ${{ github.event.inputs.max_media_size_mb }}
         run: python .github/scripts/scraper.py
 
