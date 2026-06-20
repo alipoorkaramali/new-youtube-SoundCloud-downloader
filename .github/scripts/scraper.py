@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ═══════════════════ تنظیمات ═══════════════════
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
 if not APIFY_TOKEN:
-    print("❌ APIFY_TOKEN is empty!")
+    print("❌ APIFY_TOKEN is empty! Make sure the secret is set correctly.")
     sys.exit(1)
 
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
@@ -56,8 +56,9 @@ def download_file(url, save_path, max_bytes=None):
             else:
                 print(f"   ⚠️ HTTP {r.status_code}")
         except Exception as e:
-            print(f"   ⚠️ Error (attempt {attempt+1}): {e}")
+            print(f"   ⚠️ Download error (attempt {attempt+1}): {e}")
             time.sleep(2 ** attempt)
+    print(f"   ❌ Failed: {url[:100]}...")
     return False, 0
 
 def format_iran_time(iso_date_str):
@@ -130,7 +131,7 @@ def generate_html(posts, channel_name, channel_info, media_paths):
                 else:
                     html += f'<div class="media-container"><a href="{m_path}">📎 {ext.upper()}</a></div>'
 
-        html += f'<a href="{url}" target="_blank">مشاهده در تلگرام</a></div>\n'
+        html += f'<a href="{url}" target="_blank">🔗 مشاهده در تلگرام</a></div>\n'
 
     html += '</body></html>'
     return html
@@ -138,6 +139,9 @@ def generate_html(posts, channel_name, channel_info, media_paths):
 def create_zip_archive(base_dir, channel):
     zip_name = f"{channel}_full_archive.zip"
     zip_path = os.path.join(base_dir, zip_name)
+
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
 
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(base_dir):
@@ -157,30 +161,32 @@ def main():
 
     run_input = {
         "channels": [CHANNEL],
-        "limit": LIMIT,
+        "maxMessages": LIMIT,           # پارامتر درست Actor
         "includeMedia": True,
-        "sort": "desc"   # جدیدترین اول
+        "includeReactions": True,
+        "sort": "desc"                  # جدیدترین اول
     }
 
-    print(f"🚀 Starting @{CHANNEL} | Limit: {LIMIT}")
+    print(f"🚀 Starting scrape @{CHANNEL} | Requested Limit: {LIMIT}")
 
     run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=15))
 
     if not run or run.status != 'SUCCEEDED':
-        print("❌ Run failed!")
+        print(f"❌ Run failed!")
         sys.exit(1)
 
     items = list(client.dataset(run.default_dataset_id).iterate_items())
-    items = items[:LIMIT]   # دقیق طبق درخواست
 
-    print(f"📥 Received {len(items)} posts")
+    # کنترل نهایی تعداد
+    items = items[:LIMIT]
 
-    # === دیباگ ساختار داده ===
-    print("\n🔍 DEBUG - First post keys:")
-    if items:
-        print(list(items[0].keys()))
+    print(f"📥 Final posts: {len(items)}")
 
-    channel_info = items[0] if items else {}
+    if not items:
+        print("⚠️ No posts found!")
+        return
+
+    channel_info = items[0]
     media_map = {}
     downloaded_count = 0
 
@@ -189,24 +195,24 @@ def main():
         msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
-        # تمام راه‌های ممکن برای پیدا کردن URL
-        candidates = []
-
-        # media آرایه
-        for m in item.get('media', []):
-            if isinstance(m, dict):
-                for v in m.values():
-                    if isinstance(v, str) and v.startswith('http'):
-                        candidates.append(v)
-            elif isinstance(m, str) and m.startswith('http'):
-                candidates.append(m)
+        # تمام مدیاهای ممکن
+        media_list = item.get('media', []) or []
 
         # فیلدهای مستقیم
-        for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'url']:
-            if item.get(key) and isinstance(item.get(key), str) and item.get(key).startswith('http'):
-                candidates.append(item.get(key))
+        for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'audioUrl']:
+            if item.get(key) and str(item.get(key)).startswith('http'):
+                media_list.append({'url': item.get(key)})
 
-        for idx, url in enumerate(candidates):
+        for idx, media in enumerate(media_list):
+            url = None
+            if isinstance(media, dict):
+                url = media.get('url') or media.get('mediaUrl') or media.get('photoUrl') or media.get('videoUrl')
+            elif isinstance(media, str) and media.startswith('http'):
+                url = media
+
+            if not url or not url.startswith('http'):
+                continue
+
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
             ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'bin'
@@ -219,7 +225,7 @@ def main():
                 local_paths.append(rel_path)
                 continue
 
-            print(f"⬇️ Downloading post {msg_id} → {filename}")
+            print(f"⬇️ Downloading post {msg_id} media {idx}: {filename}")
             success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
@@ -235,7 +241,7 @@ def main():
             if paths:
                 media_map[msg_id] = paths
 
-    # ذخیره فایل‌ها
+    # ذخیره خروجی‌ها
     with open(os.path.join(BASE_DIR, 'posts.json'), 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
