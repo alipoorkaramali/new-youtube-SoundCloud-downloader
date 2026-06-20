@@ -13,12 +13,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ═══════════════════ تنظیمات ═══════════════════
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
 if not APIFY_TOKEN:
-    print("❌ APIFY_TOKEN is empty! Make sure the secret is set correctly.")
+    print("❌ APIFY_TOKEN is empty!")
     sys.exit(1)
 
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '20'))
-START_ID = int(os.environ.get('START_ID', '0'))
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
 ACTOR_ID = "automation-lab/telegram-scraper"
@@ -28,7 +27,6 @@ MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
-MAX_ZIP_SIZE_MB = 30
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -36,42 +34,30 @@ HEADERS = {
 
 # ═══════════════════ توابع کمکی ═══════════════════
 
-def get_remote_file_size(url):
-    try:
-        resp = requests.head(url, timeout=20, allow_redirects=True, headers=HEADERS)
-        length = resp.headers.get('Content-Length')
-        if length and length.isdigit():
-            return int(length)
-    except:
-        pass
-    return None
-
 def download_file(url, save_path, max_bytes=None):
     if max_bytes:
-        size = get_remote_file_size(url)
-        if size is not None and size > max_bytes:
-            print(f"⏩ Skipped (size {size / 1024 / 1024:.1f} MB > limit)")
-            return False, size
+        try:
+            resp = requests.head(url, timeout=20, headers=HEADERS)
+            size = int(resp.headers.get('Content-Length', 0))
+            if size > max_bytes:
+                print(f"⏩ Skipped large file ({size / 1024 / 1024:.1f} MB)")
+                return False, size
+        except:
+            pass
 
     for attempt in range(6):
         try:
             r = requests.get(url, stream=True, timeout=90, headers=HEADERS)
             if r.status_code == 200:
-                downloaded = 0
                 with open(save_path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=16384):
                         f.write(chunk)
-                        downloaded += len(chunk)
-                        if max_bytes and downloaded > max_bytes:
-                            os.remove(save_path)
-                            return False, downloaded
-                return True, downloaded
+                return True, os.path.getsize(save_path)
             else:
-                print(f"   ⚠️ HTTP {r.status_code} (attempt {attempt+1})")
+                print(f"   ⚠️ HTTP {r.status_code}")
         except Exception as e:
-            print(f"   ⚠️ Download error (attempt {attempt+1}): {e}")
+            print(f"   ⚠️ Error (attempt {attempt+1}): {e}")
             time.sleep(2 ** attempt)
-    print(f"   ❌ Failed: {url[:100]}...")
     return False, 0
 
 def format_iran_time(iso_date_str):
@@ -86,15 +72,12 @@ def safe_format_number(value):
     try:
         if isinstance(value, (int, float)):
             return f"{value:,}"
-        elif isinstance(value, str) and value.replace(',', '').isdigit():
-            return f"{int(value.replace(',', '')):,}"
         return str(value)
     except:
         return str(value)
 
 def generate_html(posts, channel_name, channel_info, media_paths):
-    iran_date = datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)
-    iran_date_str = iran_date.strftime('%Y/%m/%d - %H:%M')
+    iran_date_str = datetime.now(timezone.utc).strftime('%Y/%m/%d - %H:%M')
 
     html = f'''<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -105,31 +88,17 @@ def generate_html(posts, channel_name, channel_info, media_paths):
     <style>
         body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #1c1e21; }}
         .header {{ background: linear-gradient(135deg, #2a6df4, #1e4fcf); color: white; padding: 25px; border-radius: 16px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; }}
-        .header img {{ width: 80px; height: 80px; border-radius: 50%; border: 3px solid white; margin-bottom: 10px; }}
         .header h1 {{ margin: 5px 0; font-size: 24px; }}
-        .header p {{ opacity: 0.9; font-size: 14px; margin: 5px 0; }}
         .stats {{ display: flex; justify-content: center; gap: 30px; margin: 15px 0; font-size: 14px; opacity: 0.9; }}
         .post {{ background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-right: 4px solid #2a6df4; }}
-        .post-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }}
-        .post-id {{ color: #2a6df4; font-weight: bold; }}
-        .post-date {{ color: #65676b; font-size: 13px; }}
-        .post-body {{ font-size: 16px; line-height: 2; white-space: pre-wrap; word-break: break-word; margin-bottom: 15px; }}
-        .meta {{ background: #f0f2f5; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }}
-        .hashtag {{ color: #1e4fcf; background: #e7f0ff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }}
-        .media-container {{ margin-top: 15px; text-align: center; }}
-        .media-container img, .media-container video {{ max-width: 100%; max-height: 500px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 10px; }}
-        .footer {{ text-align: center; margin-top: 40px; color: #65676b; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px; }}
-        .post-url {{ display: inline-block; margin-top: 10px; background: #2a6df4; color: white !important; padding: 6px 14px; border-radius: 6px; font-size: 13px; text-decoration: none; }}
+        .post-header {{ display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }}
+        .media-container img, .media-container video {{ max-width: 100%; max-height: 500px; border-radius: 8px; margin: 10px 0; }}
     </style>
 </head>
 <body>
-
 <div class="header">
-    {f'<img src="{channel_info.get("channelAvatarUrl", "") or channel_info.get("Channel_Photo_Url", "")}" alt="Logo">' if channel_info.get('channelAvatarUrl') or channel_info.get('Channel_Photo_Url') else ''}
     <h1>@{channel_name}</h1>
-    <p>{channel_info.get('channelTitle', channel_info.get('Channel_Name', ''))}</p>
     <div class="stats">
-        <span>👥 {safe_format_number(channel_info.get('subscribers') or channel_info.get('Subscribers', '?'))}</span>
         <span>📊 {len(posts)} پست</span>
         <span>📅 بروزرسانی: {iran_date_str}</span>
     </div>
@@ -142,76 +111,43 @@ def generate_html(posts, channel_name, channel_info, media_paths):
         body = post.get('text') or post.get('Body', '')
         url = post.get('url') or post.get('Url', '#')
 
-        mentions = post.get('mentions', []) or []
-        hashtags = post.get('hashtags', []) or []
-        outlinks = post.get('outlinks', []) or post.get('links', [])
-
         html += f'''
 <div class="post">
     <div class="post-header">
-        <span class="post-id">#{post_id}</span>
-        <span class="post-date">📅 {date}</span>
+        <span>#{post_id}</span>
+        <span>{date}</span>
     </div>
-    <div class="post-body">{body}</div>
+    <div>{body}</div>
 '''
-
-        if mentions or hashtags or outlinks:
-            html += '<div class="meta">'
-            if mentions:
-                html += f'<span>🔗 منشن‌ها: {", ".join(mentions)}</span>'
-            if hashtags:
-                hashtag_html = " ".join([f'<span class="hashtag">{h}</span>' for h in hashtags])
-                html += f'<span>🏷️ {hashtag_html}</span>'
-            if outlinks:
-                links_html = ", ".join([f'<a href="{l}">لینک</a>' for l in outlinks])
-                html += f'<span>🌐 لینک‌ها: {links_html}</span>'
-            html += '</div>'
 
         if str(post_id) in media_paths:
             for m_path in media_paths[str(post_id)]:
                 ext = m_path.split('.')[-1].lower()
                 if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
-                    html += f'<div class="media-container"><img src="{m_path}" loading="lazy" alt="media"></div>'
+                    html += f'<div class="media-container"><img src="{m_path}" loading="lazy"></div>'
                 elif ext in ['mp4', 'webm', 'mov']:
-                    html += f'<div class="media-container"><video controls><source src="{m_path}" type="video/{ext}"></video></div>'
+                    html += f'<div class="media-container"><video controls><source src="{m_path}"></video></div>'
                 else:
-                    html += f'<div class="media-container"><a href="{m_path}" target="_blank">📎 دانلود فایل ({ext.upper()})</a></div>'
+                    html += f'<div class="media-container"><a href="{m_path}">📎 {ext.upper()}</a></div>'
 
-        html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
-        html += '</div>\n'
+        html += f'<a href="{url}" target="_blank">مشاهده در تلگرام</a></div>\n'
 
-    html += f'''
-<div class="footer">
-    تولید شده توسط scraper در تاریخ {iran_date_str}
-</div>
-</body>
-</html>'''
+    html += '</body></html>'
     return html
 
 def create_zip_archive(base_dir, channel):
     zip_name = f"{channel}_full_archive.zip"
     zip_path = os.path.join(base_dir, zip_name)
 
-    if os.path.exists(zip_path):
-        os.remove(zip_path)
-
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
-        html_path = os.path.join(base_dir, 'posts.html')
-        if os.path.exists(html_path):
-            zipf.write(html_path, 'posts.html')
-
-        for root, _, files in os.walk(MEDIA_DIR):
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(base_dir):
             for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, base_dir)
-                zipf.write(file_path, arcname)
+                if file.endswith(('.html', '.json', '.csv')) or 'media' in root:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, base_dir)
+                    zipf.write(file_path, arcname)
 
-    size_mb = os.path.getsize(zip_path) / 1024 / 1024
-    print(f"✅ ZIP created: {zip_name} ({size_mb:.1f} MB)")
-
-    if size_mb > MAX_ZIP_SIZE_MB:
-        print(f"⚠️ ZIP is larger than {MAX_ZIP_SIZE_MB}MB. Consider increasing limit or reducing media size.")
-
+    print(f"✅ ZIP created: {zip_name} ({os.path.getsize(zip_path)/1024/1024:.1f} MB)")
     return zip_name
 
 # ═══════════════════ اصلی ═══════════════════
@@ -219,63 +155,58 @@ def create_zip_archive(base_dir, channel):
 def main():
     client = ApifyClient(APIFY_TOKEN)
 
-    # ورودی دقیق به Actor
     run_input = {
         "channels": [CHANNEL],
-        "limit": LIMIT,                    # دقیقاً طبق درخواست کاربر
+        "limit": LIMIT,
         "includeMedia": True,
-        "includeReactions": True,
-        "sort": "desc"                     # جدیدترین پست اول
+        "sort": "desc"   # جدیدترین اول
     }
 
-    print(f"🚀 Starting scrape @{CHANNEL} | Requested Limit: {LIMIT} | Max Media: {MAX_MEDIA_SIZE_MB}MB")
+    print(f"🚀 Starting @{CHANNEL} | Limit: {LIMIT}")
 
     run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=15))
 
     if not run or run.status != 'SUCCEEDED':
-        print(f"❌ Run failed! Status: {run.status if run else 'None'}")
+        print("❌ Run failed!")
         sys.exit(1)
 
     items = list(client.dataset(run.default_dataset_id).iterate_items())
+    items = items[:LIMIT]   # دقیق طبق درخواست
 
-    # کنترل نهایی تعداد
+    print(f"📥 Received {len(items)} posts")
+
+    # === دیباگ ساختار داده ===
+    print("\n🔍 DEBUG - First post keys:")
     if items:
-        items = items[:LIMIT]
+        print(list(items[0].keys()))
 
-    print(f"📥 Final posts after limit: {len(items)}")
-
-    if not items:
-        print("⚠️ No posts found!")
-        return
-
-    channel_info = items[0]
+    channel_info = items[0] if items else {}
     media_map = {}
     downloaded_count = 0
-    skipped_count = 0
 
     def download_media_for_post(item):
-        nonlocal downloaded_count, skipped_count
+        nonlocal downloaded_count
         msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
-        # همه مدیاهای ممکن در یک پست
-        media_list = item.get('media', []) or []
+        # تمام راه‌های ممکن برای پیدا کردن URL
+        candidates = []
 
-        # فیلدهای تک
-        for key in ['mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'audioUrl']:
-            if item.get(key):
-                media_list.append({'url': item.get(key)})
+        # media آرایه
+        for m in item.get('media', []):
+            if isinstance(m, dict):
+                for v in m.values():
+                    if isinstance(v, str) and v.startswith('http'):
+                        candidates.append(v)
+            elif isinstance(m, str) and m.startswith('http'):
+                candidates.append(m)
 
-        for idx, media in enumerate(media_list):
-            url = None
-            if isinstance(media, dict):
-                url = media.get('url') or media.get('mediaUrl') or media.get('photoUrl') or media.get('videoUrl') or media.get('fileUrl')
-            elif isinstance(media, str) and media.startswith('http'):
-                url = media
+        # فیلدهای مستقیم
+        for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'url']:
+            if item.get(key) and isinstance(item.get(key), str) and item.get(key).startswith('http'):
+                candidates.append(item.get(key))
 
-            if not url or not url.startswith('http'):
-                continue
-
+        for idx, url in enumerate(candidates):
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
             ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'bin'
@@ -288,15 +219,12 @@ def main():
                 local_paths.append(rel_path)
                 continue
 
-            print(f"⬇️ Downloading for post {msg_id}: {filename}")
+            print(f"⬇️ Downloading post {msg_id} → {filename}")
             success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
                 local_paths.append(rel_path)
-                print(f"   ✅ Done ({size / 1024 / 1024:.1f} MB)")
-            else:
-                skipped_count += 1
-                print(f"   ❌ Failed")
+                print(f"   ✅ Done")
 
         return msg_id, local_paths
 
@@ -307,37 +235,20 @@ def main():
             if paths:
                 media_map[msg_id] = paths
 
-    # ذخیره خروجی‌ها
-    json_path = os.path.join(BASE_DIR, 'posts.json')
-    csv_path = os.path.join(BASE_DIR, 'posts.csv')
-    html_path = os.path.join(BASE_DIR, 'posts.html')
-
-    with open(json_path, 'w', encoding='utf-8') as f:
+    # ذخیره فایل‌ها
+    with open(os.path.join(BASE_DIR, 'posts.json'), 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
-    if items:
-        all_fields = set()
-        for item in items:
-            all_fields.update(item.keys())
-        fieldnames = sorted(list(all_fields))
-
-        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(items)
-
     html_content = generate_html(items, CHANNEL, channel_info, media_map)
-    with open(html_path, 'w', encoding='utf-8') as f:
+    with open(os.path.join(BASE_DIR, 'posts.html'), 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    # ایجاد ZIP
     zip_name = create_zip_archive(BASE_DIR, CHANNEL)
 
     print(f"\n🎉 Finished @{CHANNEL}!")
     print(f"   📊 Posts: {len(items)}")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
-    print(f"   ⏩ Skipped: {skipped_count}")
-    print(f"   📦 Final Archive: {zip_name}")
+    print(f"   📦 Archive: {zip_name}")
 
 if __name__ == "__main__":
     main()
