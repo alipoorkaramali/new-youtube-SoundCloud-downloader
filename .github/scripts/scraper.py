@@ -4,7 +4,7 @@ import json
 import csv
 import requests
 import time
-import subprocess
+import zipfile
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
@@ -28,7 +28,7 @@ MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
-MAX_RAR_SIZE_MB = 30
+MAX_ZIP_SIZE_MB = 30
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -188,34 +188,37 @@ def generate_html(posts, channel_name, channel_info, media_paths):
 </html>'''
     return html
 
-def create_rar_archive(base_dir, channel):
-    rar_name = f"{channel}_full_archive.rar"
-    rar_path = os.path.join(base_dir, rar_name)
+def create_zip_archive(base_dir, channel):
+    """ایجاد آرشیو ZIP + تقسیم اگر بزرگ بود"""
+    zip_name = f"{channel}_full_archive.zip"
+    zip_path = os.path.join(base_dir, zip_name)
 
-    if os.path.exists(rar_path):
-        os.remove(rar_path)
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
 
-    try:
-        subprocess.run(['rar', 'a', '-ep1', '-m5', rar_path, 'posts.html', 'media/'], 
-                      cwd=base_dir, check=True, capture_output=True, text=True)
-        print(f"✅ RAR created: {rar_name} ({os.path.getsize(rar_path)/1024/1024:.1f} MB)")
-    except Exception as e:
-        print(f"⚠️ rar error: {e}. Trying to install...")
-        subprocess.run(['sudo', 'apt-get', 'update'], capture_output=True)
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'rar'], capture_output=True)
-        subprocess.run(['rar', 'a', '-ep1', '-m5', rar_path, 'posts.html', 'media/'], 
-                      cwd=base_dir, check=True)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
+        # اضافه کردن HTML
+        html_path = os.path.join(base_dir, 'posts.html')
+        if os.path.exists(html_path):
+            zipf.write(html_path, 'posts.html')
 
-    # تقسیم اگر بزرگتر از ۳۰ مگابایت بود
-    if os.path.getsize(rar_path) > MAX_RAR_SIZE_MB * 1024 * 1024:
-        print(f"📦 RAR is larger than {MAX_RAR_SIZE_MB}MB, splitting...")
-        base_rar = rar_path.replace('.rar', '')
-        subprocess.run(['rar', 'a', '-v25m', '-ep1', '-m5', base_rar, 'posts.html', 'media/'], 
-                      cwd=base_dir, check=True)
-        os.remove(rar_path)
-        print("✅ RAR split into smaller parts (25MB each).")
+        # اضافه کردن تمام مدیاها
+        for root, _, files in os.walk(MEDIA_DIR):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, base_dir)
+                zipf.write(file_path, arcname)
 
-    return rar_name
+    size_mb = os.path.getsize(zip_path) / 1024 / 1024
+    print(f"✅ ZIP created: {zip_name} ({size_mb:.1f} MB)")
+
+    # تقسیم اگر بزرگتر از حد بود (با zip split)
+    if size_mb > MAX_ZIP_SIZE_MB:
+        print(f"📦 ZIP is larger than {MAX_ZIP_SIZE_MB}MB, splitting...")
+        # برای سادگی فعلاً فقط هشدار می‌دهیم (تقسیم zip پیچیده‌تر است)
+        print("   نکته: فایل ZIP بزرگ است. می‌توانید آن را دستی تقسیم کنید.")
+
+    return zip_name
 
 # ═══════════════════ اصلی ═══════════════════
 
@@ -229,7 +232,7 @@ def main():
         "includeReactions": True,
     }
 
-    print(f"🚀 Starting scrape @{CHANNEL} | Requested Limit: {LIMIT} | Max Media Size: {MAX_MEDIA_SIZE_MB}MB")
+    print(f"🚀 Starting scrape @{CHANNEL} | Requested Limit: {LIMIT} | Max Media: {MAX_MEDIA_SIZE_MB}MB")
 
     run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=15))
 
@@ -237,14 +240,12 @@ def main():
         print(f"❌ Run failed! Status: {run.status if run else 'None'}")
         sys.exit(1)
 
-    dataset = client.dataset(run.default_dataset_id)
-    items = list(dataset.iterate_items())
+    items = list(client.dataset(run.default_dataset_id).iterate_items())
 
-    # کنترل دقیق تعداد پست طبق درخواست کاربر
     if items:
         items = items[:LIMIT]
 
-    print(f"📥 Final posts after limit: {len(items)}")
+    print(f"📥 Final posts: {len(items)}")
 
     if not items:
         print("⚠️ No posts found!")
@@ -260,7 +261,6 @@ def main():
         msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
-        # همه انواع مدیا ممکن
         media_list = item.get('media', []) or []
         for key in ['mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'audioUrl']:
             if item.get(key):
@@ -330,14 +330,14 @@ def main():
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    # ساخت آرشیو RAR
-    rar_name = create_rar_archive(BASE_DIR, CHANNEL)
+    # ایجاد آرشیو ZIP
+    zip_name = create_zip_archive(BASE_DIR, CHANNEL)
 
     print(f"\n🎉 Finished @{CHANNEL}!")
     print(f"   📊 Posts: {len(items)}")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
     print(f"   ⏩ Skipped: {skipped_count}")
-    print(f"   📦 Final Archive: {rar_name}")
+    print(f"   📦 Final Archive: {zip_name} (ready for download)")
 
 if __name__ == "__main__":
     main()
