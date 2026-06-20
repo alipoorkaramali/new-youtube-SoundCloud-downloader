@@ -80,6 +80,17 @@ def format_iran_time(iso_date_str):
     except:
         return iso_date_str
 
+def safe_format_number(value):
+    """فرمت امن عدد"""
+    try:
+        if isinstance(value, (int, float)):
+            return f"{value:,}"
+        elif isinstance(value, str) and value.isdigit():
+            return f"{int(value):,}"
+        return str(value)
+    except:
+        return str(value)
+
 def generate_html(posts, channel_name, channel_info, media_paths):
     iran_date = datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)
     iran_date_str = iran_date.strftime('%Y/%m/%d - %H:%M')
@@ -117,7 +128,7 @@ def generate_html(posts, channel_name, channel_info, media_paths):
     <h1>@{channel_name}</h1>
     <p>{channel_info.get('channelTitle', channel_info.get('Channel_Name', ''))}</p>
     <div class="stats">
-        <span>👥 {channel_info.get('subscribers', channel_info.get('Subscribers', '?')):,}</span>
+        <span>👥 {safe_format_number(channel_info.get('subscribers') or channel_info.get('Subscribers', '?'))}</span>
         <span>📊 {len(posts)} پست</span>
         <span>📅 بروزرسانی: {iran_date_str}</span>
     </div>
@@ -183,7 +194,7 @@ def main():
 
     run_input = {
         "channels": [CHANNEL],
-        "limit": LIMIT * 2,          # کمی بیشتر می‌گیریم تا مطمئن شویم
+        "limit": LIMIT * 2,
         "includeMedia": True,
         "includeReactions": True,
     }
@@ -199,9 +210,9 @@ def main():
     dataset = client.dataset(run.default_dataset_id)
     items = list(dataset.iterate_items())
 
-    # === کنترل دقیق تعداد پست طبق درخواست کاربر ===
+    # کنترل دقیق تعداد پست طبق درخواست کاربر
     if items:
-        items = items[:LIMIT]   # فقط به تعداد درخواستی کاربر نگه می‌داریم
+        items = items[:LIMIT]
 
     print(f"📥 Received {len(items)} posts (after applying user limit)")
 
