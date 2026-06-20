@@ -44,7 +44,7 @@ jobs:
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
           MAX_MEDIA_SIZE_MB: ${{ github.event.inputs.max_media_size_mb }}
-        run: python scripts/scraper.py
+        run: python .github/scripts/scraper.py
 
       - name: Commit and push results
         uses: stefanzweifel/git-auto-commit-action@v5
