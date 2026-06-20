@@ -6,13 +6,13 @@ on:
       channel:
         description: 'Channel username (without @)'
         required: true
-        default: 'durov'
+        default: 'bbcpersian'
       limit:
         description: 'Number of recent posts'
         required: false
-        default: '20'
+        default: '10'
       start_id:
-        description: 'Start after message ID (if supported)'
+        description: 'Start after message ID'
         required: false
         default: '0'
 
@@ -28,7 +28,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          fetch-depth: 1          # ← مهم‌ترین تغییر (فقط آخرین commit)
+          sparse-checkout: |      # فقط پوشه‌های لازم را دانلود کن
+            .github/scripts/
+            Download/
 
       - name: Set up Python
         uses: actions/setup-python@v5
