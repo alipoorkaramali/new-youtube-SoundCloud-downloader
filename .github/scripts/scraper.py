@@ -40,8 +40,8 @@ def get_remote_file_size(url):
         length = resp.headers.get('Content-Length')
         if length and length.isdigit():
             return int(length)
-    except Exception as e:
-        print(f"   ⚠️ Head failed: {e}")
+    except:
+        pass
     return None
 
 def download_file(url, save_path, max_bytes=None):
@@ -105,7 +105,7 @@ def generate_html(posts, channel_name, channel_info, media_paths):
         .meta {{ background: #f0f2f5; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }}
         .hashtag {{ color: #1e4fcf; background: #e7f0ff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }}
         .media-container {{ margin-top: 15px; text-align: center; }}
-        .media-container img, .media-container video {{ max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        .media-container img, .media-container video {{ max-width: 100%; max-height: 500px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 10px; }}
         .footer {{ text-align: center; margin-top: 40px; color: #65676b; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px; }}
         .post-url {{ display: inline-block; margin-top: 10px; background: #2a6df4; color: white !important; padding: 6px 14px; border-radius: 6px; font-size: 13px; text-decoration: none; }}
     </style>
@@ -154,13 +154,16 @@ def generate_html(posts, channel_name, channel_info, media_paths):
                 html += f'<span>🌐 لینک‌ها: {links_html}</span>'
             html += '</div>'
 
+        # نمایش همه مدیاهای دانلود شده برای این پست
         if str(post_id) in media_paths:
             for m_path in media_paths[str(post_id)]:
                 ext = m_path.split('.')[-1].lower()
                 if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
                     html += f'<div class="media-container"><img src="{m_path}" loading="lazy" alt="media"></div>'
-                elif ext in ['mp4', 'webm']:
+                elif ext in ['mp4', 'webm', 'mov']:
                     html += f'<div class="media-container"><video controls><source src="{m_path}" type="video/{ext}"></video></div>'
+                else:
+                    html += f'<div class="media-container"><a href="{m_path}" target="_blank">📎 دانلود فایل ({ext})</a></div>'
 
         html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
         html += '</div>\n'
@@ -209,23 +212,19 @@ def main():
         msg_id = str(item.get('Id') or item.get('messageId') or 'unknown')
         local_paths = []
 
-        # تمام حالت‌های ممکن برای پیدا کردن URL مدیا
+        # همه حالت‌های ممکن
         media_list = item.get('media', []) or []
 
-        # حالت‌های تک فیلد
-        single_media_keys = ['MediaUrl', 'mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'LinkPreview_Image_Url']
-        for key in single_media_keys:
+        single_keys = ['MediaUrl', 'mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'LinkPreview_Image_Url', 'documentUrl']
+        for key in single_keys:
             if item.get(key):
                 media_list.append({'url': item.get(key)})
 
         for idx, media in enumerate(media_list):
             url = None
             if isinstance(media, dict):
-                url = (media.get('url') or 
-                       media.get('MediaUrl') or 
-                       media.get('photoUrl') or 
-                       media.get('videoUrl') or 
-                       media.get('fileUrl'))
+                url = (media.get('url') or media.get('MediaUrl') or media.get('photoUrl') or 
+                       media.get('videoUrl') or media.get('fileUrl') or media.get('documentUrl'))
             elif isinstance(media, str) and media.startswith('http'):
                 url = media
 
@@ -234,7 +233,7 @@ def main():
 
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
-            ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'jpg'
+            ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'bin'
 
             filename = f"post_{msg_id}_{idx}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
@@ -245,7 +244,7 @@ def main():
                 local_paths.append(rel_path)
                 continue
 
-            print(f"⬇️ Downloading media for post {msg_id}: {filename}")
+            print(f"⬇️ Downloading media for post {msg_id}: {filename} | URL: {url[:80]}...")
             success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
@@ -257,7 +256,6 @@ def main():
 
         return msg_id, local_paths
 
-    # دانلود موازی
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(download_media_for_post, item): item for item in items}
         for future in as_completed(futures):
@@ -265,7 +263,7 @@ def main():
             if paths:
                 media_map[msg_id] = paths
 
-    # تولید خروجی‌ها
+    # خروجی‌ها
     json_path = os.path.join(BASE_DIR, 'posts.json')
     csv_path = os.path.join(BASE_DIR, 'posts.csv')
     html_path = os.path.join(BASE_DIR, 'posts.html')
@@ -286,8 +284,6 @@ def main():
     print(f"   📊 Posts: {len(items)}")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
     print(f"   ⏩ Skipped/Failed: {skipped_count}")
-    if downloaded_count == 0:
-        print("   ⚠️ نکته: اگر پست‌ها مدیا داشتند ولی دانلود نشد، لاگ‌های Downloading را چک کن.")
 
 if __name__ == "__main__":
     main()
