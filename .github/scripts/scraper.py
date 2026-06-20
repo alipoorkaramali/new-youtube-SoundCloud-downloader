@@ -12,17 +12,29 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
-# ═══════════════════ تنظیمات از متغیرهای محیطی ═══════════════════
-APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
-if not APIFY_TOKEN:
-    print("❌ APIFY_TOKEN is empty! Set it as environment variable.")
+# ═══════════════════ تنظیمات اولیه ═══════════════════
+# خواندن لیست توکن‌ها از متغیرهای محیطی (حداکثر ۵ عدد)
+TOKEN_LIST = []
+for i in range(1, 6):
+    token = os.environ.get(f'APIFY_TOKEN_{i}')
+    if token:
+        TOKEN_LIST.append(token)
+
+# اگر هیچ توکنی پیدا نشد، سعی کن APIFY_TOKEN قدیمی را بخوان
+if not TOKEN_LIST:
+    fallback = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN')
+    if fallback:
+        TOKEN_LIST.append(fallback)
+
+if not TOKEN_LIST:
+    print("❌ No API token found! Set at least one of APIFY_TOKEN_1, APIFY_TOKEN_2, ...")
     sys.exit(1)
 
 CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
-ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
+ACTOR_ID = "i-scraper/telegram-channels-scraper"  # اکتور حرفه‌ای جدید
 
 # پوشه‌های خروجی
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
@@ -90,7 +102,7 @@ def format_iran_time(iso_date_str):
 
 def generate_html(posts, channel_name, media_map):
     """
-    تولید فایل HTML کامل با نمایش تمام اطلاعات هر پست (به جز دیتای خام).
+    تولید فایل HTML کامل با نمایش تمام اطلاعات هر پست و مدیاهای دانلود شده.
     """
     current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
 
@@ -128,13 +140,13 @@ def generate_html(posts, channel_name, media_map):
 '''
 
     for post in posts:
-        post_id = post.get('Id', '?')
-        date = format_iran_time(post.get('Date', ''))
-        body = post.get('Body', '')
-        url = post.get('Url', '#')
-        mentions = post.get('Mentions', [])
-        hashtags = post.get('Hashtags', [])
-        outlinks = post.get('Outlinks', [])
+        post_id = post.get('id') or post.get('Id') or '?'
+        date = format_iran_time(post.get('date') or post.get('Date', ''))
+        body = post.get('text') or post.get('Body', '')
+        url = post.get('url') or post.get('Url', '#')
+        mentions = post.get('mentions') or post.get('Mentions', [])
+        hashtags = post.get('hashtags') or post.get('Hashtags', [])
+        outlinks = post.get('outlinks') or post.get('Outlinks', [])
 
         html += f'''
 <div class="post">
@@ -200,28 +212,55 @@ def create_zip_archive(base_dir, channel):
     print(f"✅ ZIP created: {zip_name} ({os.path.getsize(zip_path)/1024/1024:.1f} MB)")
     return zip_name
 
+# ═══════════════════ تابع اجرای اکتور با چرخش توکن ═══════════════════
+
+def run_actor_with_tokens(token_list, actor_id, run_input):
+    """
+    تلاش برای اجرای اکتور با توکن‌های مختلف تا زمانی که یکی موفق شود.
+    """
+    last_exception = None
+    for idx, token in enumerate(token_list, 1):
+        try:
+            print(f"🔑 Trying with token #{idx} ...")
+            client = ApifyClient(token)
+            run = client.actor(actor_id).call(
+                run_input=run_input,
+                wait_duration=timedelta(minutes=5)
+            )
+            if run and run.status == 'SUCCEEDED':
+                print(f"✅ Token #{idx} succeeded.")
+                return run, client
+            else:
+                print(f"⚠️ Token #{idx} failed. Status: {run.status if run else 'None'}")
+                # اگر خطای مصرف یا محدودیت بود، به توکن بعدی برو
+        except Exception as e:
+            print(f"⚠️ Token #{idx} error: {e}")
+            last_exception = e
+            time.sleep(2)  # مکث قبل از توکن بعدی
+    print("❌ All tokens failed.")
+    if last_exception:
+        raise last_exception
+    else:
+        raise Exception("No working token found.")
+
 # ═══════════════════ تابع اصلی ═══════════════════
 
 def main():
     print(f"🚀 Starting scraper for @{CHANNEL} | Limit: {LIMIT}")
-
-    client = ApifyClient(APIFY_TOKEN)
+    print(f"🔑 Found {len(TOKEN_LIST)} API token(s).")
 
     run_input = {
-        "channels": [{
-            "channelName": CHANNEL,
-            "startId": 0,          # از آخرین (جدیدترین) پست شروع کن
-            "limit": LIMIT
-        }]
+        "channels": [CHANNEL],
+        "maxMessages": LIMIT,
+        "includeMedia": True,        # دریافت مدیا
+        "includeReactions": False,   # برای سرعت بیشتر (اختیاری)
+        "includeViews": True
     }
 
-    run = client.actor(ACTOR_ID).call(
-        run_input=run_input,
-        wait_duration=timedelta(minutes=5)
-    )
-
-    if run is None or run.status != 'SUCCEEDED':
-        print(f"❌ Run failed! Status: {run.status if run else 'None'}")
+    try:
+        run, client = run_actor_with_tokens(TOKEN_LIST, ACTOR_ID, run_input)
+    except Exception as e:
+        print(f"❌ Could not start actor: {e}")
         sys.exit(1)
 
     print(f"✅ Run succeeded. Dataset ID: {run.default_dataset_id}")
@@ -233,7 +272,7 @@ def main():
         return
 
     # مرتب‌سازی بر اساس تاریخ (جدیدترین اول) – اطمینان
-    items.sort(key=lambda x: x.get('Date', ''), reverse=True)
+    items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
 
     print(f"📥 Received {len(items)} posts")
 
@@ -242,36 +281,52 @@ def main():
     downloaded_count = 0
 
     for item in items:
-        post_id = str(item.get('Id', 'unknown'))
-        media_list = item.get('media', []) or []
+        # شناسه پست: ممکن است 'id' یا 'Id' باشد
+        post_id = str(item.get('id') or item.get('Id') or 'unknown')
+        # لیست مدیاها: ممکن است 'media' یا 'Media' باشد
+        media_list = item.get('media') or item.get('Media') or []
 
-        # برخی خروجی‌های قدیمی ممکن است MediaUrl داشته باشند
-        if not media_list and item.get('MediaUrl'):
-            media_list = [{
-                'url': item['MediaUrl'],
-                'mediaType': item.get('MediaType', 'unknown')
-            }]
+        # اگر media لیست نبود یا خالی بود، شاید به صورت جداگانه فیلدهایی داشته باشد
+        if not media_list:
+            # برخی اکتورها فیلدهای جداگانه دارند مثل photos, videos, documents
+            for key in ['photos', 'videos', 'documents', 'audio', 'voice']:
+                if key in item and item[key]:
+                    if isinstance(item[key], list):
+                        for m in item[key]:
+                            if isinstance(m, dict) and 'url' in m:
+                                media_list.append(m)
+                    elif isinstance(item[key], str) and item[key].startswith('http'):
+                        media_list.append({'url': item[key], 'type': key.rstrip('s')})
 
         for idx, media in enumerate(media_list):
-            url = media.get('url')
+            if isinstance(media, str) and media.startswith('http'):
+                url = media
+                media_type = 'unknown'
+            else:
+                url = media.get('url') or media.get('Url') or media.get('link') or ''
+                media_type = media.get('type') or media.get('mediaType') or media.get('MediaType') or 'unknown'
+
             if not url:
                 continue
 
-            # تشخیص پسوند
+            # تشخیص پسوند از URL یا نوع
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
-            if '.' in path_part:
+            if '.' in path_part and len(path_part.split('.')[-1]) <= 5:
                 ext = path_part.split('.')[-1].split('?')[0][:10].lower()
             else:
-                mtype = str(media.get('mediaType', '')).lower()
+                # تشخیص از نوع
+                mtype = str(media_type).lower()
                 if 'photo' in mtype or 'image' in mtype:
                     ext = 'jpg'
                 elif 'video' in mtype:
                     ext = 'mp4'
                 elif 'audio' in mtype or 'voice' in mtype:
                     ext = 'mp3'
-                else:
+                elif 'document' in mtype or 'file' in mtype:
                     ext = 'file'
+                else:
+                    ext = 'bin'
 
             filename = f"post_{post_id}_{idx}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
@@ -298,18 +353,30 @@ def main():
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
-    # CSV با فیلدهای اصلی
+    # CSV با فیلدهای اصلی (سازگار با ساختار خروجی)
     if items:
-        fieldnames = ['Id', 'Date', 'Body', 'Url', 'Mentions', 'Hashtags', 'Outlinks']
+        sample_keys = set()
+        for item in items:
+            sample_keys.update(item.keys())
+        # فیلدهای مهم را انتخاب می‌کنیم
+        important_fields = ['id', 'date', 'text', 'url', 'views', 'forwards', 'replies']
+        # همچنین فیلدهای دیگر را هم اضافه می‌کنیم
+        fieldnames = [f for f in important_fields if f in sample_keys]
+        # اگر فیلدهای دیگری مهم باشند اضافه می‌شوند
+        for f in ['mentions', 'hashtags', 'outlinks']:
+            if f in sample_keys:
+                fieldnames.append(f)
+
         with open(csv_path, 'w', encoding='utf-8', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
             writer.writeheader()
             for item in items:
-                # تبدیل لیست‌ها به رشته برای CSV
-                row = item.copy()
-                for k in ['Mentions', 'Hashtags', 'Outlinks']:
-                    if isinstance(row.get(k), list):
-                        row[k] = ', '.join(row[k])
+                row = {}
+                for k in fieldnames:
+                    val = item.get(k)
+                    if isinstance(val, list):
+                        val = ', '.join(str(v) for v in val)
+                    row[k] = val
                 writer.writerow(row)
 
     html_content = generate_html(items, CHANNEL, media_map)
@@ -325,7 +392,7 @@ def main():
     print(f"   📁 Output: {BASE_DIR}/")
     print(f"      ├── posts.json  (همه اطلاعات خام)")
     print(f"      ├── posts.csv   (خلاصه)")
-    print(f"      ├── posts.html  (نمایش کامل بدون دیتای خام)")
+    print(f"      ├── posts.html  (نمایش کامل با مدیاها)")
     print(f"      ├── media/      (فایل‌های دانلود شده)")
     print(f"      └── {zip_name}  (بایگانی کامل)")
 
