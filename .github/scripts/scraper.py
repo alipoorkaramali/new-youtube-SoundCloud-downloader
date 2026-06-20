@@ -22,9 +22,9 @@ CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
-ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
+# ═══════ تغییر به اکتور کم‌خرج و بدون نیاز به لاگین ═══════
+ACTOR_ID = "ahaham_bytiz/telegram-channel-scraper"
 
-# پوشه‌های خروجی
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
@@ -35,7 +35,6 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 # ═══════════════════ توابع کمکی ═══════════════════
 
 def get_remote_file_size(url):
-    """دریافت حجم فایل از هدر Content-Length بدون دانلود."""
     try:
         resp = requests.head(url, timeout=10, allow_redirects=True, headers=HEADERS)
         length = resp.headers.get('Content-Length')
@@ -46,10 +45,6 @@ def get_remote_file_size(url):
     return None
 
 def download_file(url, save_path, max_bytes=None):
-    """
-    دانلود فایل با بررسی حجم.
-    اگر max_bytes مشخص باشد و حجم بیشتر باشد، دانلود نمی‌کند.
-    """
     if max_bytes:
         size = get_remote_file_size(url)
         if size is not None and size > max_bytes:
@@ -80,7 +75,6 @@ def download_file(url, save_path, max_bytes=None):
     return False, 0
 
 def format_iran_time(iso_date_str):
-    """تبدیل تاریخ ISO به زمان ایران (+3:30)."""
     try:
         dt = datetime.fromisoformat(iso_date_str.replace('Z', '+00:00'))
         iran_dt = dt + timedelta(hours=3, minutes=30)
@@ -89,9 +83,6 @@ def format_iran_time(iso_date_str):
         return iso_date_str
 
 def generate_html(posts, channel_name, media_map):
-    """
-    تولید فایل HTML کامل با نمایش تمام اطلاعات هر پست (به جز دیتای خام).
-    """
     current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
 
     html = f'''<!DOCTYPE html>
@@ -128,13 +119,13 @@ def generate_html(posts, channel_name, media_map):
 '''
 
     for post in posts:
-        post_id = post.get('Id', '?')
-        date = format_iran_time(post.get('Date', ''))
-        body = post.get('Body', '')
-        url = post.get('Url', '#')
-        mentions = post.get('Mentions', [])
-        hashtags = post.get('Hashtags', [])
-        outlinks = post.get('Outlinks', [])
+        post_id = post.get('id') or post.get('Id') or '?'
+        date = format_iran_time(post.get('date') or post.get('Date', ''))
+        body = post.get('text') or post.get('Body', '')
+        url = post.get('url') or post.get('Url', '#')
+        mentions = post.get('mentions') or post.get('Mentions', [])
+        hashtags = post.get('hashtags') or post.get('Hashtags', [])
+        outlinks = post.get('outlinks') or post.get('Outlinks', [])
 
         html += f'''
 <div class="post">
@@ -145,7 +136,6 @@ def generate_html(posts, channel_name, media_map):
     <div class="post-body">{body}</div>
 '''
 
-        # متا (منشن‌ها، هشتگ‌ها، لینک‌های خروجی)
         if mentions or hashtags or outlinks:
             html += '<div class="meta">'
             if mentions:
@@ -156,7 +146,6 @@ def generate_html(posts, channel_name, media_map):
                 html += '<span>🌐 لینک‌های خروجی: ' + ', '.join([f'<a href="{l}">لینک</a>' for l in outlinks]) + '</span>'
             html += '</div>'
 
-        # مدیاهای دانلود شده
         if str(post_id) in media_map:
             for m_path in media_map[str(post_id)]:
                 ext = m_path.split('.')[-1].lower()
@@ -169,10 +158,8 @@ def generate_html(posts, channel_name, media_map):
                 else:
                     html += f'<div class="media-container"><a href="{m_path}">📎 {ext.upper()}</a></div>'
 
-        # لینک پست
         html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
-
-        html += '</div>\n'   # بستن .post
+        html += '</div>\n'
 
     html += '''
 <div class="footer">
@@ -183,7 +170,6 @@ def generate_html(posts, channel_name, media_map):
     return html
 
 def create_zip_archive(base_dir, channel):
-    """ساخت فایل ZIP از کل پوشه خروجی."""
     zip_name = f"{channel}_full_archive.zip"
     zip_path = os.path.join(base_dir, zip_name)
     if os.path.exists(zip_path):
@@ -207,12 +193,13 @@ def main():
 
     client = ApifyClient(APIFY_TOKEN)
 
+    # ورودی مخصوص اکتور ahaham_bytiz
     run_input = {
-        "channels": [{
-            "channelName": CHANNEL,
-            "startId": 0,          # از آخرین (جدیدترین) پست شروع کن
-            "limit": LIMIT
-        }]
+        "channels": [CHANNEL],
+        "maxMessages": LIMIT,        # تعداد پست‌های آخر
+        "includeMedia": True,
+        "enableReactions": False,
+        "enableViews": True
     }
 
     run = client.actor(ACTOR_ID).call(
@@ -232,9 +219,7 @@ def main():
         print("⚠️ No posts found!")
         return
 
-    # مرتب‌سازی بر اساس تاریخ (جدیدترین اول) – اطمینان
-    items.sort(key=lambda x: x.get('Date', ''), reverse=True)
-
+    items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
     print(f"📥 Received {len(items)} posts")
 
     # ─── دانلود مدیاها ───
@@ -242,36 +227,52 @@ def main():
     downloaded_count = 0
 
     for item in items:
-        post_id = str(item.get('Id', 'unknown'))
-        media_list = item.get('media', []) or []
+        post_id = str(item.get('id') or item.get('Id') or 'unknown')
+        media_list = []
 
-        # برخی خروجی‌های قدیمی ممکن است MediaUrl داشته باشند
-        if not media_list and item.get('MediaUrl'):
-            media_list = [{
-                'url': item['MediaUrl'],
-                'mediaType': item.get('MediaType', 'unknown')
-            }]
+        # اکتور ahaham_bytiz مدیاها را در این فیلدها قرار می‌دهد
+        for key in ['photos', 'videos', 'documents', 'audio']:
+            if key in item and item[key]:
+                if isinstance(item[key], list):
+                    for m in item[key]:
+                        if isinstance(m, dict) and m.get('url'):
+                            media_list.append(m)
+                        elif isinstance(m, str) and m.startswith('http'):
+                            media_list.append({'url': m})
+                elif isinstance(item[key], str) and item[key].startswith('http'):
+                    media_list.append({'url': item[key]})
+
+        if not media_list and 'media' in item:
+            if isinstance(item['media'], list):
+                media_list = item['media']
+            elif isinstance(item['media'], str) and item['media'].startswith('http'):
+                media_list = [{'url': item['media']}]
 
         for idx, media in enumerate(media_list):
-            url = media.get('url')
+            if isinstance(media, str):
+                url = media
+            else:
+                url = media.get('url') or media.get('Url') or media.get('link') or ''
+
             if not url:
                 continue
 
-            # تشخیص پسوند
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
-            if '.' in path_part:
+            if '.' in path_part and len(path_part.split('.')[-1]) <= 5:
                 ext = path_part.split('.')[-1].split('?')[0][:10].lower()
             else:
-                mtype = str(media.get('mediaType', '')).lower()
-                if 'photo' in mtype or 'image' in mtype:
+                media_type = media.get('type') or media.get('mediaType') or ''
+                if 'photo' in media_type.lower() or 'image' in media_type.lower():
                     ext = 'jpg'
-                elif 'video' in mtype:
+                elif 'video' in media_type.lower():
                     ext = 'mp4'
-                elif 'audio' in mtype or 'voice' in mtype:
+                elif 'audio' in media_type.lower() or 'voice' in media_type.lower():
                     ext = 'mp3'
-                else:
+                elif 'document' in media_type.lower():
                     ext = 'file'
+                else:
+                    ext = 'bin'
 
             filename = f"post_{post_id}_{idx}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
@@ -298,25 +299,32 @@ def main():
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
-    # CSV با فیلدهای اصلی
     if items:
-        fieldnames = ['Id', 'Date', 'Body', 'Url', 'Mentions', 'Hashtags', 'Outlinks']
+        sample_keys = set()
+        for item in items:
+            sample_keys.update(item.keys())
+        important_fields = ['id', 'date', 'text', 'url', 'views', 'forwards', 'replies']
+        fieldnames = [f for f in important_fields if f in sample_keys]
+        for f in ['mentions', 'hashtags', 'outlinks']:
+            if f in sample_keys:
+                fieldnames.append(f)
+
         with open(csv_path, 'w', encoding='utf-8', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
             writer.writeheader()
             for item in items:
-                # تبدیل لیست‌ها به رشته برای CSV
-                row = item.copy()
-                for k in ['Mentions', 'Hashtags', 'Outlinks']:
-                    if isinstance(row.get(k), list):
-                        row[k] = ', '.join(row[k])
+                row = {}
+                for k in fieldnames:
+                    val = item.get(k)
+                    if isinstance(val, list):
+                        val = ', '.join(str(v) for v in val)
+                    row[k] = val
                 writer.writerow(row)
 
     html_content = generate_html(items, CHANNEL, media_map)
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    # ─── ساخت ZIP ───
     zip_name = create_zip_archive(BASE_DIR, CHANNEL)
 
     print(f"\n🎉 Finished @{CHANNEL}!")
@@ -325,7 +333,7 @@ def main():
     print(f"   📁 Output: {BASE_DIR}/")
     print(f"      ├── posts.json  (همه اطلاعات خام)")
     print(f"      ├── posts.csv   (خلاصه)")
-    print(f"      ├── posts.html  (نمایش کامل بدون دیتای خام)")
+    print(f"      ├── posts.html  (نمایش کامل با مدیاها)")
     print(f"      ├── media/      (فایل‌های دانلود شده)")
     print(f"      └── {zip_name}  (بایگانی کامل)")
 
