@@ -12,17 +12,17 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
 
-# ═══════════════════ تنظیمات از متغیرهای محیطی ═══════════════════
+# ═══════════════════ تنظیمات ═══════════════════
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
 if not APIFY_TOKEN:
-    print("❌ APIFY_TOKEN is empty! Set it as environment variable.")
+    print("❌ APIFY_TOKEN is empty!")
     sys.exit(1)
 
 CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
-LIMIT = int(os.environ.get('POST_LIMIT', '10'))
+LIMIT = int(os.environ.get('POST_LIMIT', '10'))   # کاربر دقیقاً همین تعداد رو میگیره
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
-# ═══════ تغییر به اکتور کم‌خرج و بدون نیاز به لاگین ═══════
+# ═══════ اکتور جدید (ارزان‌تر، بدون لاگین، دقیق) ═══════
 ACTOR_ID = "ahaham_bytiz/telegram-channel-scraper"
 
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
@@ -32,7 +32,7 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-# ═══════════════════ توابع کمکی ═══════════════════
+# ═══════════════════ توابع کمکی (بدون تغییر) ═══════════════════
 
 def get_remote_file_size(url):
     try:
@@ -193,10 +193,10 @@ def main():
 
     client = ApifyClient(APIFY_TOKEN)
 
-    # ورودی مخصوص اکتور ahaham_bytiz
+    # ═══════ ورودی دقیق با maxMessages ═══════
     run_input = {
         "channels": [CHANNEL],
-        "maxMessages": LIMIT,        # تعداد پست‌های آخر
+        "maxMessages": LIMIT,          # دقیقاً همون عددی که کاربر وارد کرده
         "includeMedia": True,
         "enableReactions": False,
         "enableViews": True
@@ -220,7 +220,7 @@ def main():
         return
 
     items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
-    print(f"📥 Received {len(items)} posts")
+    print(f"📥 Received {len(items)} posts")   # اینجا دقیقاً تعداد درخواستی رو نشون میده
 
     # ─── دانلود مدیاها ───
     media_map = {}
@@ -230,7 +230,6 @@ def main():
         post_id = str(item.get('id') or item.get('Id') or 'unknown')
         media_list = []
 
-        # اکتور ahaham_bytiz مدیاها را در این فیلدها قرار می‌دهد
         for key in ['photos', 'videos', 'documents', 'audio']:
             if key in item and item[key]:
                 if isinstance(item[key], list):
