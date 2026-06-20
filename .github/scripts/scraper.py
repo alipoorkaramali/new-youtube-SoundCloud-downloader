@@ -90,7 +90,7 @@ def format_iran_time(iso_date_str):
 
 def generate_html(posts, channel_name, media_map):
     """
-    تولید فایل HTML کامل با نمایش تمام اطلاعات هر پست.
+    تولید فایل HTML کامل با نمایش تمام اطلاعات هر پست (به جز دیتای خام).
     """
     current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
 
@@ -114,7 +114,6 @@ def generate_html(posts, channel_name, media_map):
         .media-container {{ margin-top: 15px; text-align: center; }}
         .media-container img, .media-container video {{ max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
         .post-url {{ display: inline-block; margin-top: 10px; background: #2a6df4; color: white !important; padding: 6px 14px; border-radius: 6px; font-size: 13px; text-decoration: none; }}
-        .raw-data {{ background: #f8f9fa; border-radius: 8px; padding: 15px; margin-top: 15px; font-size: 12px; direction: ltr; text-align: left; overflow-x: auto; }}
         .footer {{ text-align: center; margin-top: 40px; color: #65676b; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px; }}
     </style>
 </head>
@@ -146,7 +145,7 @@ def generate_html(posts, channel_name, media_map):
     <div class="post-body">{body}</div>
 '''
 
-        # متا
+        # متا (منشن‌ها، هشتگ‌ها، لینک‌های خروجی)
         if mentions or hashtags or outlinks:
             html += '<div class="meta">'
             if mentions:
@@ -173,14 +172,7 @@ def generate_html(posts, channel_name, media_map):
         # لینک پست
         html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
 
-        # نمایش همه فیلدهای خام (برای دیباگ و اطلاعات کامل)
-        html += f'''
-<div class="raw-data">
-    <strong>📋 همه اطلاعات خام:</strong><br>
-    <pre>{json.dumps(post, indent=2, ensure_ascii=False)}</pre>
-</div>
-'''
-        html += '</div>\n'
+        html += '</div>\n'   # بستن .post
 
     html += '''
 <div class="footer">
@@ -333,7 +325,7 @@ def main():
     print(f"   📁 Output: {BASE_DIR}/")
     print(f"      ├── posts.json  (همه اطلاعات خام)")
     print(f"      ├── posts.csv   (خلاصه)")
-    print(f"      ├── posts.html  (نمایش کامل + لینک‌ها)")
+    print(f"      ├── posts.html  (نمایش کامل بدون دیتای خام)")
     print(f"      ├── media/      (فایل‌های دانلود شده)")
     print(f"      └── {zip_name}  (بایگانی کامل)")
 
