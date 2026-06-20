@@ -8,13 +8,17 @@ on:
         required: true
         default: 'bbcpersian'
       limit:
-        description: 'Number of recent posts'
+        description: 'Number of posts to scrape'
         required: false
         default: '10'
       start_id:
-        description: 'Start after message ID'
+        description: 'Start after message ID (optional)'
         required: false
         default: '0'
+      max_media_size_mb:
+        description: 'Max media size per file (MB)'
+        required: false
+        default: '80'
 
 permissions:
   contents: write
@@ -28,8 +32,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 1          # ← مهم‌ترین تغییر (فقط آخرین commit)
-          sparse-checkout: |      # فقط پوشه‌های لازم را دانلود کن
+          fetch-depth: 1
+          sparse-checkout: |
             .github/scripts/
             Download/
 
@@ -39,21 +43,23 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install apify-client requests
+        run: |
+          pip install apify-client requests
+          sudo apt-get update && sudo apt-get install -y rar
 
-      - name: Run Improved Apify scraper + Media Download
+      - name: Run Telegram Scraper + Media Download + RAR Archive
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
           START_ID: ${{ github.event.inputs.start_id }}
-          MAX_MEDIA_SIZE_MB: '50'
+          MAX_MEDIA_SIZE_MB: ${{ github.event.inputs.max_media_size_mb }}
         run: python .github/scripts/scraper.py
 
       - name: Commit and push results
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "📥 Update posts & media for @${{ github.event.inputs.channel }}"
+          commit_message: "📥 Update Telegram archive for @${{ github.event.inputs.channel }} (${{ github.event.inputs.limit }} posts)"
           file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
