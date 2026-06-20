@@ -22,7 +22,6 @@ CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
-# ═══════ برگشت به اکتور قبلی ═══════
 ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
 
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
@@ -32,7 +31,7 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-# ═══════════════════ توابع کمکی ═══════════════════
+# ═══════════════════ توابع کمکی (بدون تغییر) ═══════════════════
 
 def get_remote_file_size(url):
     try:
@@ -193,11 +192,14 @@ def main():
 
     client = ApifyClient(APIFY_TOKEN)
 
-    # ═══════ ساختار درست برای thescrapelab ═══════
+    # ═══════ ساختار درست با channels ═══════
     run_input = {
-        "channel": CHANNEL,           # به جای channels
-        "limit": LIMIT,              # تعداد پست دقیقاً همین
-        "includeMedia": True
+        "channels": [
+            {
+                "channelName": CHANNEL,
+                "limit": LIMIT
+            }
+        ]
     }
 
     run = client.actor(ACTOR_ID).call(
@@ -228,7 +230,6 @@ def main():
         post_id = str(item.get('messageId') or item.get('id') or 'unknown')
         media_list = []
 
-        # بررسی فیلدهای مختلف برای مدیا
         for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl']:
             if item.get(key):
                 media_list.append({'url': item[key], 'type': key})
