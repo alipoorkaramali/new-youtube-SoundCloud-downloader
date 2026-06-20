@@ -19,7 +19,6 @@ CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '20'))
 START_ID = int(os.environ.get('START_ID', '0'))
 
-# Actor خوب و ارزان با پشتیبانی خوب از مدیا
 ACTOR_ID = "automation-lab/telegram-scraper"
 
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
@@ -184,12 +183,12 @@ def main():
 
     run_input = {
         "channels": [CHANNEL],
-        "limit": LIMIT,
+        "limit": LIMIT * 2,          # کمی بیشتر می‌گیریم تا مطمئن شویم
         "includeMedia": True,
         "includeReactions": True,
     }
 
-    print(f"🚀 Starting scrape with good Actor @{CHANNEL} | Limit: {LIMIT}")
+    print(f"🚀 Starting scrape with good Actor @{CHANNEL} | Requested Limit: {LIMIT}")
 
     run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=12))
 
@@ -200,11 +199,15 @@ def main():
     dataset = client.dataset(run.default_dataset_id)
     items = list(dataset.iterate_items())
 
+    # === کنترل دقیق تعداد پست طبق درخواست کاربر ===
+    if items:
+        items = items[:LIMIT]   # فقط به تعداد درخواستی کاربر نگه می‌داریم
+
+    print(f"📥 Received {len(items)} posts (after applying user limit)")
+
     if not items:
         print("⚠️ No posts found!")
         return
-
-    print(f"📥 Received {len(items)} posts from Apify")
 
     channel_info = items[0]
     media_map = {}
@@ -216,14 +219,10 @@ def main():
         msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
-        # استخراج همه مدیاها
         media_list = item.get('media', []) or []
-        if item.get('mediaUrl'):
-            media_list.append({'url': item.get('mediaUrl')})
-        if item.get('photoUrl') or item.get('image'):
-            media_list.append({'url': item.get('photoUrl') or item.get('image')})
-        if item.get('videoUrl'):
-            media_list.append({'url': item.get('videoUrl')})
+        if item.get('mediaUrl'): media_list.append({'url': item.get('mediaUrl')})
+        if item.get('photoUrl'): media_list.append({'url': item.get('photoUrl')})
+        if item.get('videoUrl'): media_list.append({'url': item.get('videoUrl')})
 
         for idx, media in enumerate(media_list):
             url = None
@@ -274,17 +273,24 @@ def main():
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
-    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=items[0].keys())
-        writer.writeheader()
-        writer.writerows(items)
+    # CSV با همه فیلدها
+    if items:
+        all_fields = set()
+        for item in items:
+            all_fields.update(item.keys())
+        fieldnames = sorted(list(all_fields))
+
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(items)
 
     html_content = generate_html(items, CHANNEL, channel_info, media_map)
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
     print(f"\n🎉 Finished @{CHANNEL}!")
-    print(f"   📊 Posts: {len(items)}")
+    print(f"   📊 Posts: {len(items)} (exactly as requested)")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
     print(f"   ⏩ Skipped: {skipped_count}")
 
