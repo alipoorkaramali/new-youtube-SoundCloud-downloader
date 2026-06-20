@@ -189,7 +189,6 @@ def generate_html(posts, channel_name, channel_info, media_paths):
     return html
 
 def create_zip_archive(base_dir, channel):
-    """ایجاد آرشیو ZIP + تقسیم اگر بزرگ بود"""
     zip_name = f"{channel}_full_archive.zip"
     zip_path = os.path.join(base_dir, zip_name)
 
@@ -197,12 +196,10 @@ def create_zip_archive(base_dir, channel):
         os.remove(zip_path)
 
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
-        # اضافه کردن HTML
         html_path = os.path.join(base_dir, 'posts.html')
         if os.path.exists(html_path):
             zipf.write(html_path, 'posts.html')
 
-        # اضافه کردن تمام مدیاها
         for root, _, files in os.walk(MEDIA_DIR):
             for file in files:
                 file_path = os.path.join(root, file)
@@ -212,11 +209,8 @@ def create_zip_archive(base_dir, channel):
     size_mb = os.path.getsize(zip_path) / 1024 / 1024
     print(f"✅ ZIP created: {zip_name} ({size_mb:.1f} MB)")
 
-    # تقسیم اگر بزرگتر از حد بود (با zip split)
     if size_mb > MAX_ZIP_SIZE_MB:
-        print(f"📦 ZIP is larger than {MAX_ZIP_SIZE_MB}MB, splitting...")
-        # برای سادگی فعلاً فقط هشدار می‌دهیم (تقسیم zip پیچیده‌تر است)
-        print("   نکته: فایل ZIP بزرگ است. می‌توانید آن را دستی تقسیم کنید.")
+        print(f"⚠️ ZIP is larger than {MAX_ZIP_SIZE_MB}MB. Consider increasing limit or reducing media size.")
 
     return zip_name
 
@@ -225,11 +219,13 @@ def create_zip_archive(base_dir, channel):
 def main():
     client = ApifyClient(APIFY_TOKEN)
 
+    # ورودی دقیق به Actor
     run_input = {
         "channels": [CHANNEL],
-        "limit": LIMIT * 2,
+        "limit": LIMIT,                    # دقیقاً طبق درخواست کاربر
         "includeMedia": True,
         "includeReactions": True,
+        "sort": "desc"                     # جدیدترین پست اول
     }
 
     print(f"🚀 Starting scrape @{CHANNEL} | Requested Limit: {LIMIT} | Max Media: {MAX_MEDIA_SIZE_MB}MB")
@@ -242,10 +238,11 @@ def main():
 
     items = list(client.dataset(run.default_dataset_id).iterate_items())
 
+    # کنترل نهایی تعداد
     if items:
         items = items[:LIMIT]
 
-    print(f"📥 Final posts: {len(items)}")
+    print(f"📥 Final posts after limit: {len(items)}")
 
     if not items:
         print("⚠️ No posts found!")
@@ -261,7 +258,10 @@ def main():
         msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
+        # همه مدیاهای ممکن در یک پست
         media_list = item.get('media', []) or []
+
+        # فیلدهای تک
         for key in ['mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'audioUrl']:
             if item.get(key):
                 media_list.append({'url': item.get(key)})
@@ -330,14 +330,14 @@ def main():
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    # ایجاد آرشیو ZIP
+    # ایجاد ZIP
     zip_name = create_zip_archive(BASE_DIR, CHANNEL)
 
     print(f"\n🎉 Finished @{CHANNEL}!")
     print(f"   📊 Posts: {len(items)}")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
     print(f"   ⏩ Skipped: {skipped_count}")
-    print(f"   📦 Final Archive: {zip_name} (ready for download)")
+    print(f"   📦 Final Archive: {zip_name}")
 
 if __name__ == "__main__":
     main()
