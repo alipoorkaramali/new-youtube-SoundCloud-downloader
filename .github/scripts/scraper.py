@@ -40,8 +40,8 @@ def get_remote_file_size(url):
         length = resp.headers.get('Content-Length')
         if length and length.isdigit():
             return int(length)
-    except Exception as e:
-        print(f"   ⚠️ Head failed: {e}")
+    except:
+        pass
     return None
 
 def download_file(url, save_path, max_bytes=None):
@@ -65,11 +65,11 @@ def download_file(url, save_path, max_bytes=None):
                             return False, downloaded
                 return True, downloaded
             else:
-                print(f"   ⚠️ HTTP {r.status_code} (attempt {attempt+1})")
+                print(f"   ⚠️ HTTP {r.status_code}")
         except Exception as e:
             print(f"   ⚠️ Download error (attempt {attempt+1}): {e}")
             time.sleep(2 ** attempt)
-    print(f"   ❌ Failed after retries: {url[:100]}...")
+    print(f"   ❌ Failed: {url[:120]}...")
     return False, 0
 
 def format_iran_time(iso_date_str):
@@ -197,6 +197,8 @@ def main():
         print("⚠️ No posts found!")
         return
 
+    print(f"📥 Received {len(items)} posts from Apify")
+
     channel_info = items[0]
     media_map = {}
     downloaded_count = 0
@@ -204,15 +206,24 @@ def main():
 
     def download_media_for_post(item):
         nonlocal downloaded_count, skipped_count
-        msg_id = str(item.get('Id', 'unknown'))
-        media_list = item.get('media', []) or []
-        if not media_list and item.get('MediaUrl'):
-            media_list = [{'url': item.get('MediaUrl'), 'mediaType': item.get('MediaType')}]
-
+        msg_id = str(item.get('Id') or item.get('messageId') or 'unknown')
         local_paths = []
+
+        # === تشخیص تمام حالت‌های ممکن مدیا ===
+        media_list = item.get('media', []) or []
+
+        # حالت‌های رایج Actor thescrapelab
+        if item.get('MediaUrl'):
+            media_list.append({'url': item.get('MediaUrl'), 'mediaType': item.get('MediaType')})
+        if item.get('photoUrl'):
+            media_list.append({'url': item.get('photoUrl')})
+        if item.get('videoUrl'):
+            media_list.append({'url': item.get('videoUrl')})
+
         for idx, media in enumerate(media_list):
-            url = media.get('url')
-            if not url: continue
+            url = media.get('url') or media.get('MediaUrl') or media.get('photoUrl') or media.get('videoUrl')
+            if not url:
+                continue
 
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
@@ -226,16 +237,19 @@ def main():
                 local_paths.append(rel_path)
                 continue
 
-            print(f"⬇️ Downloading: {filename}")
+            print(f"⬇️ Downloading media for post {msg_id}: {filename}")
             success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
                 local_paths.append(rel_path)
+                print(f"   ✅ Success ({size / 1024 / 1024:.1f} MB)")
             else:
                 skipped_count += 1
+                print(f"   ❌ Failed")
 
         return msg_id, local_paths
 
+    # دانلود موازی
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(download_media_for_post, item): item for item in items}
         for future in as_completed(futures):
@@ -243,7 +257,7 @@ def main():
             if paths:
                 media_map[msg_id] = paths
 
-    # ذخیره خروجی
+    # ذخیره فایل‌ها
     json_path = os.path.join(BASE_DIR, 'posts.json')
     csv_path = os.path.join(BASE_DIR, 'posts.csv')
     html_path = os.path.join(BASE_DIR, 'posts.html')
@@ -263,7 +277,9 @@ def main():
     print(f"\n🎉 Finished @{CHANNEL}!")
     print(f"   📊 Posts: {len(items)}")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
-    print(f"   ⏩ Skipped: {skipped_count}")
+    print(f"   ⏩ Skipped/Failed: {skipped_count}")
+    if downloaded_count == 0:
+        print("   ⚠️ نکته: اگر پست‌ها مدیا داشتند ولی دانلود نشد، لاگ بالا را چک کن.")
 
 if __name__ == "__main__":
     main()
