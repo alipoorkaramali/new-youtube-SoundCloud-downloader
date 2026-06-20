@@ -10,24 +10,25 @@ on:
       limit:
         description: 'Number of recent posts'
         required: false
-        default: '10'
+        default: '20'
       start_id:
-        description: 'Start after message ID (incremental)'
+        description: 'Start after message ID (if supported)'
         required: false
         default: '0'
 
 permissions:
-  contents: write   # برای commit و push خودکار
+  contents: write
 
 jobs:
   scrape-and-commit:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0   # کل تاریخچه برای push لازم است
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,19 +38,19 @@ jobs:
       - name: Install dependencies
         run: pip install apify-client requests
 
-      - name: Run Apify scraper
+      - name: Run Improved Apify scraper + Media Download
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           CHANNEL: ${{ github.event.inputs.channel }}
           POST_LIMIT: ${{ github.event.inputs.limit }}
           START_ID: ${{ github.event.inputs.start_id }}
+          MAX_MEDIA_SIZE_MB: '50'
         run: python .github/scripts/scraper.py
 
       - name: Commit and push results
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "📥 Update posts for @${{ github.event.inputs.channel }}"
+          commit_message: "📥 Update posts & media for @${{ github.event.inputs.channel }}"
           file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          commit_author: "GitHub Actions <actions@github.com>"
