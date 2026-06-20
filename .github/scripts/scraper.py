@@ -4,6 +4,7 @@ import json
 import csv
 import requests
 import time
+import subprocess
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
@@ -12,12 +13,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ═══════════════════ تنظیمات ═══════════════════
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
 if not APIFY_TOKEN:
-    print("❌ APIFY_TOKEN is empty!")
+    print("❌ APIFY_TOKEN is empty! Make sure the secret is set correctly.")
     sys.exit(1)
 
 CHANNEL = os.environ.get('CHANNEL', 'durov').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '20'))
 START_ID = int(os.environ.get('START_ID', '0'))
+MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
 ACTOR_ID = "automation-lab/telegram-scraper"
 
@@ -25,8 +27,8 @@ BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
+MAX_RAR_SIZE_MB = 30
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -81,12 +83,11 @@ def format_iran_time(iso_date_str):
         return iso_date_str
 
 def safe_format_number(value):
-    """فرمت امن عدد"""
     try:
         if isinstance(value, (int, float)):
             return f"{value:,}"
-        elif isinstance(value, str) and value.isdigit():
-            return f"{int(value):,}"
+        elif isinstance(value, str) and value.replace(',', '').isdigit():
+            return f"{int(value.replace(',', '')):,}"
         return str(value)
     except:
         return str(value)
@@ -187,6 +188,35 @@ def generate_html(posts, channel_name, channel_info, media_paths):
 </html>'''
     return html
 
+def create_rar_archive(base_dir, channel):
+    rar_name = f"{channel}_full_archive.rar"
+    rar_path = os.path.join(base_dir, rar_name)
+
+    if os.path.exists(rar_path):
+        os.remove(rar_path)
+
+    try:
+        subprocess.run(['rar', 'a', '-ep1', '-m5', rar_path, 'posts.html', 'media/'], 
+                      cwd=base_dir, check=True, capture_output=True, text=True)
+        print(f"✅ RAR created: {rar_name} ({os.path.getsize(rar_path)/1024/1024:.1f} MB)")
+    except Exception as e:
+        print(f"⚠️ rar error: {e}. Trying to install...")
+        subprocess.run(['sudo', 'apt-get', 'update'], capture_output=True)
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'rar'], capture_output=True)
+        subprocess.run(['rar', 'a', '-ep1', '-m5', rar_path, 'posts.html', 'media/'], 
+                      cwd=base_dir, check=True)
+
+    # تقسیم اگر بزرگتر از ۳۰ مگابایت بود
+    if os.path.getsize(rar_path) > MAX_RAR_SIZE_MB * 1024 * 1024:
+        print(f"📦 RAR is larger than {MAX_RAR_SIZE_MB}MB, splitting...")
+        base_rar = rar_path.replace('.rar', '')
+        subprocess.run(['rar', 'a', '-v25m', '-ep1', '-m5', base_rar, 'posts.html', 'media/'], 
+                      cwd=base_dir, check=True)
+        os.remove(rar_path)
+        print("✅ RAR split into smaller parts (25MB each).")
+
+    return rar_name
+
 # ═══════════════════ اصلی ═══════════════════
 
 def main():
@@ -199,9 +229,9 @@ def main():
         "includeReactions": True,
     }
 
-    print(f"🚀 Starting scrape with good Actor @{CHANNEL} | Requested Limit: {LIMIT}")
+    print(f"🚀 Starting scrape @{CHANNEL} | Requested Limit: {LIMIT} | Max Media Size: {MAX_MEDIA_SIZE_MB}MB")
 
-    run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=12))
+    run = client.actor(ACTOR_ID).call(run_input=run_input, wait_duration=timedelta(minutes=15))
 
     if not run or run.status != 'SUCCEEDED':
         print(f"❌ Run failed! Status: {run.status if run else 'None'}")
@@ -214,7 +244,7 @@ def main():
     if items:
         items = items[:LIMIT]
 
-    print(f"📥 Received {len(items)} posts (after applying user limit)")
+    print(f"📥 Final posts after limit: {len(items)}")
 
     if not items:
         print("⚠️ No posts found!")
@@ -230,15 +260,16 @@ def main():
         msg_id = str(item.get('id') or item.get('Id') or item.get('messageId', 'unknown'))
         local_paths = []
 
+        # همه انواع مدیا ممکن
         media_list = item.get('media', []) or []
-        if item.get('mediaUrl'): media_list.append({'url': item.get('mediaUrl')})
-        if item.get('photoUrl'): media_list.append({'url': item.get('photoUrl')})
-        if item.get('videoUrl'): media_list.append({'url': item.get('videoUrl')})
+        for key in ['mediaUrl', 'photoUrl', 'videoUrl', 'fileUrl', 'documentUrl', 'voiceUrl', 'audioUrl']:
+            if item.get(key):
+                media_list.append({'url': item.get(key)})
 
         for idx, media in enumerate(media_list):
             url = None
             if isinstance(media, dict):
-                url = media.get('url') or media.get('mediaUrl') or media.get('photoUrl') or media.get('videoUrl')
+                url = media.get('url') or media.get('mediaUrl') or media.get('photoUrl') or media.get('videoUrl') or media.get('fileUrl')
             elif isinstance(media, str) and media.startswith('http'):
                 url = media
 
@@ -247,7 +278,7 @@ def main():
 
             parsed = urlparse(url)
             path_part = unquote(parsed.path).split('/')[-1]
-            ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'jpg'
+            ext = path_part.split('.')[-1].split('?')[0][:10].lower() if '.' in path_part else 'bin'
 
             filename = f"post_{msg_id}_{idx}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
@@ -276,7 +307,7 @@ def main():
             if paths:
                 media_map[msg_id] = paths
 
-    # خروجی‌ها
+    # ذخیره خروجی‌ها
     json_path = os.path.join(BASE_DIR, 'posts.json')
     csv_path = os.path.join(BASE_DIR, 'posts.csv')
     html_path = os.path.join(BASE_DIR, 'posts.html')
@@ -284,7 +315,6 @@ def main():
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(items, f, indent=2, ensure_ascii=False)
 
-    # CSV با همه فیلدها
     if items:
         all_fields = set()
         for item in items:
@@ -300,10 +330,14 @@ def main():
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
+    # ساخت آرشیو RAR
+    rar_name = create_rar_archive(BASE_DIR, CHANNEL)
+
     print(f"\n🎉 Finished @{CHANNEL}!")
-    print(f"   📊 Posts: {len(items)} (exactly as requested)")
+    print(f"   📊 Posts: {len(items)}")
     print(f"   🖼️ Media downloaded: {downloaded_count}")
     print(f"   ⏩ Skipped: {skipped_count}")
+    print(f"   📦 Final Archive: {rar_name}")
 
 if __name__ == "__main__":
     main()
