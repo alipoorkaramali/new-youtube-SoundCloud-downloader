@@ -70,7 +70,8 @@ def format_iran_time(iso_date_str):
         return iso_date_str
 
 def generate_html(posts, channel_name, channel_info, media_paths):
-    iran_date_str = datetime.now(timezone.utc).strftime('%Y/%m/%d - %H:%M')
+    # زمان همیشه تازه و فعلی
+    current_iran_time = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
 
     html = f'''<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -93,7 +94,7 @@ def generate_html(posts, channel_name, channel_info, media_paths):
     <h1>@{channel_name}</h1>
     <div class="stats">
         <span>📊 {len(posts)} پست</span>
-        <span>📅 بروزرسانی: {iran_date_str}</span>
+        <span>📅 بروزرسانی: {current_iran_time}</span>
     </div>
 </div>
 '''
@@ -168,10 +169,8 @@ def main():
 
     all_items = list(client.dataset(run.default_dataset_id).iterate_items())
 
-    # جداسازی پست‌ها از اطلاعات کانال
     posts = [item for item in all_items if 'messageId' in item]
 
-    # کنترل دقیق تعداد
     posts = posts[:LIMIT]
 
     print(f"📥 Final posts: {len(posts)}")
@@ -186,22 +185,17 @@ def main():
 
     def download_media_for_post(item):
         nonlocal downloaded_count
-        msg_id = str(item.get('messageId') or 'unknown')
+        msg_id = str(item.get('messageId') or item.get('id') or 'unknown')
         local_paths = []
 
         urls = []
-
-        # فیلدهای مستقیم
         for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl']:
-            if item.get(key) and isinstance(item.get(key), str) and item.get(key).startswith('http'):
+            if item.get(key) and str(item.get(key)).startswith('http'):
                 urls.append(item.get(key))
 
-        # اگر media آرایه باشد
         for m in item.get('media', []):
-            if isinstance(m, dict):
-                for v in m.values():
-                    if isinstance(v, str) and v.startswith('http'):
-                        urls.append(v)
+            if isinstance(m, dict) and m.get('url'):
+                urls.append(m.get('url'))
 
         for idx, url in enumerate(urls):
             parsed = urlparse(url)
@@ -221,7 +215,7 @@ def main():
             if success:
                 downloaded_count += 1
                 local_paths.append(rel_path)
-                print(f"   ✅ Done ({size / 1024 / 1024:.1f} MB)")
+                print(f"   ✅ Done")
 
         return msg_id, local_paths
 
