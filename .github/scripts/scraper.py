@@ -22,7 +22,7 @@ CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
 LIMIT = int(os.environ.get('POST_LIMIT', '10'))
 MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
 
-ACTOR_ID = "thescrapelab/Apify-Telegram-Scraper"
+ACTOR_ID = "ahaham_bytiz/telegram-channel-scraper"
 
 BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
@@ -31,7 +31,7 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-# ═══════════════════ توابع کمکی (بدون تغییر) ═══════════════════
+# ═══════════════════ توابع کمکی ═══════════════════
 
 def get_remote_file_size(url):
     try:
@@ -84,6 +84,11 @@ def format_iran_time(iso_date_str):
 def generate_html(posts, channel_name, media_map):
     current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
 
+    # لاگ برای دیباگ
+    print(f"🔍 media_map keys: {list(media_map.keys())}")
+    for key, val in media_map.items():
+        print(f"   {key} -> {val}")
+
     html = f'''<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -91,19 +96,24 @@ def generate_html(posts, channel_name, media_map):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@{channel_name} - آخرین پست‌ها</title>
     <style>
+        * {{ box-sizing: border-box; }}
         body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #1c1e21; direction: rtl; }}
         .header {{ background: linear-gradient(135deg, #2a6df4, #1e4fcf); color: white; padding: 25px; border-radius: 16px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; }}
         .header h1 {{ margin: 5px 0; font-size: 24px; }}
         .stats {{ display: flex; justify-content: center; gap: 30px; margin: 15px 0; font-size: 14px; opacity: 0.9; }}
-        .post {{ background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-right: 4px solid #2a6df4; }}
+        .post {{ background: white; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-right: 4px solid #2a6df4; }}
         .post-header {{ display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }}
         .post-body {{ font-size: 16px; line-height: 2; white-space: pre-wrap; word-break: break-word; }}
         .meta {{ background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 13px; margin: 10px 0; }}
         .meta span {{ margin-left: 15px; }}
         .hashtag {{ color: #1e4fcf; background: #e7f0ff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }}
-        .media-container {{ margin-top: 15px; text-align: center; }}
-        .media-container img, .media-container video {{ max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
-        .post-url {{ display: inline-block; margin-top: 10px; background: #2a6df4; color: white !important; padding: 6px 14px; border-radius: 6px; font-size: 13px; text-decoration: none; }}
+        .media-container {{ margin-top: 15px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }}
+        .media-item {{ background: #fafafa; border-radius: 10px; padding: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); max-width: 100%; text-align: center; }}
+        .media-item img, .media-item video {{ max-width: 100%; max-height: 400px; border-radius: 8px; }}
+        .media-item audio {{ width: 100%; max-width: 300px; }}
+        .media-item a {{ display: inline-block; background: #2a6df4; color: white; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 13px; }}
+        .no-media {{ color: #999; font-size: 14px; padding: 10px; background: #f9f9f9; border-radius: 8px; }}
+        .post-url {{ display: inline-block; margin-top: 15px; background: #2a6df4; color: white !important; padding: 6px 14px; border-radius: 6px; font-size: 13px; text-decoration: none; }}
         .footer {{ text-align: center; margin-top: 40px; color: #65676b; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px; }}
     </style>
 </head>
@@ -117,8 +127,10 @@ def generate_html(posts, channel_name, media_map):
 </div>
 '''
 
-    for post in posts:
-        post_id = post.get('messageId') or post.get('id') or '?'
+    # ─── برای هر پست با استفاده از شناسه موقت ───
+    for idx, post in enumerate(posts):
+        # شناسه موقت برای این پست
+        temp_id = f"post_{idx}"
         date = format_iran_time(post.get('date') or post.get('Date', ''))
         body = post.get('text') or post.get('Body', '')
         url = post.get('url') or post.get('Url', '#')
@@ -126,10 +138,13 @@ def generate_html(posts, channel_name, media_map):
         hashtags = post.get('hashtags') or []
         outlinks = post.get('outlinks') or []
 
+        # لاگ برای دیباگ
+        print(f"🔍 HTML temp_id: {temp_id} | in media_map? {temp_id in media_map}")
+
         html += f'''
 <div class="post">
     <div class="post-header">
-        <span>#{post_id}</span>
+        <span>#{idx+1}</span>
         <span>📅 {date}</span>
     </div>
     <div class="post-body">{body}</div>
@@ -145,17 +160,22 @@ def generate_html(posts, channel_name, media_map):
                 html += '<span>🌐 لینک‌های خروجی: ' + ', '.join([f'<a href="{l}">لینک</a>' for l in outlinks]) + '</span>'
             html += '</div>'
 
-        if str(post_id) in media_map:
-            for m_path in media_map[str(post_id)]:
+        # ─── نمایش مدیاها ───
+        html += '<div class="media-container">'
+        if temp_id in media_map:
+            for m_path in media_map[temp_id]:
                 ext = m_path.split('.')[-1].lower()
                 if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
-                    html += f'<div class="media-container"><img src="{m_path}" loading="lazy" alt="media"></div>'
+                    html += f'<div class="media-item"><img src="{m_path}" loading="lazy" alt="media"></div>'
                 elif ext in ['mp4', 'webm', 'mov']:
-                    html += f'<div class="media-container"><video controls><source src="{m_path}"></video></div>'
+                    html += f'<div class="media-item"><video controls><source src="{m_path}"></video></div>'
                 elif ext in ['mp3', 'ogg', 'wav']:
-                    html += f'<div class="media-container"><audio controls><source src="{m_path}"></audio></div>'
+                    html += f'<div class="media-item"><audio controls><source src="{m_path}"></audio></div>'
                 else:
-                    html += f'<div class="media-container"><a href="{m_path}">📎 {ext.upper()}</a></div>'
+                    html += f'<div class="media-item"><a href="{m_path}">📎 {ext.upper()}</a></div>'
+        else:
+            html += '<div class="no-media">⚠️ بدون مدیا</div>'
+        html += '</div>'
 
         html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
         html += '</div>\n'
@@ -192,14 +212,12 @@ def main():
 
     client = ApifyClient(APIFY_TOKEN)
 
-    # ═══════ ساختار درست با channels ═══════
     run_input = {
-        "channels": [
-            {
-                "channelName": CHANNEL,
-                "limit": LIMIT
-            }
-        ]
+        "channels": [CHANNEL],
+        "maxMessagesPerChannel": LIMIT,
+        "includeMedia": True,
+        "enableReactions": False,
+        "enableViews": True
     }
 
     run = client.actor(ACTOR_ID).call(
@@ -222,17 +240,25 @@ def main():
     items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
     print(f"📥 Received {len(items)} posts")
 
-    # ─── دانلود مدیاها ───
+    # ─── دانلود مدیاها با استفاده از شناسه موقت ───
     media_map = {}
     downloaded_count = 0
 
-    for item in items:
-        post_id = str(item.get('messageId') or item.get('id') or 'unknown')
+    for idx, item in enumerate(items):
+        temp_id = f"post_{idx}"
+        print(f"📌 Processing post index {idx} (temp_id: {temp_id})")
         media_list = []
 
-        for key in ['photoUrl', 'videoUrl', 'mediaUrl', 'fileUrl', 'documentUrl']:
-            if item.get(key):
-                media_list.append({'url': item[key], 'type': key})
+        for key in ['photos', 'videos', 'documents', 'audio']:
+            if key in item and item[key]:
+                if isinstance(item[key], list):
+                    for m in item[key]:
+                        if isinstance(m, dict) and m.get('url'):
+                            media_list.append(m)
+                        elif isinstance(m, str) and m.startswith('http'):
+                            media_list.append({'url': m})
+                elif isinstance(item[key], str) and item[key].startswith('http'):
+                    media_list.append({'url': item[key]})
 
         if not media_list and 'media' in item:
             if isinstance(item['media'], list):
@@ -240,11 +266,13 @@ def main():
             elif isinstance(item['media'], str) and item['media'].startswith('http'):
                 media_list = [{'url': item['media']}]
 
-        for idx, media in enumerate(media_list):
+        print(f"   📎 Found {len(media_list)} media items")
+
+        for mi, media in enumerate(media_list):
             if isinstance(media, str):
                 url = media
             else:
-                url = media.get('url') or media.get('Url') or ''
+                url = media.get('url') or media.get('Url') or media.get('link') or ''
 
             if not url:
                 continue
@@ -266,19 +294,20 @@ def main():
                 else:
                     ext = 'bin'
 
-            filename = f"post_{post_id}_{idx}.{ext}"
+            filename = f"{temp_id}_{mi}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
             rel_path = f"media/{filename}"
 
             if os.path.exists(filepath):
-                media_map.setdefault(post_id, []).append(rel_path)
+                media_map.setdefault(temp_id, []).append(rel_path)
+                print(f"   ⏩ Already exists: {filename}")
                 continue
 
             print(f"⬇️ Downloading: {filename} ...")
             success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
-                media_map.setdefault(post_id, []).append(rel_path)
+                media_map.setdefault(temp_id, []).append(rel_path)
                 print(f"   ✅ Done ({size/1024/1024:.1f} MB)")
             else:
                 print(f"   ⏩ Skipped/failed")
@@ -295,7 +324,7 @@ def main():
         sample_keys = set()
         for item in items:
             sample_keys.update(item.keys())
-        important_fields = ['messageId', 'date', 'text', 'url', 'views', 'forwards']
+        important_fields = ['id', 'date', 'text', 'url', 'views', 'forwards', 'replies']
         fieldnames = [f for f in important_fields if f in sample_keys]
         for f in ['mentions', 'hashtags', 'outlinks']:
             if f in sample_keys:
