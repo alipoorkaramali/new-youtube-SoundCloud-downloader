@@ -184,6 +184,39 @@ def generate_html(posts, channel_name, media_map):
 </html>'''
     return html
 
+# ═══════════════════ تابع پاکسازی فایل‌های قدیمی ═══════════════════
+
+def cleanup_old_media(base_dir, media_map):
+    """
+    حذف فایل‌های مدیایی که در آخرین scrape مورد نیاز نیستند.
+    """
+    media_dir = os.path.join(base_dir, "media")
+    if not os.path.exists(media_dir):
+        return
+
+    # مجموعه اسامی فایل‌های مورد نیاز (فقط نام فایل، نه مسیر کامل)
+    needed_files = set()
+    for media_list in media_map.values():
+        for rel_path in media_list:
+            filename = os.path.basename(rel_path)
+            needed_files.add(filename)
+
+    # پیمایش فایل‌های موجود در پوشه media
+    removed_count = 0
+    for filename in os.listdir(media_dir):
+        filepath = os.path.join(media_dir, filename)
+        if os.path.isfile(filepath):
+            # اگر فایل در لیست نیازمندی‌ها نبود، حذف کن
+            if filename not in needed_files:
+                os.remove(filepath)
+                removed_count += 1
+                print(f"🗑️ Removed old media: {filename}")
+
+    if removed_count:
+        print(f"🧹 Cleaned up {removed_count} old media file(s).")
+    else:
+        print("✅ No old media files to clean up.")
+
 # ═══════════════════ تابع زیپ با تقسیم صحیح ═══════════════════
 
 def create_zip_archive(base_dir, channel):
@@ -215,7 +248,6 @@ def create_zip_archive(base_dir, channel):
 
     if size_mb > MAX_SPLIT_MB:
         print(f"📦 Splitting into {MAX_SPLIT_MB} MB parts with WinRAR-compatible format...")
-        # استفاده از دستور zip با گزینه‌ی --out برای تولید فایل چندبخشی
         cmd = [
             "zip",
             "-s", f"{MAX_SPLIT_MB}m",
@@ -223,11 +255,9 @@ def create_zip_archive(base_dir, channel):
             "--out", zip_path
         ]
         subprocess.run(cmd, check=True)
-        # حذف فایل موقت
         os.remove(temp_zip)
         print(f"✅ Split completed. Parts: {zip_path}, {zip_path}.z01, ...")
     else:
-        # اگر حجم کم است، فایل موقت را به نام نهایی تغییر بده
         os.rename(temp_zip, zip_path)
         print(f"ℹ️ ZIP size is acceptable, no split needed.")
 
@@ -340,6 +370,9 @@ def main():
             else:
                 print(f"   ⏩ Skipped/failed")
 
+    # ─── پاکسازی فایل‌های مدیای قدیمی ───
+    cleanup_old_media(BASE_DIR, media_map)
+
     # ─── ذخیره خروجی‌ها ───
     json_path = os.path.join(BASE_DIR, 'posts.json')
     csv_path = os.path.join(BASE_DIR, 'posts.csv')
@@ -374,7 +407,7 @@ def main():
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    # ─── ساخت زیپ با قابلیت باز شدن با وین‌رر ───
+    # ─── ساخت زیپ ───
     zip_name = create_zip_archive(BASE_DIR, CHANNEL)
 
     # ─── گزارش نهایی ───
