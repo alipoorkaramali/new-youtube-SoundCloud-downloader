@@ -8,7 +8,7 @@ import csv
 import requests
 import time
 import zipfile
-import subprocess  # برای اجرای دستورات zip
+import subprocess
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, unquote
 from apify_client import ApifyClient
@@ -85,7 +85,6 @@ def format_iran_time(iso_date_str):
 def generate_html(posts, channel_name, media_map):
     current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
 
-    # لاگ برای دیباگ
     print(f"🔍 media_map keys: {list(media_map.keys())}")
     for key, val in media_map.items():
         print(f"   {key} -> {val}")
@@ -128,7 +127,6 @@ def generate_html(posts, channel_name, media_map):
 </div>
 '''
 
-    # ─── برای هر پست با استفاده از شناسه موقت ───
     for idx, post in enumerate(posts):
         temp_id = f"post_{idx}"
         date = format_iran_time(post.get('date') or post.get('Date', ''))
@@ -159,7 +157,6 @@ def generate_html(posts, channel_name, media_map):
                 html += '<span>🌐 لینک‌های خروجی: ' + ', '.join([f'<a href="{l}">لینک</a>' for l in outlinks]) + '</span>'
             html += '</div>'
 
-        # ─── نمایش مدیاها ───
         html += '<div class="media-container">'
         if temp_id in media_map:
             for m_path in media_map[temp_id]:
@@ -187,25 +184,25 @@ def generate_html(posts, channel_name, media_map):
 </html>'''
     return html
 
-# ═══════════════════ تابع جدید زیپ با قابلیت باز شدن با وین‌رر ═══════════════════
+# ═══════════════════ تابع زیپ با تقسیم صحیح ═══════════════════
 
 def create_zip_archive(base_dir, channel):
     zip_name = f"{channel}_full_archive.zip"
     zip_path = os.path.join(base_dir, zip_name)
 
-    # حذف فایل‌های قبلی (اگر وجود دارند)
+    # حذف فایل‌های قبلی (قطعات قدیمی)
     for f in os.listdir(base_dir):
         if f.startswith(channel + "_full_archive") and (f.endswith(".zip") or f.endswith(".z01") or f.endswith(".z02") or f.endswith(".z03")):
             os.remove(os.path.join(base_dir, f))
 
-    # ساخت یک زیپ کامل موقت (با استفاده از zipfile یا دستور zip)
+    # ساخت یک فایل زیپ موقت با محتوای مورد نظر (با استفاده از zipfile پایتون)
     temp_zip = os.path.join(base_dir, "temp_full.zip")
     with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(base_dir):
             for file in files:
                 if file == "temp_full.zip" or file == zip_name:
                     continue
-                # فقط فایل‌های html, json, csv و media/ را اضافه کن
+                # فقط فایل‌های html, json, csv و محتویات پوشه‌ی media را اضافه کن
                 if file.endswith(('.html', '.json', '.csv')) or 'media' in root:
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, base_dir)
@@ -218,22 +215,19 @@ def create_zip_archive(base_dir, channel):
 
     if size_mb > MAX_SPLIT_MB:
         print(f"📦 Splitting into {MAX_SPLIT_MB} MB parts with WinRAR-compatible format...")
-        # استفاده از دستور zip با گزینه -s برای ایجاد فایل‌های .zip و .z01, .z02, ...
-        # توجه: zip -s فایل ورودی را به چند بخش تقسیم می‌کند و فایل اصلی را با نام archive.zip (که کوچک است) نگه می‌دارد.
-        # ما می‌خواهیم نام نهایی همان channel_full_archive.zip باشد.
-        # ابتدا فایل موقت را به نام نهایی تغییر می‌دهیم تا دستور zip روی آن کار کند.
-        os.rename(temp_zip, zip_path)
+        # استفاده از دستور zip با گزینه‌ی --out برای تولید فایل چندبخشی
         cmd = [
             "zip",
             "-s", f"{MAX_SPLIT_MB}m",
-            zip_path,  # این فایل به‌روز می‌شود و قطعات کنار آن ساخته می‌شوند
+            temp_zip,
+            "--out", zip_path
         ]
         subprocess.run(cmd, check=True)
-        # بعد از اجرا، فایل zip_path دیگر کامل نیست و به یک فایل کوچک (شامل اطلاعات) تبدیل شده است
-        # و فایل‌های .z01, .z02, ... ساخته شده‌اند.
+        # حذف فایل موقت
+        os.remove(temp_zip)
         print(f"✅ Split completed. Parts: {zip_path}, {zip_path}.z01, ...")
     else:
-        # اگر حجم کم است، فقط فایل موقت را به نام نهایی تغییر بده
+        # اگر حجم کم است، فایل موقت را به نام نهایی تغییر بده
         os.rename(temp_zip, zip_path)
         print(f"ℹ️ ZIP size is acceptable, no split needed.")
 
@@ -274,7 +268,7 @@ def main():
     items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
     print(f"📥 Received {len(items)} posts")
 
-    # ─── دانلود مدیاها با استفاده از شناسه موقت ───
+    # ─── دانلود مدیاها ───
     media_map = {}
     downloaded_count = 0
 
@@ -393,20 +387,15 @@ def main():
     print(f"      ├── posts.html  (نمایش کامل با مدیاها)")
     print(f"      ├── media/      (فایل‌های دانلود شده)")
 
-    # نمایش وضعیت فایل‌های زیپ
     zip_full_path = os.path.join(BASE_DIR, zip_name)
     if os.path.exists(zip_full_path):
-        # اگر فایل اصلی وجود داشته باشد، ممکن است کوچک باشد (در صورت تقسیم) یا کامل
         size = os.path.getsize(zip_full_path)
-        if size < 1024 * 1024:  # کمتر از ۱ مگابایت احتمالاً فایل اولیهٔ تقسیم‌شده است
+        if size < 1024 * 1024 and any(f.startswith(zip_name + ".z") for f in os.listdir(BASE_DIR)):
             parts = sorted([f for f in os.listdir(BASE_DIR) if f.startswith(zip_name) and f != zip_name])
-            if parts:
-                print(f"      └── {zip_name} (تقسیم شده به {len(parts)+1} قطعهٔ {MAX_SPLIT_MB} مگابایتی، قابل باز شدن با وین‌رر):")
-                print(f"           ├── {zip_name}")
-                for p in parts:
-                    print(f"           ├── {p}")
-            else:
-                print(f"      └── {zip_name} (حجم {size/1024/1024:.1f} MB)")
+            print(f"      └── {zip_name} (تقسیم شده به {len(parts)+1} قطعهٔ ۳۰ مگابایتی، قابل باز شدن با وین‌رر):")
+            print(f"           ├── {zip_name}")
+            for p in parts:
+                print(f"           ├── {p}")
         else:
             print(f"      └── {zip_name} (حجم {size/1024/1024:.1f} MB)")
     else:
