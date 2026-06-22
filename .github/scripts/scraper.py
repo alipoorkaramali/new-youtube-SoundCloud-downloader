@@ -128,7 +128,8 @@ def generate_html(posts, channel_name, media_map):
 '''
 
     for idx, post in enumerate(posts):
-        temp_id = f"post_{idx}"
+        # استفاده از شناسه واقعی پست برای کلید media_map
+        post_id = str(post.get('id') or post.get('message_id') or f"post_{idx}")
         date = format_iran_time(post.get('date') or post.get('Date', ''))
         body = post.get('text') or post.get('Body', '')
         url = post.get('url') or post.get('Url', '#')
@@ -136,7 +137,7 @@ def generate_html(posts, channel_name, media_map):
         hashtags = post.get('hashtags') or []
         outlinks = post.get('outlinks') or []
 
-        print(f"🔍 HTML temp_id: {temp_id} | in media_map? {temp_id in media_map}")
+        print(f"🔍 HTML post_id: {post_id} | in media_map? {post_id in media_map}")
 
         html += f'''
 <div class="post">
@@ -158,8 +159,8 @@ def generate_html(posts, channel_name, media_map):
             html += '</div>'
 
         html += '<div class="media-container">'
-        if temp_id in media_map:
-            for m_path in media_map[temp_id]:
+        if post_id in media_map:
+            for m_path in media_map[post_id]:
                 ext = m_path.split('.')[-1].lower()
                 if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
                     html += f'<div class="media-item"><img src="{m_path}" loading="lazy" alt="media"></div>'
@@ -194,19 +195,16 @@ def cleanup_old_media(base_dir, media_map):
     if not os.path.exists(media_dir):
         return
 
-    # مجموعه اسامی فایل‌های مورد نیاز (فقط نام فایل، نه مسیر کامل)
     needed_files = set()
     for media_list in media_map.values():
         for rel_path in media_list:
             filename = os.path.basename(rel_path)
             needed_files.add(filename)
 
-    # پیمایش فایل‌های موجود در پوشه media
     removed_count = 0
     for filename in os.listdir(media_dir):
         filepath = os.path.join(media_dir, filename)
         if os.path.isfile(filepath):
-            # اگر فایل در لیست نیازمندی‌ها نبود، حذف کن
             if filename not in needed_files:
                 os.remove(filepath)
                 removed_count += 1
@@ -223,19 +221,16 @@ def create_zip_archive(base_dir, channel):
     zip_name = f"{channel}_full_archive.zip"
     zip_path = os.path.join(base_dir, zip_name)
 
-    # حذف فایل‌های قبلی (قطعات قدیمی)
     for f in os.listdir(base_dir):
         if f.startswith(channel + "_full_archive") and (f.endswith(".zip") or f.endswith(".z01") or f.endswith(".z02") or f.endswith(".z03")):
             os.remove(os.path.join(base_dir, f))
 
-    # ساخت یک فایل زیپ موقت با محتوای مورد نظر (با استفاده از zipfile پایتون)
     temp_zip = os.path.join(base_dir, "temp_full.zip")
     with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(base_dir):
             for file in files:
                 if file == "temp_full.zip" or file == zip_name:
                     continue
-                # فقط فایل‌های html, json, csv و محتویات پوشه‌ی media را اضافه کن
                 if file.endswith(('.html', '.json', '.csv')) or 'media' in root:
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, base_dir)
@@ -298,15 +293,18 @@ def main():
     items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
     print(f"📥 Received {len(items)} posts")
 
-    # ─── دانلود مدیاها ───
+    # ─── دانلود مدیاها با استفاده از شناسه واقعی پست ───
     media_map = {}
     downloaded_count = 0
 
     for idx, item in enumerate(items):
-        temp_id = f"post_{idx}"
-        print(f"📌 Processing post index {idx} (temp_id: {temp_id})")
+        # استفاده از شناسه واقعی پست به جای اندیس
+        post_id = str(item.get('id') or item.get('message_id') or f"post_{idx}")
+        print(f"📌 Processing post index {idx} (post_id: {post_id})")
+        
         media_list = []
 
+        # استخراج مدیاها از کلیدهای مختلف
         for key in ['photos', 'videos', 'documents', 'audio']:
             if key in item and item[key]:
                 if isinstance(item[key], list):
@@ -324,14 +322,19 @@ def main():
             elif isinstance(item['media'], str) and item['media'].startswith('http'):
                 media_list = [{'url': item['media']}]
 
-        print(f"   📎 Found {len(media_list)} media items")
-
-        for mi, media in enumerate(media_list):
+        # ─── حذف مدیاهای تکراری بر اساس URL ───
+        unique_media = {}
+        for media in media_list:
             if isinstance(media, str):
                 url = media
             else:
                 url = media.get('url') or media.get('Url') or media.get('link') or ''
+            if url and url not in unique_media:
+                unique_media[url] = media
 
+        print(f"   📎 Found {len(media_list)} media items, {len(unique_media)} unique")
+
+        for mi, (url, media) in enumerate(unique_media.items()):
             if not url:
                 continue
 
@@ -352,12 +355,12 @@ def main():
                 else:
                     ext = 'bin'
 
-            filename = f"{temp_id}_{mi}.{ext}"
+            filename = f"{post_id}_{mi}.{ext}"
             filepath = os.path.join(MEDIA_DIR, filename)
             rel_path = f"media/{filename}"
 
             if os.path.exists(filepath):
-                media_map.setdefault(temp_id, []).append(rel_path)
+                media_map.setdefault(post_id, []).append(rel_path)
                 print(f"   ⏩ Already exists: {filename}")
                 continue
 
@@ -365,7 +368,7 @@ def main():
             success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
             if success:
                 downloaded_count += 1
-                media_map.setdefault(temp_id, []).append(rel_path)
+                media_map.setdefault(post_id, []).append(rel_path)
                 print(f"   ✅ Done ({size/1024/1024:.1f} MB)")
             else:
                 print(f"   ⏩ Skipped/failed")
