@@ -27,7 +27,7 @@ def setup_early_logging():
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="Telegram Channel Scraper - نسخهٔ حرفه‌ای با دانلود هم‌زمان"
+        description="Telegram Channel Scraper - نسخهٔ مستقل (بدون Apify)"
     )
     parser.add_argument(
         "--config",
