@@ -9,8 +9,7 @@ from typing import List, Dict
 
 from apify_client import ApifyClient
 from config_loader import Config
-from telegram_session import TelegramSession
-from downloader import Downloader
+from playwright_downloader import PlaywrightDownloader   # ← جدید
 from output_generator import OutputGenerator
 
 class TelegramChannelScraper:
@@ -24,9 +23,13 @@ class TelegramChannelScraper:
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
         self.media_dir = self.base_dir / "media"
         self.media_dir.mkdir(parents=True, exist_ok=True)
-        self.session_file = Path(config.session_file)
-        self.rate_limit = config.rate_limit
 
+        # مسیر پروفایل دائمی مرورگر (همان که save_session.py ساخت)
+        self.profile_dir = Path(config.profile_dir)
+        # فاصلهٔ زمانی بین بارگذاری پست‌ها (ثانیه)
+        self.delay_between_posts = config.delay_between_posts
+
+        # راه‌اندازی لاگر
         self.logger = logging.getLogger("TelegramScraper")
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -38,8 +41,6 @@ class TelegramChannelScraper:
             self.logger.addHandler(fh)
             self.logger.addHandler(ch)
 
-        self.tg_session = TelegramSession(self.session_file, self.rate_limit)
-
     async def run(self):
         self.logger.info(f"🚀 شروع اسکریپر برای @{self.channel} (limit={self.limit})")
         items = self._scrape_with_apify()
@@ -48,19 +49,18 @@ class TelegramChannelScraper:
             return
         self.logger.info(f"📥 {len(items)} پست دریافت شد.")
 
-        if not self.tg_session.load():
-            self.logger.error("❌ سشن تلگرام بارگذاری نشد.")
-            return
-
+        # دانلود رسانه‌ها با Playwright (بدون نیاز به سشن دستی)
         media_map, downloaded = await self._enrich_and_download(items)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
 
+        # تولید خروجی‌ها
         gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
         gen.generate_json()
         gen.generate_csv()
         gen.generate_html()
         gen.create_zip()
 
+        # پاکسازی فایل‌های قدیمی
         self._cleanup_old_media(media_map)
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
@@ -86,68 +86,39 @@ class TelegramChannelScraper:
         return items
 
     async def _enrich_and_download(self, items: List[Dict]):
-        download_tasks = []
+        """
+        به‌جای استخراج دستی لینک‌های دانلود، مستقیماً با Playwright
+        صفحهٔ هر پست را باز می‌کنیم و فایل‌های رسانه را دانلود می‌کنیم.
+        """
+        tasks = []
         media_map = {}
-        tg_cookies = self.tg_session.cookies
+        for item in items:
+            post_id = str(item.get('id') or item.get('message_id') or '')
+            post_url = item.get('url', '')
+            if post_url:
+                tasks.append((post_url, post_id))
+                media_map[post_id] = []
 
-        for idx, item in enumerate(items):
-            post_id = str(item.get('id') or item.get('message_id') or f"post_{idx}")
-            post_url = item.get('url') or ''
+        if not tasks:
+            return media_map, 0
 
-            # جمع‌آوری لینک‌های Apify
-            actor_urls = set()
-            for key in ['photos', 'videos', 'documents', 'audio']:
-                val = item.get(key)
-                if isinstance(val, list):
-                    for m in val:
-                        url = m if isinstance(m, str) else (m.get('url') or m.get('Url') or '')
-                        if url: actor_urls.add(url)
-                elif isinstance(val, str) and val.startswith('http'):
-                    actor_urls.add(val)
-            if 'media' in item:
-                m = item['media']
-                if isinstance(m, list):
-                    for u in m:
-                        if isinstance(u, str): actor_urls.add(u)
-                        elif isinstance(u, dict): actor_urls.add(u.get('url') or u.get('Url') or '')
-                elif isinstance(m, str) and m.startswith('http'):
-                    actor_urls.add(m)
+        # دانلود با Playwright
+        downloader = PlaywrightDownloader(
+            self.profile_dir, self.media_dir, self.max_media_bytes,
+            self.delay_between_posts
+        )
+        await downloader.download_all(tasks)
 
-            best_links = self.tg_session.get_best_media_links(post_url) if post_url else []
+        # پر کردن media_map با فایل‌های واقعی دانلودشده
+        for f in self.media_dir.iterdir():
+            if f.is_file():
+                # نام فایل‌ها به‌صورت {post_id}_{rest}.ext ذخیره شده‌اند
+                parts = f.stem.split('_', 1)
+                pid = parts[0] if parts else ''
+                if pid in media_map:
+                    media_map[pid].append(f"media/{f.name}")
 
-            final_urls = {}
-            for bl in best_links:
-                final_urls[bl['url']] = bl
-            for url in actor_urls:
-                if url not in final_urls:
-                    fn = url.split('/')[-1].split('?')[0]
-                    final_urls[url] = {'url': url, 'filename': fn, 'media_type': 'unknown'}
-
-            post_media_rel_paths = []
-            for mi, (url, info) in enumerate(final_urls.items()):
-                ext = "bin"
-                if info.get("filename") and '.' in info["filename"]:
-                    ext = info["filename"].split('.')[-1]
-                else:
-                    fn = url.split('/')[-1].split('?')[0]
-                    if '.' in fn: ext = fn.split('.')[-1].split('?')[0][:10]
-                filename = f"{post_id}_{mi}.{ext}"
-                filepath = self.media_dir / filename
-                rel_path = f"media/{filename}"
-
-                if filepath.exists():
-                    post_media_rel_paths.append(rel_path)
-                    continue
-                download_tasks.append({"url": url, "filepath": filepath, "filename": filename})
-                post_media_rel_paths.append(rel_path)
-
-            media_map[post_id] = post_media_rel_paths
-
-        if download_tasks:
-            downloader = Downloader(self.media_dir, self.max_media_bytes, cookies=tg_cookies)
-            await downloader.download_all(download_tasks)
-
-        downloaded_count = sum(1 for p in sum(media_map.values(), []) if (self.base_dir / p).exists())
+        downloaded_count = sum(len(v) for v in media_map.values())
         return media_map, downloaded_count
 
     def _cleanup_old_media(self, media_map):
@@ -155,7 +126,8 @@ class TelegramChannelScraper:
         for paths in media_map.values():
             for p in paths:
                 needed_files.add(Path(p).name)
-        if not self.media_dir.exists(): return
+        if not self.media_dir.exists():
+            return
         removed = 0
         for f in self.media_dir.iterdir():
             if f.is_file() and f.name not in needed_files:
