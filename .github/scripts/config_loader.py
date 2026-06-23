@@ -9,13 +9,14 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
+    """تنظیمات پروژه — نسخه سازگار با Playwright و پروفایل دائمی"""
     apify_token: str
     channel: str
     limit: int
     max_media_mb: int
-    session_file: str
     output_dir: str
-    rate_limit: float
+    profile_dir: str          # پوشهٔ پروفایل مرورگر (browser_profile)
+    delay_between_posts: float = 1.5  # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
 
 def _expand_env_vars(value: str) -> str:
     """جایگزینی ${VAR} با مقادیر متغیرهای محیطی"""
@@ -37,9 +38,12 @@ def load_config(path: str = "config.yaml") -> Config:
         else:
             data[key] = value
 
+    # اعتبارسنجی
     if not data.get('apify_token') or data['apify_token'] == "${APIFY_TOKEN}":
         raise ValueError("❌ توکن Apify تنظیم نشده است.")
     if not data.get('channel'):
         raise ValueError("❌ نام کانال تنظیم نشده است.")
+    if not data.get('profile_dir'):
+        raise ValueError("❌ پوشه پروفایل مرورگر (profile_dir) مشخص نشده است.")
 
     return Config(**data)
