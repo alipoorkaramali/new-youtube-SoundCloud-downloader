@@ -1,49 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import re
 import yaml
 from pathlib import Path
 from dataclasses import dataclass
 
 @dataclass
 class Config:
-    """تنظیمات پروژه — نسخه سازگار با Playwright و پروفایل دائمی"""
-    apify_token: str
-    channel: str
-    limit: int
-    max_media_mb: int
-    output_dir: str
-    profile_dir: str          # پوشهٔ پروفایل مرورگر (browser_profile)
-    delay_between_posts: float = 1.5  # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
-
-def _expand_env_vars(value: str) -> str:
-    """جایگزینی ${VAR} با مقادیر متغیرهای محیطی"""
-    pattern = re.compile(r'\$\{(\w+)\}')
-    return pattern.sub(lambda m: os.environ.get(m.group(1), ''), value)
+    """تنظیمات پروژه — نسخهٔ مستقل از Apify"""
+    channel: str                  # نام کانال بدون @
+    limit: int                    # تعداد پست‌های مورد نظر
+    max_media_mb: int             # حداکثر حجم هر فایل رسانه (مگابایت)
+    output_dir: str               # پوشهٔ اصلی خروجی
+    profile_dir: str              # پوشهٔ پروفایل مرورگر
+    delay_between_posts: float    # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
 
 def load_config(path: str = "config.yaml") -> Config:
+    """بارگذاری تنظیمات از فایل YAML"""
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(f"❌ فایل تنظیمات {path} یافت نشد!")
 
     with open(config_path, 'r', encoding='utf-8') as f:
-        raw_data = yaml.safe_load(f)
-
-    data = {}
-    for key, value in raw_data.items():
-        if isinstance(value, str):
-            data[key] = _expand_env_vars(value)
-        else:
-            data[key] = value
+        data = yaml.safe_load(f)
 
     # اعتبارسنجی
-    if not data.get('apify_token') or data['apify_token'] == "${APIFY_TOKEN}":
-        raise ValueError("❌ توکن Apify تنظیم نشده است.")
     if not data.get('channel'):
-        raise ValueError("❌ نام کانال تنظیم نشده است.")
+        raise ValueError("❌ نام کانال در config.yaml تنظیم نشده است.")
+    if data.get('limit', 0) <= 0:
+        raise ValueError("❌ limit باید بزرگ‌تر از صفر باشد.")
+    if data.get('max_media_mb', 0) <= 0:
+        raise ValueError("❌ max_media_mb باید بزرگ‌تر از صفر باشد.")
     if not data.get('profile_dir'):
-        raise ValueError("❌ پوشه پروفایل مرورگر (profile_dir) مشخص نشده است.")
+        raise ValueError("❌ پوشهٔ پروفایل (profile_dir) مشخص نشده است.")
 
-    return Config(**data)
+    return Config(
+        channel=data['channel'].lstrip('@'),
+        limit=data['limit'],
+        max_media_mb=data['max_media_mb'],
+        output_dir=data.get('output_dir', 'Download'),
+        profile_dir=data['profile_dir'],
+        delay_between_posts=data.get('delay_between_posts', 1.5)
+    )
