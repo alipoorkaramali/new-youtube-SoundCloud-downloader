@@ -4,32 +4,26 @@
 import asyncio
 import logging
 from pathlib import Path
-from datetime import timedelta
 from typing import List, Dict
 
-from apify_client import ApifyClient
 from config_loader import Config
-from playwright_downloader import PlaywrightDownloader   # ← جدید
+from playwright_downloader import PlaywrightDownloader
 from output_generator import OutputGenerator
 
 class TelegramChannelScraper:
-    ACTOR_ID = "ahaham_bytiz/telegram-channel-scraper"
 
     def __init__(self, config: Config):
         self.config = config
-        self.channel = config.channel.lstrip('@')
+        self.channel = config.channel
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
         self.media_dir = self.base_dir / "media"
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
-        # مسیر پروفایل دائمی مرورگر (همان که save_session.py ساخت)
         self.profile_dir = Path(config.profile_dir)
-        # فاصلهٔ زمانی بین بارگذاری پست‌ها (ثانیه)
         self.delay_between_posts = config.delay_between_posts
 
-        # راه‌اندازی لاگر
         self.logger = logging.getLogger("TelegramScraper")
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -42,77 +36,118 @@ class TelegramChannelScraper:
             self.logger.addHandler(ch)
 
     async def run(self):
-        self.logger.info(f"🚀 شروع اسکریپر برای @{self.channel} (limit={self.limit})")
-        items = self._scrape_with_apify()
-        if not items:
-            self.logger.warning("هیچ پستی از Apify دریافت نشد.")
-            return
-        self.logger.info(f"📥 {len(items)} پست دریافت شد.")
+        self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
 
-        # دانلود رسانه‌ها با Playwright (بدون نیاز به سشن دستی)
-        media_map, downloaded = await self._enrich_and_download(items)
+        # ۱. دریافت پست‌ها مستقیماً از تلگرام وب
+        items = await self._fetch_posts_from_telegram()
+        if not items:
+            self.logger.warning("هیچ پستی دریافت نشد.")
+            return
+        self.logger.info(f"📥 {len(items)} پست استخراج شد.")
+
+        # ۲. دانلود رسانه‌ها
+        media_map, downloaded = await self._download_media(items)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
 
-        # تولید خروجی‌ها
+        # ۳. تولید خروجی‌ها
         gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
         gen.generate_json()
         gen.generate_csv()
         gen.generate_html()
         gen.create_zip()
 
-        # پاکسازی فایل‌های قدیمی
-        self._cleanup_old_media(media_map)
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    def _scrape_with_apify(self) -> List[Dict]:
-        client = ApifyClient(self.config.apify_token)
-        run_input = {
-            "channels": [self.channel],
-            "maxMessagesPerChannel": self.limit,
-            "includeMedia": True,
-            "enableReactions": False,
-            "enableViews": True
-        }
-        run = client.actor(self.ACTOR_ID).call(
-            run_input=run_input,
-            wait_duration=timedelta(minutes=5)
-        )
-        if run is None or run.status != 'SUCCEEDED':
-            self.logger.error(f"Apify اجرا ناموفق. وضعیت: {run.status if run else 'None'}")
-            return []
-        dataset = client.dataset(run.default_dataset_id)
-        items = list(dataset.iterate_items())
-        items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
-        return items
-
-    async def _enrich_and_download(self, items: List[Dict]):
+    async def _fetch_posts_from_telegram(self) -> List[Dict]:
         """
-        به‌جای استخراج دستی لینک‌های دانلود، مستقیماً با Playwright
-        صفحهٔ هر پست را باز می‌کنیم و فایل‌های رسانه را دانلود می‌کنیم.
+        با Playwright وارد کانال می‌شود و اطلاعات پست‌ها را از DOM استخراج می‌کند.
+        """
+        from playwright.async_api import async_playwright
+        items = []
+
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
+            )
+            page = await context.new_page()
+
+            # باز کردن صفحهٔ اصلی و رفتن به کانال
+            await page.goto("https://web.telegram.org/a/", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(2)
+
+            # جستجو و باز کردن کانال
+            search_input = page.locator('input[type="search"]')
+            await search_input.fill(self.channel)
+            await asyncio.sleep(1)
+            await search_input.press("Enter")
+            await asyncio.sleep(2)
+
+            # کلیک روی اولین نتیجه (معمولاً کانال)
+            first_result = page.locator('div.search-result, a[href*="' + self.channel + '"]').first
+            await first_result.click()
+            await asyncio.sleep(2)
+
+            # اسکرول تدریجی برای جمع‌آوری پست‌ها
+            while len(items) < self.limit:
+                # استخراج پست‌های فعلی از DOM
+                new_items = await page.evaluate('''() => {
+                    const posts = [];
+                    document.querySelectorAll('div.message, div[class*="Message"]').forEach(msg => {
+                        const id = msg.getAttribute('data-message-id') || msg.id || '';
+                        if (!id) return;
+                        const textEl = msg.querySelector('div.text-content, div[class*="text"]');
+                        const text = textEl ? textEl.innerText : '';
+                        const dateEl = msg.querySelector('time, span[class*="date"]');
+                        const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText) : '';
+                        const linkEl = msg.querySelector('a[href*="/' + self.channel + '/"]');
+                        const url = linkEl ? linkEl.href : '';
+                        posts.push({ id, text, date, url });
+                    });
+                    return posts;
+                }''')
+                # اضافه کردن پست‌های جدید (بدون تکراری)
+                existing_ids = {item['id'] for item in items}
+                for post in new_items:
+                    if post['id'] and post['id'] not in existing_ids:
+                        items.append(post)
+                        existing_ids.add(post['id'])
+                        if len(items) >= self.limit:
+                            break
+
+                if len(items) >= self.limit:
+                    break
+
+                # اسکرول به پایین
+                await page.evaluate('window.scrollBy(0, 2000)')
+                await asyncio.sleep(self.delay_between_posts)
+
+            await context.close()
+
+        return items[:self.limit]
+
+    async def _download_media(self, items: List[Dict]):
+        """
+        برای هر پست، صفحهٔ آن را باز می‌کند و رسانه‌ها را دانلود می‌کند.
         """
         tasks = []
-        media_map = {}
+        media_map = {str(item['id']): [] for item in items}
         for item in items:
-            post_id = str(item.get('id') or item.get('message_id') or '')
             post_url = item.get('url', '')
             if post_url:
-                tasks.append((post_url, post_id))
-                media_map[post_id] = []
+                tasks.append((post_url, str(item['id'])))
 
-        if not tasks:
-            return media_map, 0
-
-        # دانلود با Playwright
-        downloader = PlaywrightDownloader(
-            self.profile_dir, self.media_dir, self.max_media_bytes,
-            self.delay_between_posts
-        )
-        await downloader.download_all(tasks)
+        if tasks:
+            downloader = PlaywrightDownloader(
+                self.profile_dir, self.media_dir, self.max_media_bytes,
+                self.delay_between_posts
+            )
+            await downloader.download_all(tasks)
 
         # پر کردن media_map با فایل‌های واقعی دانلودشده
         for f in self.media_dir.iterdir():
             if f.is_file():
-                # نام فایل‌ها به‌صورت {post_id}_{rest}.ext ذخیره شده‌اند
                 parts = f.stem.split('_', 1)
                 pid = parts[0] if parts else ''
                 if pid in media_map:
@@ -120,20 +155,3 @@ class TelegramChannelScraper:
 
         downloaded_count = sum(len(v) for v in media_map.values())
         return media_map, downloaded_count
-
-    def _cleanup_old_media(self, media_map):
-        needed_files = set()
-        for paths in media_map.values():
-            for p in paths:
-                needed_files.add(Path(p).name)
-        if not self.media_dir.exists():
-            return
-        removed = 0
-        for f in self.media_dir.iterdir():
-            if f.is_file() and f.name not in needed_files:
-                f.unlink()
-                removed += 1
-        if removed:
-            self.logger.info(f"🧹 {removed} فایل قدیمی پاک شد.")
-        else:
-            self.logger.info("✅ فایل قدیمی‌ای برای پاکسازی نبود.")
