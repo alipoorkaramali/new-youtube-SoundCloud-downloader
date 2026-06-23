@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>@{{ channel }} - آرشیو تلگرام</title>
+    <style>
+        body { font-family: Tahoma, Arial; background: #f4f4f4; margin: 0; padding: 20px; direction: rtl; line-height: 1.6; }
+        .post { background: white; margin: 20px auto; padding: 20px; border-radius: 12px; max-width: 850px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .date { color: #555; font-size: 14px; }
+        .text { white-space: pre-wrap; margin: 15px 0; font-size: 16px; }
+        .media { display: flex; flex-wrap: wrap; gap: 12px; margin: 15px 0; }
+        .media img, .media video { max-width: 100%; max-height: 420px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .media audio { width: 100%; }
+        .media a { display: inline-block; background: #0088cc; color: white; padding: 8px 14px; border-radius: 6px; text-decoration: none; margin: 5px; }
+        h1 { text-align: center; color: #0088cc; }
+        .footer { text-align: center; color: #888; margin-top: 50px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <h1>@{{ channel }}</h1>
+    <p style="text-align:center;">تعداد پست‌ها: {{ posts|length }} | آخرین بروزرسانی: {{ current_time }}</p>
+
+    {% for post in posts %}
+    <div class="post">
+        <div class="date">{{ post.formatted_date|default(post.date) }}</div>
+        <div class="text">{{ post.text|default('بدون متن') }}</div>
+        
+        {% set post_id = (post.id or post.message_id or loop.index0)|string %}
+        <div class="media">
+            {% if post_id in media_map %}
+                {% for m in media_map[post_id] %}
+                    {% set ext = m.split('.')[-1]|lower %}
+                    {% if ext in ['jpg','jpeg','png','gif','webp'] %}
+                        <img src="{{ m }}" loading="lazy" alt="تصویر">
+                    {% elif ext in ['mp4','webm','mov'] %}
+                        <video controls><source src="{{ m }}"></video>
+                    {% elif ext in ['mp3','ogg','wav'] %}
+                        <audio controls><source src="{{ m }}"></audio>
+                    {% else %}
+                        <a href="{{ m }}" download>📎 {{ m.split('/')[-1] }}</a>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <p style="color:gray;">بدون رسانه</p>
+            {% endif %}
+        </div>
+        
+        {% if post.url %}
+        <a href="{{ post.url }}" target="_blank" style="color:#0088cc;">👁️ مشاهده در تلگرام</a>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="footer">تولید شده توسط Telegram Channel Scraper</div>
+</body>
+</html>
