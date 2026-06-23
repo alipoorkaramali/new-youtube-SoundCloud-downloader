@@ -14,7 +14,7 @@ class TelegramChannelScraper:
 
     def __init__(self, config: Config):
         self.config = config
-        self.channel = config.channel
+        self.channel = config.channel          # بدون @
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
@@ -68,30 +68,30 @@ class TelegramChannelScraper:
 
             # باز کردن صفحهٔ اصلی
             await page.goto("https://web.telegram.org/a/", wait_until="domcontentloaded", timeout=30000)
-            # صبر برای ظاهر شدن المان جستجو (با چند انتخابگر احتمالی)
             try:
                 await page.wait_for_selector('input[type="search"], input[placeholder*="Search"], input[placeholder*="جستجو"]', timeout=15000)
                 self.logger.info("🔍 المان جستجو پیدا شد.")
             except Exception:
-                self.logger.error("❌ المان جستجو پیدا نشد. صفحه اصلی به درستی بارگذاری نشده است.")
+                self.logger.error("❌ المان جستجو پیدا نشد.")
                 await context.close()
                 return []
 
-            # پر کردن فیلد جستجو
+            # پر کردن فیلد جستجو (بدون @)
             search_input = page.locator('input[type="search"], input[placeholder*="Search"], input[placeholder*="جستجو"]').first
-            await search_input.fill(self.channel)
+            await search_input.fill(self.channel)     # ← بدون @
             await asyncio.sleep(1)
             await search_input.press("Enter")
             await asyncio.sleep(2)
 
-            # کلیک روی اولین نتیجه
+            # کلیک روی اولین نتیجه (selector عمومی‌تر برای نسخه A)
             try:
-                await page.wait_for_selector('a[href*="' + self.channel + '"]', timeout=10000)
-                first_result = page.locator('a[href*="' + self.channel + '"]').first
+                # چند selector رایج در نسخه A
+                first_result = page.locator('a.chatlist-chat, div.search-result a, a[data-peer-id]').first
                 await first_result.click()
                 await asyncio.sleep(2)
-            except Exception:
-                self.logger.error(f"❌ نتیجه‌ای برای @{self.channel} پیدا نشد.")
+                self.logger.info(f"✅ وارد کانال @{self.channel} شدیم.")
+            except Exception as e:
+                self.logger.error(f"❌ نتیجه‌ای برای @{self.channel} پیدا نشد: {e}")
                 await context.close()
                 return []
 
@@ -106,7 +106,7 @@ class TelegramChannelScraper:
                         const text = textEl ? textEl.innerText : '';
                         const dateEl = msg.querySelector('time, span[class*="date"]');
                         const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText) : '';
-                        const linkEl = msg.querySelector('a[href*="/' + self.channel + '/"]');
+                        const linkEl = msg.querySelector('a[href*="/' + window.location.hostname + '/"]');
                         const url = linkEl ? linkEl.href : '';
                         posts.push({ id, text, date, url });
                     });
@@ -134,20 +134,17 @@ class TelegramChannelScraper:
             post_url = item.get('url', '')
             if post_url:
                 tasks.append((post_url, str(item['id'])))
-
         if tasks:
             downloader = PlaywrightDownloader(
                 self.profile_dir, self.media_dir, self.max_media_bytes,
                 self.delay_between_posts
             )
             await downloader.download_all(tasks)
-
         for f in self.media_dir.iterdir():
             if f.is_file():
                 parts = f.stem.split('_', 1)
                 pid = parts[0] if parts else ''
                 if pid in media_map:
                     media_map[pid].append(f"media/{f.name}")
-
         downloaded_count = sum(len(v) for v in media_map.values())
         return media_map, downloaded_count
