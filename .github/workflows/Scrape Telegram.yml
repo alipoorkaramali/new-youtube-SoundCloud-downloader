@@ -15,6 +15,11 @@ on:
         description: 'حداکثر حجم رسانه (MB)'
         required: false
         default: '80'
+      debug_mode:
+        description: 'حالت دیباگ (اسکرین‌شات از هر مرحله)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -27,6 +32,9 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
+      # ════════════════════════════════════════════
+      # ۱. دریافت کد از مخزن
+      # ════════════════════════════════════════════
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
@@ -34,25 +42,40 @@ jobs:
           lfs: true
           fetch-depth: 0
 
+      # ════════════════════════════════════════════
+      # ۲. تنظیم پایتون
+      # ════════════════════════════════════════════
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # ════════════════════════════════════════════
+      # ۳. نصب پیش‌نیازهای پایتون
+      # ════════════════════════════════════════════
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ════════════════════════════════════════════
+      # ۴. نصب Playwright و مرورگر کرومیوم
+      # ════════════════════════════════════════════
       - name: 🎭 Install Playwright and Chromium
         run: |
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
+      # ════════════════════════════════════════════
+      # ۵. استخراج پروفایل مرورگر
+      # ════════════════════════════════════════════
       - name: 📂 Extract browser profile
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
+      # ════════════════════════════════════════════
+      # ۶. به‌روزرسانی فایل تنظیمات با ورودی‌ها
+      # ════════════════════════════════════════════
       - name: ⚙️ Update config.yaml with inputs
         run: |
           python -c "
@@ -66,11 +89,34 @@ jobs:
               yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
           "
 
+      # ════════════════════════════════════════════
+      # ۷. اجرای اسکریپر (اصلی یا دیباگ)
+      # ════════════════════════════════════════════
       - name: 🚀 Run Telegram Scraper
+        if: ${{ !inputs.debug_mode }}
         run: python .github/scripts/main.py --config config/config.yaml
         timeout-minutes: 35
 
+      - name: 🐞 Run debug script with screenshots
+        if: ${{ inputs.debug_mode }}
+        run: python .github/scripts/debug_full.py
+        timeout-minutes: 35
+
+      # ════════════════════════════════════════════
+      # ۸. آپلود اسکرین‌شات‌های دیباگ
+      # ════════════════════════════════════════════
+      - name: 📤 Upload debug screenshots
+        if: ${{ inputs.debug_mode }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-${{ github.run_id }}
+          path: debug_output/
+
+      # ════════════════════════════════════════════
+      # ۹. بررسی خروجی (فقط در حالت عادی)
+      # ════════════════════════════════════════════
       - name: 📊 Verify output
+        if: ${{ !inputs.debug_mode }}
         run: |
           OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
           if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then
@@ -79,7 +125,11 @@ jobs:
           fi
           echo "✅ Output directory is ready"
 
+      # ════════════════════════════════════════════
+      # ۱۰. ذخیرهٔ نتایج در مخزن (فقط حالت عادی)
+      # ════════════════════════════════════════════
       - name: 💾 Commit and push results
+        if: ${{ !inputs.debug_mode }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
