@@ -1,6 +1,6 @@
-apify-client
 PyYAML
 aiohttp
 tqdm
 Jinja2
-requests
+cryptography
+playwright
