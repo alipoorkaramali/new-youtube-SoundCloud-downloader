@@ -4,3 +4,42 @@
 2026-06-23 16:24:06,306 [INFO] 🚀 شروع اسکریپر برای @bbcpersian (limit=15)
 2026-06-23 16:24:53,359 [INFO] 📥 15 پست دریافت شد.
 2026-06-23 16:25:04,002 [ERROR] ❌ سشن تلگرام بارگذاری نشد.
+2026-06-23 20:19:48,942 [INFO] 🚀 شروع اسکریپر برای @bbcpersian (limit=15)
+2026-06-23 20:20:01,516 [INFO] 📥 15 پست دریافت شد.
+2026-06-23 20:20:02,072 [INFO] 📄 باز کردن https://t.me/bbcpersian/284858
+2026-06-23 20:20:13,283 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284858 یافت نشد.
+2026-06-23 20:20:14,785 [INFO] 📄 باز کردن https://t.me/bbcpersian/284857
+2026-06-23 20:20:24,976 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284857 یافت نشد.
+2026-06-23 20:20:26,477 [INFO] 📄 باز کردن https://t.me/bbcpersian/284856
+2026-06-23 20:20:36,664 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284856 یافت نشد.
+2026-06-23 20:20:38,166 [INFO] 📄 باز کردن https://t.me/bbcpersian/284855
+2026-06-23 20:20:48,354 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284855 یافت نشد.
+2026-06-23 20:20:49,856 [INFO] 📄 باز کردن https://t.me/bbcpersian/284854
+2026-06-23 20:21:00,048 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284854 یافت نشد.
+2026-06-23 20:21:01,550 [INFO] 📄 باز کردن https://t.me/bbcpersian/284853
+2026-06-23 20:21:11,742 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284853 یافت نشد.
+2026-06-23 20:21:13,244 [INFO] 📄 باز کردن https://t.me/bbcpersian/284852
+2026-06-23 20:21:23,433 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284852 یافت نشد.
+2026-06-23 20:21:24,935 [INFO] 📄 باز کردن https://t.me/bbcpersian/284851
+2026-06-23 20:21:35,142 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284851 یافت نشد.
+2026-06-23 20:21:36,644 [INFO] 📄 باز کردن https://t.me/bbcpersian/284850
+2026-06-23 20:21:46,832 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284850 یافت نشد.
+2026-06-23 20:21:48,334 [INFO] 📄 باز کردن https://t.me/bbcpersian/284849
+2026-06-23 20:21:58,569 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284849 یافت نشد.
+2026-06-23 20:22:00,071 [INFO] 📄 باز کردن https://t.me/bbcpersian/284848
+2026-06-23 20:22:10,267 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284848 یافت نشد.
+2026-06-23 20:22:11,768 [INFO] 📄 باز کردن https://t.me/bbcpersian/284847
+2026-06-23 20:22:21,953 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284847 یافت نشد.
+2026-06-23 20:22:23,455 [INFO] 📄 باز کردن https://t.me/bbcpersian/284846
+2026-06-23 20:22:33,649 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284846 یافت نشد.
+2026-06-23 20:22:35,150 [INFO] 📄 باز کردن https://t.me/bbcpersian/284845
+2026-06-23 20:22:45,345 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284845 یافت نشد.
+2026-06-23 20:22:46,847 [INFO] 📄 باز کردن https://t.me/bbcpersian/284844
+2026-06-23 20:22:57,037 [INFO] 📭 هیچ رسانه‌ای در https://t.me/bbcpersian/284844 یافت نشد.
+2026-06-23 20:22:58,580 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
+2026-06-23 20:22:58,581 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-23 20:22:58,581 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-23 20:22:58,581 [ERROR] ❌ فایل post_template.html پیدا نشد.
+2026-06-23 20:22:58,585 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
+2026-06-23 20:22:58,585 [INFO] ✅ فایل قدیمی‌ای برای پاکسازی نبود.
+2026-06-23 20:22:58,585 [INFO] ✅ پایان موفقیت‌آمیز.
