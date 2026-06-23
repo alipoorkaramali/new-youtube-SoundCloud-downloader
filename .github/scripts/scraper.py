@@ -37,19 +37,15 @@ class TelegramChannelScraper:
 
     async def run(self):
         self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
-
-        # ۱. دریافت پست‌ها مستقیماً از تلگرام وب
         items = await self._fetch_posts_from_telegram()
         if not items:
             self.logger.warning("هیچ پستی دریافت نشد.")
             return
         self.logger.info(f"📥 {len(items)} پست استخراج شد.")
 
-        # ۲. دانلود رسانه‌ها
         media_map, downloaded = await self._download_media(items)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
 
-        # ۳. تولید خروجی‌ها
         gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
         gen.generate_json()
         gen.generate_csv()
@@ -59,9 +55,6 @@ class TelegramChannelScraper:
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
     async def _fetch_posts_from_telegram(self) -> List[Dict]:
-        """
-        با Playwright وارد کانال می‌شود و اطلاعات پست‌ها را از DOM استخراج می‌کند.
-        """
         from playwright.async_api import async_playwright
         items = []
 
@@ -73,25 +66,37 @@ class TelegramChannelScraper:
             )
             page = await context.new_page()
 
-            # باز کردن صفحهٔ اصلی و رفتن به کانال
+            # باز کردن صفحهٔ اصلی
             await page.goto("https://web.telegram.org/a/", wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(2)
+            # صبر برای ظاهر شدن المان جستجو (با چند انتخابگر احتمالی)
+            try:
+                await page.wait_for_selector('input[type="search"], input[placeholder*="Search"], input[placeholder*="جستجو"]', timeout=15000)
+                self.logger.info("🔍 المان جستجو پیدا شد.")
+            except Exception:
+                self.logger.error("❌ المان جستجو پیدا نشد. صفحه اصلی به درستی بارگذاری نشده است.")
+                await context.close()
+                return []
 
-            # جستجو و باز کردن کانال
-            search_input = page.locator('input[type="search"]')
+            # پر کردن فیلد جستجو
+            search_input = page.locator('input[type="search"], input[placeholder*="Search"], input[placeholder*="جستجو"]').first
             await search_input.fill(self.channel)
             await asyncio.sleep(1)
             await search_input.press("Enter")
             await asyncio.sleep(2)
 
-            # کلیک روی اولین نتیجه (معمولاً کانال)
-            first_result = page.locator('div.search-result, a[href*="' + self.channel + '"]').first
-            await first_result.click()
-            await asyncio.sleep(2)
+            # کلیک روی اولین نتیجه
+            try:
+                await page.wait_for_selector('a[href*="' + self.channel + '"]', timeout=10000)
+                first_result = page.locator('a[href*="' + self.channel + '"]').first
+                await first_result.click()
+                await asyncio.sleep(2)
+            except Exception:
+                self.logger.error(f"❌ نتیجه‌ای برای @{self.channel} پیدا نشد.")
+                await context.close()
+                return []
 
             # اسکرول تدریجی برای جمع‌آوری پست‌ها
             while len(items) < self.limit:
-                # استخراج پست‌های فعلی از DOM
                 new_items = await page.evaluate('''() => {
                     const posts = [];
                     document.querySelectorAll('div.message, div[class*="Message"]').forEach(msg => {
@@ -107,7 +112,6 @@ class TelegramChannelScraper:
                     });
                     return posts;
                 }''')
-                # اضافه کردن پست‌های جدید (بدون تکراری)
                 existing_ids = {item['id'] for item in items}
                 for post in new_items:
                     if post['id'] and post['id'] not in existing_ids:
@@ -115,22 +119,15 @@ class TelegramChannelScraper:
                         existing_ids.add(post['id'])
                         if len(items) >= self.limit:
                             break
-
                 if len(items) >= self.limit:
                     break
-
-                # اسکرول به پایین
                 await page.evaluate('window.scrollBy(0, 2000)')
                 await asyncio.sleep(self.delay_between_posts)
 
             await context.close()
-
         return items[:self.limit]
 
     async def _download_media(self, items: List[Dict]):
-        """
-        برای هر پست، صفحهٔ آن را باز می‌کند و رسانه‌ها را دانلود می‌کند.
-        """
         tasks = []
         media_map = {str(item['id']): [] for item in items}
         for item in items:
@@ -145,7 +142,6 @@ class TelegramChannelScraper:
             )
             await downloader.download_all(tasks)
 
-        # پر کردن media_map با فایل‌های واقعی دانلودشده
         for f in self.media_dir.iterdir():
             if f.is_file():
                 parts = f.stem.split('_', 1)
