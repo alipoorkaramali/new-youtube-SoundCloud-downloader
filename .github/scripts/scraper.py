@@ -14,7 +14,7 @@ class TelegramChannelScraper:
 
     def __init__(self, config: Config):
         self.config = config
-        self.channel = config.channel          # بدون @
+        self.channel = config.channel
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
@@ -78,22 +78,37 @@ class TelegramChannelScraper:
 
             # پر کردن فیلد جستجو (بدون @)
             search_input = page.locator('input[type="search"], input[placeholder*="Search"], input[placeholder*="جستجو"]').first
-            await search_input.fill(self.channel)     # ← بدون @
+            await search_input.fill(self.channel)
             await asyncio.sleep(1)
             await search_input.press("Enter")
-            await asyncio.sleep(2)
+            self.logger.info(f"🔎 جستجوی @{self.channel} انجام شد.")
 
-            # کلیک روی اولین نتیجه (selector عمومی‌تر برای نسخه A)
+            # منتظر ظاهر شدن نتایج جستجو (با چند selector محتمل)
             try:
-                # چند selector رایج در نسخه A
-                first_result = page.locator('a.chatlist-chat, div.search-result a, a[data-peer-id]').first
-                await first_result.click()
-                await asyncio.sleep(2)
-                self.logger.info(f"✅ وارد کانال @{self.channel} شدیم.")
-            except Exception as e:
-                self.logger.error(f"❌ نتیجه‌ای برای @{self.channel} پیدا نشد: {e}")
+                await page.wait_for_selector('div.search-results, a[data-peer-id]', timeout=10000)
+                self.logger.info("📋 نتایج جستجو ظاهر شدند.")
+            except Exception:
+                self.logger.error("❌ نتایج جستجو ظاهر نشدند.")
                 await context.close()
                 return []
+
+            # کلیک روی اولین نتیجه (کاندیدهای مختلف)
+            first_result = page.locator('a[data-peer-id]').first
+            try:
+                await first_result.click(timeout=5000)
+                self.logger.info(f"✅ روی اولین نتیجه کلیک شد.")
+            except Exception:
+                # fallback: div.search-result a
+                try:
+                    first_result = page.locator('div.search-result a').first
+                    await first_result.click(timeout=5000)
+                    self.logger.info(f"✅ با fallback روی نتیجه کلیک شد.")
+                except Exception as e:
+                    self.logger.error(f"❌ کلیک روی نتیجه ممکن نشد: {e}")
+                    await context.close()
+                    return []
+
+            await asyncio.sleep(2)
 
             # اسکرول تدریجی برای جمع‌آوری پست‌ها
             while len(items) < self.limit:
@@ -106,7 +121,7 @@ class TelegramChannelScraper:
                         const text = textEl ? textEl.innerText : '';
                         const dateEl = msg.querySelector('time, span[class*="date"]');
                         const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText) : '';
-                        const linkEl = msg.querySelector('a[href*="/' + window.location.hostname + '/"]');
+                        const linkEl = msg.querySelector('a[href*="/' + self.channel + '/"]');
                         const url = linkEl ? linkEl.href : '';
                         posts.push({ id, text, date, url });
                     });
