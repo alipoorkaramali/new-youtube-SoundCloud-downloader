@@ -125,3 +125,10 @@
 2026-06-23 22:26:13,251 [INFO] 🔍 المان جستجو پیدا شد.
 2026-06-23 22:26:26,348 [ERROR] ❌ نتیجه‌ای برای @bbcpersian پیدا نشد.
 2026-06-23 22:26:26,431 [WARNING] هیچ پستی دریافت نشد.
+2026-06-23 22:32:15,261 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
+2026-06-23 22:32:17,125 [INFO] 🔍 المان جستجو پیدا شد.
+2026-06-23 22:32:50,165 [ERROR] ❌ نتیجه‌ای برای @bbcpersian پیدا نشد: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("a.chatlist-chat, div.search-result a, a[data-peer-id]").first
+
+2026-06-23 22:32:50,227 [WARNING] هیچ پستی دریافت نشد.
