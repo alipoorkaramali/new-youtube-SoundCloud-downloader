@@ -40,7 +40,7 @@ class TelegramChannelScraper:
             self.logger.addHandler(fh)
             self.logger.addHandler(ch)
 
-    # ═══════════════════ متد اصلی (با timeout کلی و محافظت) ═══════════════════
+    # ═══════════════════ متد اصلی ═══════════════════
     async def run(self):
         try:
             await asyncio.wait_for(self._run_impl(), timeout=OVERALL_TIMEOUT)
@@ -158,7 +158,7 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ جستجو و ورود به کانال (مقاوم‌سازی شده) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (نسخه نهایی) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
         # ۱. پیدا کردن نوار جستجو
         search_input = None
@@ -184,45 +184,60 @@ class TelegramChannelScraper:
         await asyncio.sleep(1)
         await search_input.press("Enter")
 
-        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو...")
+        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو (تا ۲۵ ثانیه)...")
+        await asyncio.sleep(5)
+
+        # ۳. کلیک روی تب Channels (اگر وجود داشته باشد)
         try:
-            await page.wait_for_load_state("networkidle", timeout=20000)
+            channels_tab = page.get_by_role("tab", name="Channels").first
+            if await channels_tab.count() > 0:
+                await channels_tab.click()
+                await asyncio.sleep(3)   # افزایش تأخیر برای بارگذاری
+                self.logger.info("📑 تب Channels انتخاب شد.")
         except Exception:
-            self.logger.warning("⚠️ networkidle تایم‌اوت شد، ادامه با selector...")
+            pass
 
-        await asyncio.sleep(4)  # زمان مهم برای رندر نتایج
-
-        # ۳. تلاش‌های متعدد برای تشخیص نتایج
+        # ۴. انتظار هوشمند برای نتایج
+        found = False
         search_result_selectors = [
-            'div.search-result',
-            'div.chatlist-item',
-            'a[data-peer-id]',
-            'div.search-results',
-            '[role="listitem"]',
-            'div[role="button"]'
+            'div.search-result', 'div.chatlist-item', 'a[data-peer-id]',
+            'div.search-results', '[role="listitem"]', 'div[role="button"]'
         ]
 
-        has_results = False
-        for sel in search_result_selectors:
+        for wait_time in [8, 10, 12]:
             try:
-                await page.wait_for_selector(sel, timeout=8000)
-                self.logger.info(f"✅ نتایج جستجو با سلکتور پیدا شد: {sel}")
-                has_results = True
-                break
+                await page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
-                continue
+                pass
+            await asyncio.sleep(wait_time)
 
-        if not has_results:
+            for sel in search_result_selectors:
+                try:
+                    count = await page.locator(sel).count()
+                    if count > 0:
+                        self.logger.info(f"✅ {count} نتیجه با سلکتور '{sel}' پیدا شد.")
+                        found = True
+                        break
+                except Exception:
+                    continue
+            if found:
+                break
+
+        if not found:
+            # آخرین تلاش با evaluate
             has_results = await page.evaluate(
-                """() => !!document.querySelector('div.search-result, div.chatlist-item, a[data-peer-id], div.search-results')"""
+                """() => document.querySelectorAll('div.search-result, div.chatlist-item, a[data-peer-id]').length > 0"""
             )
+            if has_results:
+                found = True
 
-        if not has_results:
-            self.logger.error("❌ نتایج جستجو پیدا نشدند.")
+        if not found:
+            self.logger.error("❌ نتایج جستجو بعد از ۲۵+ ثانیه پیدا نشد.")
             await self._take_screenshot(page, "search_failed")
             return False
 
         self.logger.info("✅ نتایج جستجو ظاهر شدند.")
+        await asyncio.sleep(2)
         return await self._click_search_result(page)
 
     async def _click_search_result(self, page) -> bool:
@@ -287,6 +302,7 @@ class TelegramChannelScraper:
     # ═══════════════════ اسکرین‌شات برای دیباگ ═══════════════════
     async def _take_screenshot(self, page, name: str):
         try:
+            self.base_dir.mkdir(parents=True, exist_ok=True)
             path = self.base_dir / f"debug_{name}.png"
             await page.screenshot(path=path, full_page=True)
             self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
