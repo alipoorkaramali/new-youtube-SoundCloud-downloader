@@ -180,7 +180,7 @@ class TelegramChannelScraper:
 
                 # اسکرول به بالا (بارگذاری پست‌های قدیمی‌تر)
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
-                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")   # مقدار منفی → اسکرول به بالا
+                await page.evaluate("window.scrollBy(0, -2000)")   # 🔼 مقدار منفی → اسکرول به بالا
                 await asyncio.sleep(2)
                 new_height = await page.evaluate("document.documentElement.scrollHeight")
 
