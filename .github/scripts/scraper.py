@@ -14,7 +14,7 @@ from output_generator import OutputGenerator
 MAX_SCROLL_ATTEMPTS = 12
 SCROLL_STEP = 2000
 HOME_URL = "https://web.telegram.org/a/"
-OVERALL_TIMEOUT = 35 * 60  # 35 دقیقه (هماهنگ با workflow)
+OVERALL_TIMEOUT = 35 * 60  # 35 دقیقه
 
 class TelegramChannelScraper:
 
@@ -86,7 +86,6 @@ class TelegramChannelScraper:
             )
             page = await context.new_page()
 
-            # ۱. باز کردن صفحهٔ اصلی و ورود به کانال
             try:
                 await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
             except Exception as e:
@@ -99,7 +98,6 @@ class TelegramChannelScraper:
                 await context.close()
                 return []
 
-            # ۲. اسکرول و استخراج پست‌ها
             scroll_attempts = 0
 
             while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
@@ -145,7 +143,6 @@ class TelegramChannelScraper:
                 if len(items) >= self.limit:
                     break
 
-                # اسکرول هوشمند
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
                 await page.evaluate(f"window.scrollBy(0, {SCROLL_STEP})")
                 await asyncio.sleep(2)
@@ -161,7 +158,7 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ جستجو و ورود به کانال (با retry و fallback) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (مقاوم‌سازی شده) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
         # ۱. پیدا کردن نوار جستجو
         search_input = None
@@ -184,33 +181,51 @@ class TelegramChannelScraper:
 
         # ۲. جستجوی کانال
         await search_input.fill(self.channel)
-        await asyncio.sleep(0.5)
-        await search_input.press("Enter")
-        try:
-            await page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
-            self.logger.warning("⚠️ networkidle تایم‌اوت شد، منتظر نتایج می‌مانیم...")
-            await asyncio.sleep(3)
-            try:
-                await page.wait_for_selector('div.search-result, div.chatlist-item, a[data-peer-id]', timeout=10000)
-            except Exception:
-                self.logger.error("❌ نتایج جستجو پیدا نشدند.")
-                return False
         await asyncio.sleep(1)
+        await search_input.press("Enter")
 
-        # ۳. بررسی وجود نتایج
-        has_results = await page.evaluate(
-            """() => !!document.querySelector('div.search-result, div.chatlist-item, a[data-peer-id]')"""
-        )
+        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو...")
+        try:
+            await page.wait_for_load_state("networkidle", timeout=20000)
+        except Exception:
+            self.logger.warning("⚠️ networkidle تایم‌اوت شد، ادامه با selector...")
+
+        await asyncio.sleep(4)  # زمان مهم برای رندر نتایج
+
+        # ۳. تلاش‌های متعدد برای تشخیص نتایج
+        search_result_selectors = [
+            'div.search-result',
+            'div.chatlist-item',
+            'a[data-peer-id]',
+            'div.search-results',
+            '[role="listitem"]',
+            'div[role="button"]'
+        ]
+
+        has_results = False
+        for sel in search_result_selectors:
+            try:
+                await page.wait_for_selector(sel, timeout=8000)
+                self.logger.info(f"✅ نتایج جستجو با سلکتور پیدا شد: {sel}")
+                has_results = True
+                break
+            except Exception:
+                continue
+
         if not has_results:
-            self.logger.error("❌ نتایج جستجو ظاهر نشد.")
+            has_results = await page.evaluate(
+                """() => !!document.querySelector('div.search-result, div.chatlist-item, a[data-peer-id], div.search-results')"""
+            )
+
+        if not has_results:
+            self.logger.error("❌ نتایج جستجو پیدا نشدند.")
+            await self._take_screenshot(page, "search_failed")
             return False
 
-        # ۴. کلیک با retry (تا ۲ بار) و fallback به get_by_text
+        self.logger.info("✅ نتایج جستجو ظاهر شدند.")
         return await self._click_search_result(page)
 
     async def _click_search_result(self, page) -> bool:
-        """تلاش برای کلیک روی نتیجه جستجو با چندین سلکتور و retry."""
         click_selectors = [
             'div.search-result [role="link"]',
             'div.chatlist-item',
@@ -244,7 +259,7 @@ class TelegramChannelScraper:
                 except Exception:
                     continue
 
-        # ۵. روش کمکی با get_by_role + fallback به get_by_text
+        # روش کمکی get_by_role / get_by_text
         self.logger.info("🔄 تلاش با get_by_role/get_by_text...")
         for _ in range(2):
             try:
@@ -269,7 +284,16 @@ class TelegramChannelScraper:
         self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
         return False
 
-    # ═══════════════════ دانلود رسانه‌ها (شمارش دقیق) ═══════════════════
+    # ═══════════════════ اسکرین‌شات برای دیباگ ═══════════════════
+    async def _take_screenshot(self, page, name: str):
+        try:
+            path = self.base_dir / f"debug_{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
+
+    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
     async def _download_media(self, items: List[Dict]):
         tasks = []
         media_map = {str(item['id']): [] for item in items}
@@ -286,7 +310,6 @@ class TelegramChannelScraper:
             )
             await downloader.download_all(tasks)
 
-            # شمارش دقیق فایل‌هایی که با الگوی postid_ شروع می‌شوند
             for f in self.media_dir.iterdir():
                 if f.is_file() and '_' in f.stem:
                     pid = f.stem.split('_', 1)[0]
