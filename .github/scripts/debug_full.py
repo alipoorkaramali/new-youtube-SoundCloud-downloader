@@ -3,6 +3,7 @@
 """
 اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
 هم روی لوکال (ویندوز + Chrome) و هم روی گیت‌هاب (لینوکس + کرومیوم) کار می‌کند.
+ورود به کانال از طریق جستجو با سلکتورهای بهبودیافته (همانند scraper.py).
 """
 
 import asyncio
@@ -96,7 +97,7 @@ async def main():
         # ══════════════════════════════════════
         print(f"🔎 جستجوی @{CHANNEL} ...")
         await search_input.fill(CHANNEL)
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
         await search_input.press("Enter")
         await asyncio.sleep(2)
         await screenshot(page, "03_after_search")
@@ -106,7 +107,7 @@ async def main():
         # ══════════════════════════════════════
         print("📋 منتظر نتایج جستجو...")
         try:
-            await page.wait_for_selector('div.search-results, a[data-peer-id]', timeout=12000)
+            await page.wait_for_selector('div.search-results, a[data-peer-id], div.search-result', timeout=12000)
             print("   ✅ نتایج جستجو ظاهر شدند.")
             await screenshot(page, "04_search_results")
         except Exception:
@@ -116,23 +117,44 @@ async def main():
             return
 
         # ══════════════════════════════════════
-        # ۵. کلیک روی اولین نتیجه
+        # ۵. کلیک روی اولین نتیجه (سلکتورهای جدید)
         # ══════════════════════════════════════
         print("🖱️ کلیک روی اولین نتیجه...")
-        click_selectors = ['a[data-peer-id]', 'div.search-result a', 'a.chatlist-chat', '.chatlist .row']
+        click_selectors = [
+            'div.search-result a',               # لینک داخل نتیجه
+            'a[data-peer-id]',                   # خود لینک چت
+            'div.chatlist-item a',               # آیتم‌های لیست چت
+            'div.search-result:first-child',     # اولین div نتیجه
+            'div[data-peer-id]',                 # div دارای peer-id
+            '.search-results a'                  # لینک داخل نتایج
+        ]
         clicked = False
         for sel in click_selectors:
             try:
-                first = page.locator(sel).first
-                await first.click(timeout=7000)
-                await asyncio.sleep(2)
-                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                locator = page.locator(sel).first
+                if await locator.count() == 0:
+                    continue
+                print(f"   🖱️ تلاش برای کلیک با سلکتور: {sel}")
+                await locator.click(timeout=5000)
+
+                # منتظر بارگذاری کانال (پیام‌ها یا network idle)
+                try:
+                    await page.wait_for_selector(
+                        'div.message, div.bubbles-group, div[data-message-id], .bubble-content',
+                        timeout=15000
+                    )
+                    print("   ✅ محتوای کانال بارگذاری شد.")
+                except Exception:
+                    await page.wait_for_load_state("networkidle", timeout=10000)
+                    print("   ✅ صفحه کانال باز شد (بدون پیام قابل تشخیص).")
+
                 print(f"   ✅ کلیک موفق با selector: {sel}")
                 clicked = True
                 break
             except Exception as e:
                 print(f"   ⚠️ selector {sel} کار نکرد: {e}")
                 continue
+
         if not clicked:
             print("❌ کلیک روی هیچ نتیجه‌ای موفق نبود.")
             await screenshot(page, "05_click_failed")
