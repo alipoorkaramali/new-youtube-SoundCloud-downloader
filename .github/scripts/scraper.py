@@ -258,7 +258,6 @@ class TelegramChannelScraper:
         return await self._click_search_result(page)
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
-        # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page) -> bool:
         """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
         # لایهٔ ۱: سلکتورهای رایج
@@ -311,38 +310,6 @@ class TelegramChannelScraper:
                 return True
         except Exception as e:
             self.logger.debug("JavaScript generic click: %s", e)
-
-        self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
-        await self._take_screenshot(page, "click_failed")
-        return False        # لایه ۲: کلیک با JavaScript روی نام کانال
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
-        try:
-            await page.evaluate(f'''(channel) => {{
-                const el = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"]'))
-                    .find(e => e.textContent.trim().toLowerCase() === channel.toLowerCase());
-                if (el) el.click();
-            }}''', self.channel)
-            await asyncio.sleep(4)
-            if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با JavaScript وارد کانال شدیم.")
-                return True
-        except Exception as e:
-            self.logger.debug(f"JavaScript name click: {e}")
-
-        # لایه ۳: کلیک روی اولین المان با JavaScript
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
-        try:
-            await page.evaluate('''() => {
-                const sel = 'div.chatlist-item, div[role="button"], div.search-result, a[data-peer-id]';
-                const el = document.querySelector(sel);
-                if (el) el.click();
-            }''')
-            await asyncio.sleep(4)
-            if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با JavaScript کلیک شد.")
-                return True
-        except Exception as e:
-            self.logger.debug(f"JavaScript generic click: {e}")
 
         self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
         await self._take_screenshot(page, "click_failed")
