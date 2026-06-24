@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
-نسخهٔ اصلاح‌شده: جستجوی ساده + کلیک با سلکتورهای جدید.
+رفع مشکل کلیک با هدف‌گیری لینک‌های داخل نتایج جستجو.
 """
 
 import asyncio
@@ -103,20 +103,27 @@ async def main():
             await context.close()
             return
 
-        # ════════════ ۵. کلیک روی اولین نتیجه (سلکتورهای بهبودیافته) ════════════
+        # ════════════ ۵. کلیک روی اولین نتیجه (هدف‌گیری لینک‌ها) ════════════
         print("🖱️ کلیک روی اولین نتیجه...")
         clicked = False
+
+        # اولویت با لینک‌های داخل نتایج
         for sel in [
-            'div.search-result a', 'a[data-peer-id]', 'div.chatlist-item a',
-            'div.search-result:first-child', 'div[data-peer-id]', '.search-results a'
+            'div.search-result a',        # لینک داخل div نتیجه
+            'a[data-peer-id]',            # لینک با peer-id
+            '.search-results a',          # لینک عمومی در نتایج
+            'div.chatlist-item a'         # آیتم‌های لیست چت
         ]:
             try:
                 loc = page.locator(sel).first
                 if await loc.count() == 0:
                     continue
+                # صبر می‌کنیم تا لینک قابل کلیک (visible) شود
+                await loc.wait_for(state="visible", timeout=3000)
                 print(f"   🖱️ تلاش برای کلیک با سلکتور: {sel}")
                 await loc.click(timeout=5000)
                 await asyncio.sleep(2)
+                # بررسی بارگذاری کانال
                 try:
                     await page.wait_for_selector('div.message, div[class*="Message"], div[data-message-id]', timeout=10000)
                     print("   ✅ محتوای کانال بارگذاری شد.")
@@ -128,6 +135,25 @@ async def main():
             except Exception as e:
                 print(f"   ⚠️ سلکتور {sel} ناموفق: {e}")
                 continue
+
+        # روش کمکی: اگر هیچ لینکی کلیک نشد، با Enter روی div نتیجه
+        if not clicked:
+            print("   🔄 تلاش با انتخاب div نتیجه و فشردن Enter...")
+            try:
+                first_result = page.locator('div.search-result').first
+                if await first_result.count() > 0:
+                    await first_result.click()      # فوکوس روی نتیجه
+                    await asyncio.sleep(0.5)
+                    await page.keyboard.press("Enter")
+                    await asyncio.sleep(2)
+                    try:
+                        await page.wait_for_selector('div.message, div[class*="Message"], div[data-message-id]', timeout=10000)
+                        print("   ✅ با Enter وارد کانال شدیم.")
+                        clicked = True
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"   ❌ روش Enter هم شکست: {e}")
 
         if not clicked:
             print("❌ کلیک روی هیچ نتیجه‌ای موفق نبود.")
