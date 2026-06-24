@@ -257,69 +257,62 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await asyncio.sleep(2)
 
-        # ۵. کلیک روی اولین نتیجه (متد جدید)
+        # ۵. کلیک روی اولین نتیجه (مکانیسم اصلی و قدرتمند)
         return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه (روش مستقیم JavaScript) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (نسخهٔ اصلی: force + JS) ═══════════════════
     async def _click_search_result(self, page) -> bool:
-        """با JavaScript مستقیماً روی المان حاوی نام کانال یا اولین آیتم کلیک می‌کند."""
-        # لایهٔ ۱: پیدا کردن المان با متن دقیق کانال و کلیک
-        self.logger.info("🔍 جستجوی المان با نام کانال...")
-        try:
-            clicked = await page.evaluate(f'''(channel) => {{
-                // تمام المان‌های متنی که نام کانال را دارند
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                let textNode;
-                while (textNode = walker.nextNode()) {{
-                    if (textNode.textContent.trim().toLowerCase() === channel.toLowerCase()) {{
-                        // پیدا کردن نزدیک‌ترین والد قابل کلیک
-                        let parent = textNode.parentElement;
-                        while (parent) {{
-                            if (parent.tagName === 'A' || parent.getAttribute('role') === 'button' || parent.classList.contains('chatlist-item')) {{
-                                parent.click();
-                                return true;
-                            }}
-                            parent = parent.parentElement;
-                        }}
-                    }}
-                }}
-                return false;
-            }}''', self.channel)
-            if clicked:
+        """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
+        # لایهٔ ۱: سلکتورهای رایج
+        click_selectors = [
+            'div.chatlist-item', 'div[role="button"]', 'div.search-result',
+            'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
+            'div[class*="ListItem"]', 'div[class*="search-result"]'
+        ]
+        for sel in click_selectors:
+            try:
+                loc = page.locator(sel).first
+                if await loc.count() == 0:
+                    continue
+                # سعی می‌کنیم حتی اگر visible نباشد با force کلیک کنیم
+                await loc.click(timeout=8000, force=True)
                 await asyncio.sleep(4)
                 if await page.locator('div.message, div[data-message-id]').count() > 0:
-                    self.logger.info("✅ با JavaScript (نام کانال) وارد شدیم.")
+                    self.logger.info("✅ کانال با موفقیت باز شد (سلکتور %s).", sel)
                     return True
-        except Exception as e:
-            self.logger.debug("خطا در کلیک با نام کانال: %s", e)
+            except Exception as e:
+                self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
-        # لایهٔ ۲: کلیک روی اولین div[role="button"] موجود
-        self.logger.info("🔄 تلاش کلیک روی اولین div[role='button']...")
+        # لایهٔ ۲: کلیک با JavaScript روی اسم کانال (در لیست نتایج)
+        self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
         try:
-            await page.evaluate('''() => {
-                const btn = document.querySelector('div[role="button"]');
-                if (btn) btn.click();
-            }''')
+            await page.evaluate(f'''(channel) => {{
+                const els = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"], div[class*="name"], span[class*="peer-title"]'));
+                const target = els.find(el => el.textContent.trim().toLowerCase() === channel.toLowerCase());
+                if (target) {{
+                    target.closest('div[role="button"], div.chatlist-item, a')?.click();
+                }}
+            }}''', self.channel)
             await asyncio.sleep(4)
             if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با کلیک روی اولین دکمه وارد شدیم.")
+                self.logger.info("✅ با JavaScript (نام کانال) وارد شدیم.")
                 return True
         except Exception as e:
-            self.logger.debug("خطا در کلیک روی اولین دکمه: %s", e)
+            self.logger.debug("JavaScript name click: %s", e)
 
-        # لایهٔ ۳: کلیک روی اولین div.chatlist-item یا مشابه
-        self.logger.info("🔄 تلاش کلیک روی اولین chatlist-item...")
+        # لایهٔ ۳: کلیک روی اولین آیتم موجود در لیست (بدون توجه به نام)
+        self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
             await page.evaluate('''() => {
-                const item = document.querySelector('div.chatlist-item, div.search-result, a[data-peer-id]');
+                const item = document.querySelector('div.chatlist-item, div[role="button"], div.search-result, a[data-peer-id]');
                 if (item) item.click();
             }''')
             await asyncio.sleep(4)
             if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با کلیک روی اولین آیتم وارد شدیم.")
+                self.logger.info("✅ با JavaScript (اولین نتیجه) وارد شدیم.")
                 return True
         except Exception as e:
-            self.logger.debug("خطا در کلیک روی اولین آیتم: %s", e)
+            self.logger.debug("JavaScript generic click: %s", e)
 
         self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
         await self._take_screenshot(page, "click_failed")
