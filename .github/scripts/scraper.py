@@ -177,51 +177,79 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ جستجو و ورود به کانال (اصلاح‌شده) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (اصلاح‌شده با سلکتورهای جدید) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
-        """جستجو و ورود به کانال با پایداری بالاتر"""
+        """جستجو و ورود به کانال با سلکتورهای بهبودیافته"""
+        # ---------- ۱. پیدا کردن نوار جستجو ----------
         search_selectors = [
             'input[placeholder*="Search"], input[placeholder*="جستجو"]',
             'div.input-search input',
             '[data-testid="search-input"]',
             'input[role="textbox"]'
         ]
-
+        search_input = None
         for sel in search_selectors:
             try:
                 search_input = await page.wait_for_selector(sel, timeout=8000)
                 if search_input:
                     self.logger.info(f"🔍 نوار جستجو پیدا شد: {sel[:50]}")
-                    await search_input.fill(self.channel)
-                    await asyncio.sleep(1)
-                    await search_input.press("Enter")
-                    self.logger.info(f"🔎 جستجوی @{self.channel} انجام شد.")
                     break
             except Exception:
                 continue
-        else:
+        if not search_input:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
-        # منتظر نتایج
+        # ---------- ۲. پر کردن و ارسال جستجو ----------
+        await search_input.fill(self.channel)
+        await asyncio.sleep(0.5)
+        await search_input.press("Enter")
+        self.logger.info(f"🔎 جستجوی @{self.channel} انجام شد.")
+
+        # ---------- ۳. انتظار برای ظاهر شدن نتایج ----------
         try:
-            await page.wait_for_selector('div.search-results, a[data-peer-id]', timeout=12000)
+            await page.wait_for_selector('div.search-results, a[data-peer-id], div.search-result', timeout=12000)
         except Exception:
             self.logger.error("❌ نتایج جستجو ظاهر نشد.")
             return False
 
-        # کلیک روی نتیجه
-        click_selectors = ['a[data-peer-id]', 'div.search-result a', 'a.chatlist-chat', '.chatlist .row']
+        # ---------- ۴. کلیک روی اولین نتیجه (بهبودیافته) ----------
+        click_selectors = [
+            'div.search-result a',               # لینک داخل نتیجه
+            'a[data-peer-id]',                   # خود لینک چت
+            'div.chatlist-item a',               # آیتم‌های لیست چت
+            'div.search-result:first-child',     # اولین div نتیجه
+            'div[data-peer-id]',                 # div دارای peer-id
+            '.search-results a'                  # لینک داخل نتایج
+        ]
+
         for sel in click_selectors:
             try:
-                first_result = page.locator(sel).first
-                await first_result.click(timeout=7000)
-                await asyncio.sleep(2)
-                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                locator = page.locator(sel).first
+                # بررسی وجود عنصر قبل از کلیک
+                if await locator.count() == 0:
+                    continue
+
+                self.logger.info(f"🖱️ تلاش برای کلیک با سلکتور: {sel}")
+                await locator.click(timeout=5000)
+
+                # ---------- ۵. انتظار برای بارگذاری صفحه کانال ----------
+                try:
+                    await page.wait_for_selector(
+                        'div.message, div.bubbles-group, div[data-message-id], .bubble-content',
+                        timeout=15000
+                    )
+                    self.logger.info("✅ محتوای کانال بارگذاری شد.")
+                except Exception:
+                    # اگر پیامی نبود، حداقل منتظر network idle می‌مانیم
+                    await page.wait_for_load_state("networkidle", timeout=10000)
+                    self.logger.info("✅ صفحه کانال باز شد (بدون پیام قابل تشخیص).")
+
                 self.logger.info(f"✅ با موفقیت وارد کانال @{self.channel} شدیم.")
                 return True
+
             except Exception as e:
-                self.logger.debug(f"Selector {sel} کار نکرد: {e}")
+                self.logger.debug(f"Selector {sel} ناموفق: {e}")
                 continue
 
         self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
