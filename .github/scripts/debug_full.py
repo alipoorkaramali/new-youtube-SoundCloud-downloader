@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
-نسخهٔ نهایی: استخراج پیام‌های جدید در هر اسکرول، انتظار مناسب، سلکتورهای گسترده.
+نسخهٔ نهایی با بهبود پایداری.
 """
 
 import asyncio
@@ -83,16 +83,23 @@ async def main():
             return
         await screenshot(page, "02_searchbar_found")
 
-        # ════════════ ۳. جستجوی کانال (منتظر network idle) ════════════
+        # ════════════ ۳. جستجوی کانال ════════════
         print(f"🔎 جستجوی @{CHANNEL} ...")
         await search_input.fill(CHANNEL)
         await asyncio.sleep(0.5)
         await search_input.press("Enter")
         try:
             await page.wait_for_load_state("networkidle", timeout=15000)
-            print("   ✅ نتایج جستجو بارگذاری شدند (networkidle).")
         except Exception:
-            print("   ⚠️ networkidle تایم‌اوت شد؛ ادامه می‌دهیم...")
+            print("   ⚠️ networkidle تایم‌اوت شد، منتظر نتایج می‌مانیم...")
+            await asyncio.sleep(3)
+            try:
+                await page.wait_for_selector('div.search-result, div.chatlist-item, a[data-peer-id]', timeout=10000)
+            except Exception:
+                print("❌ نتایج جستجو پیدا نشدند.")
+                await screenshot(page, "04_no_search_results")
+                await context.close()
+                return
         await asyncio.sleep(1)
         await screenshot(page, "03_after_search")
 
@@ -108,19 +115,16 @@ async def main():
         print("   ✅ نتایج جستجو در DOM موجودند.")
         await screenshot(page, "04_search_results")
 
-        # ════════════ ۵. کلیک با سلکتورهای مقاوم ════════════
+        # ════════════ ۵. کلیک روی اولین نتیجه ════════════
         print("🖱️ کلیک روی اولین نتیجه...")
         clicked = False
-
-        click_selectors = [
+        for sel in [
             'div.search-result [role="link"]',
             'div.chatlist-item',
             'a[href*="/c/"]',
             'div.search-results div[role="button"]',
             'div.search-result',
-        ]
-
-        for sel in click_selectors:
+        ]:
             try:
                 loc = page.locator(sel).first
                 if await loc.count() == 0:
@@ -128,21 +132,27 @@ async def main():
                 await loc.wait_for(state="visible", timeout=3000)
                 print(f"   🖱️ تلاش برای کلیک با سلکتور: {sel}")
                 await loc.click(timeout=5000)
-                # بعد از کلیک صبر برای رندر UI
                 await asyncio.sleep(2)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=15000)
-                    await page.wait_for_selector('div.message, div[data-message-id], article[role="article"]', timeout=10000)
-                    print("   ✅ کانال با موفقیت باز شد.")
+                    await asyncio.sleep(3)
+                    # بررسی نهایی
+                    try:
+                        await page.wait_for_selector(
+                            'div.message, div[data-message-id], article[role="article"]',
+                            timeout=5000
+                        )
+                        print("   ✅ پیام‌ها به طور کامل بارگذاری شدند.")
+                    except Exception:
+                        print("   ⚠️ هنوز پیام کامل لود نشده، اما ادامه می‌دهیم.")
                 except Exception:
-                    print("   ⚠️ کانال باز شد اما ممکن است خالی یا در حال لود باشد.")
+                    print("   ⚠️ کانال باز شد ولی ممکن است خالی باشد.")
                 clicked = True
                 break
             except Exception as e:
                 print(f"   ⚠️ سلکتور {sel} ناموفق: {e}")
                 continue
 
-        # روش کمکی: get_by_role
         if not clicked:
             try:
                 print("   🔄 تلاش با get_by_role...")
@@ -151,8 +161,12 @@ async def main():
                     await link.click(timeout=5000)
                     await asyncio.sleep(2)
                     await page.wait_for_load_state("networkidle", timeout=12000)
-                    await page.wait_for_selector('div.message, div[data-message-id]', timeout=8000)
-                    print("   ✅ با get_by_role وارد کانال شدیم.")
+                    await asyncio.sleep(3)
+                    try:
+                        await page.wait_for_selector('div.message, div[data-message-id]', timeout=5000)
+                        print("   ✅ پیام‌ها با get_by_role کامل بارگذاری شدند.")
+                    except Exception:
+                        print("   ⚠️ get_by_role موفق بود اما پیام‌ها کامل نیستند.")
                     clicked = True
             except Exception as e:
                 print(f"   ❌ روش get_by_role شکست: {e}")
@@ -179,17 +193,14 @@ async def main():
                 count = await messages.count()
                 print(f"   🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
 
-                # فقط پیام‌های جدید را از اندیس last_count به بعد پردازش کن
                 for i in range(last_count, count):
                     try:
                         msg = messages.nth(i)
                         msg_id = await msg.get_attribute('data-message-id')
-
                         if not msg_id:
                             inner = msg.locator('[data-message-id]').first
                             if await inner.count() > 0:
                                 msg_id = await inner.get_attribute('data-message-id')
-
                         if not msg_id or msg_id in seen_ids:
                             continue
 
@@ -209,15 +220,14 @@ async def main():
                     except Exception:
                         continue
 
-                last_count = count   # برای دور بعد
+                last_count = count
                 print(f"   📊 {len(items)} پست یکتا جمع‌آوری شد.")
             except Exception as e:
-                print(f"   ❌ خطا استخراج: {e}")
+                print(f"   ❌ خطا: {e}")
 
             if len(items) >= LIMIT:
                 break
 
-            # اسکرول
             old_height = await page.evaluate("document.documentElement.scrollHeight")
             await page.evaluate("window.scrollBy(0, 2000)")
             await asyncio.sleep(2)
@@ -228,7 +238,6 @@ async def main():
             else:
                 scroll_attempts = 0
 
-            # اسکرین‌شات در اولین توقف یا هر ۸ پست
             if scroll_attempts == 1 or len(items) % 8 == 0:
                 await screenshot(page, f"06_scroll_{len(items)}")
 
