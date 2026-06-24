@@ -130,12 +130,15 @@ jobs:
         run: python .github/scripts/debug_full.py
         timeout-minutes: 35
         
-      # 👇 این گام جدید رو اینجا اضافه کن (قبل از آپلود دیباگ)
       - name: 🧹 Delete old debug screenshots artifacts
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: debug-screenshots-*
-          failOnError: false
+        run: |
+          ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.name | startswith("debug-screenshots-")) | .id')
+          for id in $ids; do
+            gh api repos/${{ github.repository }}/actions/artifacts/$id -X DELETE
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       # ════════════════════════════════════════════
       # ۱۰. آپلود اسکرین‌شات‌های دیباگ
@@ -185,10 +188,14 @@ jobs:
 
       # مرحلهٔ جدید پاکسازی آرتیفکت قدیمی
       - name: 🧹 Delete old post screenshots artifacts
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: post-screenshots-${{ github.event.inputs.channel }}-*
-          failOnError: false
+        run: |
+          ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.name | startswith("post-screenshots-${{ github.event.inputs.channel }}-")) | .id')
+          for id in $ids; do
+            gh api repos/${{ github.repository }}/actions/artifacts/$id -X DELETE
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ════════════════════════════════════════════
       # ۱۳. آپلود اسکرین‌شات‌های هر پست (همیشه)
