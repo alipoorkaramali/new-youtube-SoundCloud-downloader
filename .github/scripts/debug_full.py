@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
-نسخهٔ نهایی: جستجوی مقاوم + کلیک ترکیبی (ساده + force) + استخراج پایدار.
+نسخهٔ نهایی: جستجوی مقاوم + کلیک ترکیبی + پرش به آخرین پست + استخراج پایدار.
 """
 
 import asyncio
@@ -174,6 +174,30 @@ async def main():
         except Exception:
             print("⚠️ کانال باز شد ولی پیام‌ها کامل لود نشدند. ادامه می‌دهیم...")
         await screenshot(page, "05_entered_channel")
+
+        # ════════════ ۴.۵ **پرش به آخرین پست** (جدید) ════════════
+        print("⬇️ تلاش برای پرش به آخرین پست‌ها...")
+        try:
+            # سلکتورهای رایج برای دکمهٔ «برو به پایین» یا «آخرین پیام‌ها»
+            scroll_button_selectors = [
+                'button[title="Go to bottom"]',
+                'div[class*="scroll-to-bottom"]',
+                'div[class*="ScrollButton"]',
+                '[aria-label="Scroll to bottom"]',
+                'button:has(svg[class*="arrow-down"])',   # آیکن فلش پایین
+            ]
+            for sel in scroll_button_selectors:
+                btn = page.locator(sel).first
+                if await btn.count() > 0:
+                    await btn.click(timeout=3000)
+                    print("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری آخرین پست‌ها...")
+                    await asyncio.sleep(3)
+                    await screenshot(page, "05b_jumped_to_latest")
+                    break
+            else:
+                print("   ℹ️ دکمهٔ پرش به پایین پیدا نشد (شاید از قبل در آخرین پست‌ها هستیم).")
+        except Exception as e:
+            print(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
 
         # ════════════ ۵. اسکرول و استخراج پست‌ها (روش اثبات‌شده قبلی) ════════════
         print("📜 شروع اسکرول و استخراج پست‌ها...")
