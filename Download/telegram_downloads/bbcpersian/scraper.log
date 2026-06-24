@@ -154,3 +154,47 @@ Call log:
 2026-06-24 07:08:19,854 [ERROR] ❌ نتایج جستجو پیدا نشدند.
 2026-06-24 07:08:19,997 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_search_failed.png
 2026-06-24 07:08:20,063 [WARNING] هیچ پستی دریافت نشد.
+2026-06-24 07:22:25,334 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=15)
+2026-06-24 07:22:28,001 [INFO] 🔍 نوار جستجو پیدا شد: input[placeholder*="Search"], input[placeholder*="
+2026-06-24 07:22:29,088 [INFO] ⏳ منتظر بارگذاری نتایج جستجو (تا ۲۵ ثانیه)...
+2026-06-24 07:22:57,123 [INFO] ✅ 1 نتیجه با سلکتور 'div[role="button"]' پیدا شد.
+2026-06-24 07:22:57,123 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-06-24 07:22:59,150 [INFO] 🔄 تلاش با get_by_role/get_by_text...
+2026-06-24 07:23:04,170 [ERROR] ❌ get_by_role/text شکست: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for get_by_text("bbcpersian").first
+    - locator resolved to <h3 dir="auto" role="button" class="fullName _8IVW0azL">BBCPersian</h3>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    10 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
+
+2026-06-24 07:23:10,187 [ERROR] ❌ get_by_role/text شکست: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for get_by_text("bbcpersian").first
+    - locator resolved to <h3 dir="auto" role="button" class="fullName _8IVW0azL">BBCPersian</h3>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    10 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
+
+2026-06-24 07:23:11,189 [ERROR] ❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.
+2026-06-24 07:23:11,244 [WARNING] هیچ پستی دریافت نشد.
