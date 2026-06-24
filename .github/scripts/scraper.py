@@ -93,8 +93,8 @@ class TelegramChannelScraper:
             page = await context.new_page()
             self._page = page
 
-            # ═══════════ ورود مستقیم به کانال (بدون جستجو) ═══════════
-            self.logger.info(f"🔗 ورود مستقیم به کانال @{self.channel} ...")
+            # ورود مستقیم (اولویت)
+            self.logger.info(f"🔗 تلاش برای ورود مستقیم به @{self.channel} ...")
             entered = await self._direct_enter_channel(page)
             if not entered:
                 self.logger.warning("⚠️ ورود مستقیم ناموفق بود. تلاش با جستجو...")
@@ -194,7 +194,6 @@ class TelegramChannelScraper:
 
     # ═══════════════════ ورود مستقیم با URL ═══════════════════
     async def _direct_enter_channel(self, page) -> bool:
-        """مستقیماً با URL وارد کانال شویم (پایدارترین روش)"""
         urls = [
             f"https://web.telegram.org/a/#@{self.channel}",
             f"https://t.me/{self.channel}",
@@ -203,9 +202,7 @@ class TelegramChannelScraper:
             try:
                 self.logger.info(f"🔗 تلاش برای باز کردن {url}")
                 await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(5)  # صبر برای لود کامل
-
-                # بررسی وجود پیام‌ها
+                await asyncio.sleep(5)
                 if await page.locator('div.message, div[data-message-id]').count() > 0:
                     self.logger.info("✅ با URL مستقیم وارد کانال شدیم.")
                     return True
@@ -216,9 +213,8 @@ class TelegramChannelScraper:
                 continue
         return False
 
-    # ═══════════════════ جستجو (به عنوان پشتیبان) ═══════════════════
+    # ═══════════════════ جستجو (پشتیبان) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
-        """روش جستجو (همان نسخهٔ موفق دیباگ) در صورت شکست ورود مستقیم"""
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -251,6 +247,7 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
+        # انتظار هوشمند برای نتایج
         found = False
         for wait_time in [6, 10, 14]:
             await asyncio.sleep(wait_time)
@@ -267,13 +264,16 @@ class TelegramChannelScraper:
 
         if not found:
             self.logger.error("❌ نتایج پیدا نشد.")
+            await self._take_screenshot(page, "search_failed")
             return False
 
-        self.logger.info("✅ نتایج جستجو ظاهر شدند.")
-        await asyncio.sleep(2)
+        # 🆕 اسکرین‌شات از نتایج جستجو با نام کانال
+        await self._take_screenshot(page, f"search_results_{self.channel}")
+        self.logger.info("📸 اسکرین‌شات نتایج جستجو ذخیره شد.")
+
         return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه (نسخهٔ ساده و مقاوم) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (ساده و مقاوم) ═══════════════════
     async def _click_search_result(self, page) -> bool:
         for sel in ['div.chatlist-item', 'div[role="button"]', 'div.search-result', 'a[data-peer-id]']:
             try:
@@ -288,7 +288,6 @@ class TelegramChannelScraper:
             except Exception:
                 continue
 
-        # fallback get_by_text
         for name in [self.channel, self.channel.upper()]:
             try:
                 item = page.get_by_text(name, exact=False).first
@@ -302,6 +301,74 @@ class TelegramChannelScraper:
 
         return False
 
-    # ═══════════════════ سایر توابع (اسکرین‌شات، دانلود) بدون تغییر ═══════════════════
-    # (همان توابع _capture_post_screenshots، _save_screenshot، _take_screenshot، _download_media)
-    ...
+    # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
+    async def _capture_post_screenshots(self, page, items: List[Dict]):
+        self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
+        for idx, item in enumerate(items):
+            msg_id = item['id']
+            try:
+                locator = page.locator(f'[data-message-id="{msg_id}"]').first
+                if await locator.count() == 0:
+                    self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
+                    continue
+
+                await locator.scroll_into_view_if_needed()
+                await asyncio.sleep(0.5)
+
+                path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"   # 🆕 نام شامل کانال
+                await page.screenshot(path=path, full_page=False)
+                self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+
+                if (idx + 1) % 10 == 0:
+                    self.logger.info(f"   {idx+1}/{len(items)} اسکرین‌شات گرفته شد.")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {e}")
+                continue
+
+        self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
+
+    # ═══════════════════ اسکرین‌شات ساده ═══════════════════
+    async def _save_screenshot(self, page, name: str):
+        try:
+            path = self.screenshots_dir / f"{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
+
+    # ═══════════════════ اسکرین‌شات دیباگ ═══════════════════
+    async def _take_screenshot(self, page, name: str):
+        try:
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+            # نام شامل کانال
+            path = self.base_dir / f"debug_{self.channel}_{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
+
+    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
+    async def _download_media(self, items: List[Dict]):
+        tasks = []
+        media_map = {str(item['id']): [] for item in items}
+        for item in items:
+            post_url = item.get('url', '')
+            if post_url:
+                tasks.append((post_url, str(item['id'])))
+
+        downloaded = 0
+        if tasks:
+            downloader = PlaywrightDownloader(
+                self.profile_dir, self.media_dir, self.max_media_bytes,
+                self.delay_between_posts
+            )
+            await downloader.download_all(tasks)
+
+            for f in self.media_dir.iterdir():
+                if f.is_file() and '_' in f.stem:
+                    pid = f.stem.split('_', 1)[0]
+                    if pid in media_map:
+                        media_map[pid].append(f"media/{f.name}")
+                        downloaded += 1
+
+        return media_map, downloaded
