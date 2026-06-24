@@ -161,6 +161,16 @@ jobs:
           echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
+      # ۱۱.۵ تنظیم Git LFS برای فایل‌های رسانه
+      # ════════════════════════════════════════════
+      - name: 🐘 Setup Git LFS track for media
+        if: ${{ !inputs.debug_mode }}
+        run: |
+          git lfs install
+          git lfs track "Download/telegram_downloads/**/media/*"
+          git add .gitattributes
+
+      # ════════════════════════════════════════════
       # ۱۲. ذخیرهٔ نتایج در مخزن (فقط حالت عادی)
       # ════════════════════════════════════════════
       - name: 💾 Commit and push results
