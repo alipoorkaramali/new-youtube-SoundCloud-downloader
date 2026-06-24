@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>@{{ channel }} - آرشیو تلگرام</title>
     <style>
-        body { font-family: Tahoma, Arial; background: #f4f4f4; margin: 0; padding: 20px; direction: rtl; line-height: 1.6; }
+        body { font-family: Tahoma; background: #f4f4f4; margin: 0; padding: 20px; direction: rtl; }
         .post { background: white; margin: 20px auto; padding: 20px; border-radius: 12px; max-width: 850px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         .date { color: #555; font-size: 14px; }
         .text { white-space: pre-wrap; margin: 15px 0; font-size: 16px; }
@@ -18,7 +18,7 @@
 </head>
 <body>
     <h1>@{{ channel }}</h1>
-    <p style="text-align:center;">تعداد پست‌ها: {{ posts|length }} | آخرین بروزرسانی: {{ current_time }}</p>
+    <p style="text-align:center;">تعداد پست‌ها: {{ posts|length }} | آخرین بروزرسانی: {{ current_time|default('نامشخص') }}</p>
 
     {% for post in posts %}
     <div class="post">
