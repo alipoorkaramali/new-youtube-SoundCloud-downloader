@@ -159,3 +159,13 @@ jobs:
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
+
+      # ════════════════════════════════════════════
+      # ۱۳. آپلود اسکرین‌شات‌های هر پست (همیشه)
+      # ════════════════════════════════════════════
+      - name: 📸 Upload post screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: post-screenshots-${{ github.event.inputs.channel }}-${{ github.run_id }}
+          path: Download/telegram_downloads/${{ github.event.inputs.channel }}/post_screenshots/
