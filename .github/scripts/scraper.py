@@ -230,31 +230,34 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
-        # ۴. انتظار هوشمند برای نتایج (زمان کمتر)
+        # ۴. انتظار هوشمند برای نتایج (بر اساس وجود نام کانال در متن صفحه)
         found = False
-        for wait_time in [5, 10, 15]:
-            await asyncio.sleep(wait_time)
-            for sel in ['div[role="button"]', 'div.search-result', 'div.chatlist-item', 'a[data-peer-id]']:
-                try:
-                    if await page.locator(sel).count() > 0:
-                        self.logger.info(f"✅ نتیجه پیدا شد با سلکتور '{sel}'")
-                        found = True
-                        break
-                except Exception:
-                    continue
-            if found:
-                break
+        # حداکثر ۳۰ ثانیه صبر می‌کنیم، هر ۲ ثانیه چک می‌کنیم
+        for _ in range(15):   # 15 * 2 = 30 ثانیه
+            await asyncio.sleep(2)
+            # بررسی کن که آیا در کل صفحه متنی برابر با نام کانال وجود دارد یا خیر
+            try:
+                text_exists = await page.evaluate(f'''(channel) => {{
+                    const bodyText = document.body.innerText || '';
+                    return bodyText.toLowerCase().includes(channel.toLowerCase());
+                }}''', self.channel)
+                if text_exists:
+                    self.logger.info(f"✅ نام کانال '{self.channel}' در صفحه یافت شد.")
+                    found = True
+                    break
+            except Exception:
+                continue
 
         if not found:
-            self.logger.error("❌ نتایج پیدا نشد.")
+            self.logger.error("❌ نتایج جستجو برای این کانال پیدا نشد (حتی پس از ۳۰ ثانیه).")
             await self._take_screenshot(page, "search_failed")
             return False
 
-        self.logger.info("✅ نتایج جستجو ظاهر شدند.")
+        self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند.")
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await asyncio.sleep(2)
 
-        # ۵. کلیک روی اولین نتیجه (روش جدید)
+        # ۵. کلیک روی اولین نتیجه (متد جدید)
         return await self._click_search_result(page)
 
     # ═══════════════════ کلیک روی نتیجه (روش مستقیم JavaScript) ═══════════════════
