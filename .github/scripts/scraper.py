@@ -158,20 +158,19 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ جستجو و ورود به کانال (مقاوم‌سازی کامل) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (روش مقاوم و موفق دیباگ) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
         # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
-            'input[placeholder*="Search"], input[placeholder*="جستجو"]',
-            'div.input-search input',
-            '[data-testid="search-input"]',
-            'input[role="textbox"]'
+            'input[placeholder*="Search"]',
+            'input[role="textbox"]',
+            '[data-testid="search-input"]'
         ]:
             try:
-                search_input = await page.wait_for_selector(sel, timeout=8000)
+                search_input = await page.wait_for_selector(sel, timeout=10000)
                 if search_input:
-                    self.logger.info(f"🔍 نوار جستجو پیدا شد: {sel[:50]}")
+                    self.logger.info("🔍 نوار جستجو پیدا شد.")
                     break
             except Exception:
                 continue
@@ -183,11 +182,10 @@ class TelegramChannelScraper:
         await search_input.fill(self.channel)
         await asyncio.sleep(1)
         await search_input.press("Enter")
-
-        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو (تا ۲۵ ثانیه)...")
+        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو...")
         await asyncio.sleep(5)
 
-        # ۳. کلیک روی تب Channels (اگر وجود داشته باشد)
+        # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
@@ -197,25 +195,14 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
-        # ۴. انتظار هوشمند برای نتایج
+        # ۴. بررسی وجود نتایج
         found = False
-        search_result_selectors = [
-            'div.search-result', 'div.chatlist-item', 'a[data-peer-id]',
-            'div.search-results', '[role="listitem"]', 'div[role="button"]'
-        ]
-
-        for wait_time in [8, 10, 12]:
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
+        for wait_time in [6, 10, 14]:
             await asyncio.sleep(wait_time)
-
-            for sel in search_result_selectors:
+            for sel in ['div[role="button"]', 'div.search-result', 'div.chatlist-item', 'a[data-peer-id]']:
                 try:
-                    count = await page.locator(sel).count()
-                    if count > 0:
-                        self.logger.info(f"✅ {count} نتیجه با سلکتور '{sel}' پیدا شد.")
+                    if await page.locator(sel).count() > 0:
+                        self.logger.info(f"✅ نتیجه پیدا شد با سلکتور '{sel}'")
                         found = True
                         break
                 except Exception:
@@ -224,15 +211,7 @@ class TelegramChannelScraper:
                 break
 
         if not found:
-            # آخرین تلاش با evaluate
-            has_results = await page.evaluate(
-                """() => document.querySelectorAll('div.search-result, div.chatlist-item, a[data-peer-id]').length > 0"""
-            )
-            if has_results:
-                found = True
-
-        if not found:
-            self.logger.error("❌ نتایج جستجو بعد از ۲۵+ ثانیه پیدا نشد.")
+            self.logger.error("❌ نتایج جستجو پیدا نشد.")
             await self._take_screenshot(page, "search_failed")
             return False
 
@@ -240,72 +219,55 @@ class TelegramChannelScraper:
         await asyncio.sleep(2)
         return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه جستجو (اصلاح‌شده با force click) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (روش ترکیبی و موفق دیباگ) ═══════════════════
     async def _click_search_result(self, page) -> bool:
-        """تلاش برای کلیک روی نتیجه جستجو با سلکتورهای قوی‌تر و force click"""
+        """کلیک ترکیبی ساده + force (بر اساس نسخه موفق debug)"""
+        self.logger.info("🖱️ تلاش برای ورود به کانال...")
+
         click_selectors = [
-            'div.search-result [role="button"]',     # جدید و هدفمند
-            'div.search-result [role="link"]',
             'div.chatlist-item',
-            'a[href*="/c/"]',
-            'div.search-results div[role="button"]',
-            'div[role="button"]',                    # قبلاً پیدا شده بود
+            'div[role="button"]',
             'div.search-result',
+            'a[data-peer-id]',
+            'div.search-results div[role="button"]'
         ]
 
-        for attempt in range(3):  # افزایش به ۳ تلاش
-            for sel in click_selectors:
-                try:
-                    loc = page.locator(sel).first
-                    if await loc.count() == 0:
-                        continue
-
-                    await loc.wait_for(state="visible", timeout=5000)
-                    self.logger.info(f"🖱️ تلاش کلیک با سلکتور: {sel} (attempt {attempt+1})")
-
-                    # کلیک با force برای دور زدن مشکلات visibility
-                    await loc.click(timeout=8000, force=True)
-
-                    await asyncio.sleep(3)
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=15000)
-                        await asyncio.sleep(2)
-                        await page.wait_for_selector(
-                            'div.message, div[data-message-id], article[role="article"]',
-                            timeout=10000
-                        )
-                        self.logger.info("✅ کانال با موفقیت باز شد.")
-                        return True
-                    except Exception:
-                        self.logger.warning("⚠️ کانال باز شد اما پیام‌ها کامل لود نشدند. ادامه...")
-                        return True
-                except Exception as e:
-                    self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
+        for sel in click_selectors:
+            try:
+                loc = page.locator(sel).first
+                if await loc.count() == 0:
                     continue
+                await loc.wait_for(state="visible", timeout=6000)
+                self.logger.info(f" → کلیک با سلکتور {sel}")
+                await loc.click(timeout=10000, force=True)
+                await asyncio.sleep(4)
 
-        # fallback قوی‌تر با get_by_text و force click
-        self.logger.info("🔄 تلاش fallback با get_by_text...")
-        try:
-            result_item = page.get_by_text(self.channel, exact=False).first
-            if await result_item.count() > 0:
-                await result_item.click(timeout=8000, force=True)
-                await asyncio.sleep(3)
+                # چک ورود به کانال
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=15000)
-                    await asyncio.sleep(2)
-                    await page.wait_for_selector(
-                        'div.message, div[data-message-id], article[role="article"]',
-                        timeout=10000
-                    )
-                    self.logger.info("✅ با fallback get_by_text وارد کانال شدیم.")
+                    await page.wait_for_selector('div.message, div[data-message-id]', timeout=10000)
+                    self.logger.info("✅ کانال با موفقیت باز شد.")
                     return True
                 except Exception:
-                    self.logger.warning("⚠️ کانال با fallback باز شد، شاید پیام‌ها کامل نباشند.")
-                    return True
-        except Exception as e:
-            self.logger.error(f"❌ fallback get_by_text شکست: {e}")
+                    pass  # ادامه می‌دهیم
+            except Exception as e:
+                self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
+                continue
 
-        self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
+        # Fallback get_by_text
+        self.logger.info(" 🔄 fallback get_by_text...")
+        for name in [self.channel, self.channel.upper(), "BBCPersian", self.channel.title()]:
+            try:
+                item = page.get_by_text(name, exact=False).first
+                if await item.count() > 0:
+                    self.logger.info(f" → fallback با '{name}'")
+                    await item.click(timeout=10000, force=True)
+                    await asyncio.sleep(4)
+                    self.logger.info("✅ با fallback وارد کانال شدیم.")
+                    return True
+            except Exception:
+                continue
+
+        self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
         await self._take_screenshot(page, "click_failed")
         return False
 
