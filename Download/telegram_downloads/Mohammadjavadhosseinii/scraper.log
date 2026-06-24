@@ -1,12 +1,7 @@
-2026-06-24 16:45:01,015 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/Mohammadjavadhosseinii
-2026-06-24 16:45:01,015 [INFO] 🚀 شروع اسکریپر مستقل برای @Mohammadjavadhosseinii (limit=15)
-2026-06-24 16:45:02,936 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-24 16:45:04,017 [INFO] ⏳ منتظر نتایج...
-2026-06-24 16:45:15,038 [INFO] ✅ نتیجه پیدا شد با سلکتور 'div[role="button"]'
-2026-06-24 16:45:15,038 [INFO] ✅ نتایج جستجو ظاهر شدند.
-2026-06-24 16:45:15,190 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_Mohammadjavadhosseinii_search_results_Mohammadjavadhosseinii.png
-2026-06-24 16:45:22,207 [INFO] 🔄 تلاش کلیک با JavaScript روی نام کانال...
-2026-06-24 16:45:26,215 [INFO] 🔄 تلاش کلیک با JavaScript روی اولین نتیجه...
-2026-06-24 16:45:30,225 [ERROR] ❌ تمام روش‌های کلیک شکست خورد.
-2026-06-24 16:45:30,370 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_Mohammadjavadhosseinii_click_failed.png
-2026-06-24 16:45:30,437 [WARNING] هیچ پستی دریافت نشد.
+2026-06-24 21:06:24,128 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/Mohammadjavadhosseinii
+2026-06-24 21:06:24,128 [INFO] 🚀 شروع اسکریپر مستقل برای @Mohammadjavadhosseinii (limit=20)
+2026-06-24 21:06:26,323 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-24 21:06:27,357 [INFO] ⏳ منتظر نتایج...
+2026-06-24 21:07:02,423 [ERROR] ❌ نتایج جستجو برای این کانال پیدا نشد (حتی پس از ۳۰ ثانیه).
+2026-06-24 21:07:02,538 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_Mohammadjavadhosseinii_search_failed.png
+2026-06-24 21:07:02,586 [WARNING] هیچ پستی دریافت نشد.
