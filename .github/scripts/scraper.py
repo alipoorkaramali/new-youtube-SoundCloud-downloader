@@ -93,13 +93,15 @@ class TelegramChannelScraper:
             page = await context.new_page()
             self._page = page
 
-            # ورود مستقیم (اولویت)
-            self.logger.info(f"🔗 تلاش برای ورود مستقیم به @{self.channel} ...")
-            entered = await self._direct_enter_channel(page)
-            if not entered:
-                self.logger.warning("⚠️ ورود مستقیم ناموفق بود. تلاش با جستجو...")
-                entered = await self._search_and_enter_channel(page)
+            try:
+                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+            except Exception as e:
+                self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
+                await context.close()
+                return []
 
+            # همیشه جستجو کن (ورود مستقیم را کنار گذاشتیم)
+            entered = await self._search_and_enter_channel(page)
             if not entered:
                 await context.close()
                 return []
@@ -192,29 +194,9 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ ورود مستقیم با URL ═══════════════════
-    async def _direct_enter_channel(self, page) -> bool:
-        urls = [
-            f"https://web.telegram.org/a/#@{self.channel}",
-            f"https://t.me/{self.channel}",
-        ]
-        for url in urls:
-            try:
-                self.logger.info(f"🔗 تلاش برای باز کردن {url}")
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(5)
-                if await page.locator('div.message, div[data-message-id]').count() > 0:
-                    self.logger.info("✅ با URL مستقیم وارد کانال شدیم.")
-                    return True
-                else:
-                    self.logger.warning(f"⚠️ URL باز شد اما پیامی پیدا نشد: {url}")
-            except Exception as e:
-                self.logger.warning(f"⚠️ خطا در باز کردن {url}: {e}")
-                continue
-        return False
-
-    # ═══════════════════ جستجو (پشتیبان) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (با کلیک JS) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
+        # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -232,12 +214,14 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
+        # ۲. جستجوی کانال
         await search_input.fill(self.channel)
         await asyncio.sleep(1)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
         await asyncio.sleep(5)
 
+        # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
@@ -247,7 +231,7 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
-        # انتظار هوشمند برای نتایج
+        # ۴. انتظار هوشمند برای نتایج
         found = False
         for wait_time in [6, 10, 14]:
             await asyncio.sleep(wait_time)
@@ -267,38 +251,65 @@ class TelegramChannelScraper:
             await self._take_screenshot(page, "search_failed")
             return False
 
-        # 🆕 اسکرین‌شات از نتایج جستجو با نام کانال
+        self.logger.info("✅ نتایج جستجو ظاهر شدند.")
         await self._take_screenshot(page, f"search_results_{self.channel}")
-        self.logger.info("📸 اسکرین‌شات نتایج جستجو ذخیره شد.")
+        await asyncio.sleep(2)
 
-        return await self._click_search_result(page)
+        # ۵. کلیک با JavaScript (روش قطعی)
+        return await self._click_via_javascript(page)
 
-    # ═══════════════════ کلیک روی نتیجه (ساده و مقاوم) ═══════════════════
-    async def _click_search_result(self, page) -> bool:
-        for sel in ['div.chatlist-item', 'div[role="button"]', 'div.search-result', 'a[data-peer-id]']:
-            try:
-                loc = page.locator(sel).first
-                if await loc.count() == 0:
-                    continue
-                await loc.click(timeout=10000, force=True)
+    # ═══════════════════ کلیک با JavaScript (صددرصدی) ═══════════════════
+    async def _click_via_javascript(self, page) -> bool:
+        """کلیک روی اولین نتیجه با استفاده از JavaScript (حتی اگر المنت visible نباشد)"""
+        self.logger.info("🖱️ کلیک با JavaScript...")
+
+        # تلاش ۱: پیدا کردن لینک مستقیم به کانال و رفتن با page.goto
+        try:
+            link = await page.evaluate(f'''(channel) => {{
+                const sel = 'a[href*="/{channel}"]';
+                const el = document.querySelector(sel);
+                return el ? el.href : null;
+            }}''', self.channel)
+            if link:
+                self.logger.info(f"🔗 لینک مستقیم پیدا شد: {link}")
+                await page.goto(link, wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(4)
                 if await page.locator('div.message, div[data-message-id]').count() > 0:
-                    self.logger.info("✅ کانال باز شد.")
+                    self.logger.info("✅ با لینک مستقیم وارد کانال شدیم.")
                     return True
-            except Exception:
-                continue
+        except Exception as e:
+            self.logger.debug(f"خطا در رفتن به لینک مستقیم: {e}")
 
-        for name in [self.channel, self.channel.upper()]:
-            try:
-                item = page.get_by_text(name, exact=False).first
-                if await item.count() > 0:
-                    await item.click(timeout=10000, force=True)
-                    await asyncio.sleep(4)
-                    if await page.locator('div.message, div[data-message-id]').count() > 0:
-                        return True
-            except Exception:
-                continue
+        # تلاش ۲: کلیک با JavaScript روی اولین نتیجه
+        try:
+            await page.evaluate('''() => {
+                const sel = 'div.chatlist-item, div[role="button"], div.search-result, a[data-peer-id]';
+                const el = document.querySelector(sel);
+                if (el) el.click();
+            }''')
+            await asyncio.sleep(4)
+            if await page.locator('div.message, div[data-message-id]').count() > 0:
+                self.logger.info("✅ با کلیک JavaScript وارد کانال شدیم.")
+                return True
+        except Exception as e:
+            self.logger.debug(f"خطا در کلیک JS: {e}")
 
+        # تلاش ۳: کلیک روی نام کانال
+        try:
+            await page.evaluate(f'''(channel) => {{
+                const el = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"]'))
+                    .find(e => e.textContent.trim().toLowerCase() === channel.toLowerCase());
+                if (el) el.click();
+            }}''', self.channel)
+            await asyncio.sleep(4)
+            if await page.locator('div.message, div[data-message-id]').count() > 0:
+                self.logger.info("✅ با کلیک روی نام کانال وارد شدیم.")
+                return True
+        except Exception as e:
+            self.logger.debug(f"خطا در کلیک نام کانال: {e}")
+
+        self.logger.error("❌ هیچ‌یک از روش‌های JavaScript کار نکرد.")
+        await self._take_screenshot(page, "click_failed")
         return False
 
     # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
@@ -315,7 +326,7 @@ class TelegramChannelScraper:
                 await locator.scroll_into_view_if_needed()
                 await asyncio.sleep(0.5)
 
-                path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"   # 🆕 نام شامل کانال
+                path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"
                 await page.screenshot(path=path, full_page=False)
                 self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
 
@@ -340,7 +351,6 @@ class TelegramChannelScraper:
     async def _take_screenshot(self, page, name: str):
         try:
             self.base_dir.mkdir(parents=True, exist_ok=True)
-            # نام شامل کانال
             path = self.base_dir / f"debug_{self.channel}_{name}.png"
             await page.screenshot(path=path, full_page=True)
             self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
