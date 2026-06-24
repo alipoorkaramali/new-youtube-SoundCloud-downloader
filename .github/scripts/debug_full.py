@@ -1,112 +1,178 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
+نسخهٔ نهایی: جستجوی مقاوم، کلیک فوق‌مقاوم، fallback چندلایه.
+"""
 
 import asyncio
-import logging
+import os
 from pathlib import Path
-from typing import List, Dict
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
-from config_loader import Config
-from playwright_downloader import PlaywrightDownloader
-from output_generator import OutputGenerator
-
-# ═══════════════════ Constants ═══════════════════
-MAX_SCROLL_ATTEMPTS = 12
-SCROLL_STEP = 2000
+CHANNEL = os.getenv("CHANNEL", "bbcpersian").lstrip("@")
+LIMIT = int(os.getenv("LIMIT", "10"))
+PROFILE_DIR = Path("config/browser_profile")
+OUTPUT_DIR = Path("debug_output")
+OUTPUT_DIR.mkdir(exist_ok=True)
 HOME_URL = "https://web.telegram.org/a/"
-OVERALL_TIMEOUT = 35 * 60  # 35 دقیقه
 
-class TelegramChannelScraper:
+def is_github_actions() -> bool:
+    return os.getenv("GITHUB_ACTIONS", "").lower() == "true"
 
-    def __init__(self, config: Config):
-        self.config = config
-        self.channel = config.channel.lstrip('@')
-        self.limit = config.limit
-        self.max_media_bytes = config.max_media_mb * 1024 * 1024
-        self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
-        self.media_dir = self.base_dir / "media"
-        self.media_dir.mkdir(parents=True, exist_ok=True)
-        self.profile_dir = Path(config.profile_dir)
-        self.delay_between_posts = config.delay_between_posts
+async def screenshot(page, name: str):
+    try:
+        path = OUTPUT_DIR / f"{name}.png"
+        await page.screenshot(path=path, full_page=True)
+        print(f"📸 {name} ذخیره شد: {path}")
+    except Exception as e:
+        print(f"⚠️ خطای اسکرین‌شات: {e}")
 
-        self.logger = logging.getLogger("TelegramScraper")
-        self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-        fh = logging.FileHandler(self.base_dir / "scraper.log", encoding='utf-8')
-        fh.setFormatter(formatter)
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        if not self.logger.handlers:
-            self.logger.addHandler(fh)
-            self.logger.addHandler(ch)
-
-    # ═══════════════════ متد اصلی (با timeout کلی و محافظت) ═══════════════════
-    async def run(self):
-        try:
-            await asyncio.wait_for(self._run_impl(), timeout=OVERALL_TIMEOUT)
-        except asyncio.TimeoutError:
-            self.logger.error("⏰ اسکریپت به دلیل محدودیت زمانی کلی متوقف شد.")
-        except Exception as e:
-            self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
-
-    async def _run_impl(self):
-        self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
-        items = await self._fetch_posts_from_telegram()
-        if not items:
-            self.logger.warning("هیچ پستی دریافت نشد.")
-            return
-        self.logger.info(f"📥 {len(items)} پست استخراج شد.")
-
-        media_map, downloaded = await self._download_media(items)
-        self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
-
-        gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
-        gen.generate_json()
-        gen.generate_csv()
-        gen.generate_html()
-        gen.create_zip()
-
-        self.logger.info("✅ پایان موفقیت‌آمیز.")
-
-    # ═══════════════════ استخراج پست‌ها ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> List[Dict]:
-        from playwright.async_api import async_playwright
-
-        items = []
-        seen_ids = set()
-        last_count = 0
-
+async def main():
+    try:
         async with async_playwright() as p:
-            context = await p.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile_dir),
-                headless=True,
-                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-                viewport={"width": 1366, "height": 900},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-            )
+            if is_github_actions():
+                print("☁️ محیط: گیت‌هاب (headless + کرومیوم)")
+                context = await p.chromium.launch_persistent_context(
+                    user_data_dir=str(PROFILE_DIR),
+                    headless=True,
+                    args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                    viewport={"width": 1366, "height": 900},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+                )
+            else:
+                print("💻 محیط: لوکال (Chrome + نمایشگر)")
+                context = await p.chromium.launch_persistent_context(
+                    user_data_dir=str(PROFILE_DIR),
+                    channel="chrome",
+                    headless=False,
+                    args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                    viewport={"width": 1366, "height": 900},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+                )
+
             page = await context.new_page()
 
+            # ۱. صفحه اصلی
+            print("🌐 باز کردن صفحه اصلی تلگرام...")
             try:
                 await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+                await screenshot(page, "01_homepage")
             except Exception as e:
-                self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
+                print(f"❌ خطا: {e}")
                 await context.close()
-                return []
+                return
 
-            entered = await self._search_and_enter_channel(page)
-            if not entered:
+            # ۲. نوار جستجو
+            print("🔍 جستجوی نوار جستجو...")
+            search_input = None
+            for sel in [
+                'input[placeholder*="Search"], input[placeholder*="جستجو"]',
+                'div.input-search input',
+                '[data-testid="search-input"]',
+                'input[role="textbox"]'
+            ]:
+                try:
+                    search_input = await page.wait_for_selector(sel, timeout=8000)
+                    if search_input:
+                        print(f"   ✅ نوار جستجو پیدا شد: {sel[:50]}")
+                        break
+                except Exception:
+                    continue
+            if not search_input:
+                print("❌ نوار جستجو پیدا نشد.")
+                await screenshot(page, "02_searchbar_missing")
                 await context.close()
-                return []
+                return
+            await screenshot(page, "02_searchbar_found")
 
+            # ۳. جستجوی کانال
+            print(f"🔎 جستجوی @{CHANNEL} ...")
+            await search_input.fill(CHANNEL)
+            await asyncio.sleep(1)
+            await search_input.press("Enter")
+
+            print("⏳ منتظر بارگذاری نتایج جستجو (تا ۲۵ ثانیه)...")
+            await asyncio.sleep(5)
+
+            # تب Channels
+            try:
+                channels_tab = page.get_by_role("tab", name="Channels").first
+                if await channels_tab.count() > 0:
+                    await channels_tab.click()
+                    await asyncio.sleep(3)
+                    print("📑 تب Channels انتخاب شد.")
+                    await screenshot(page, "03_after_channels_tab")
+            except Exception:
+                pass
+
+            # انتظار برای نتایج
+            found = False
+            search_result_selectors = [
+                'div.search-result', 'div.chatlist-item', 'a[data-peer-id]',
+                'div.search-results', '[role="listitem"]', 'div[role="button"]'
+            ]
+
+            for wait_time in [8, 10, 12]:
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                await asyncio.sleep(wait_time)
+
+                for sel in search_result_selectors:
+                    try:
+                        count = await page.locator(sel).count()
+                        if count > 0:
+                            print(f"   ✅ {count} نتیجه با سلکتور '{sel}' پیدا شد.")
+                            found = True
+                            break
+                    except Exception:
+                        continue
+                if found:
+                    break
+
+            if not found:
+                has_results = await page.evaluate(
+                    """() => document.querySelectorAll('div.search-result, div.chatlist-item, a[data-peer-id]').length > 0"""
+                )
+                if has_results:
+                    found = True
+
+            if not found:
+                print("❌ نتایج جستجو پیدا نشدند.")
+                await screenshot(page, "04_no_search_results")
+                await context.close()
+                return
+
+            print("   ✅ نتایج جستجو ظاهر شدند.")
+            await screenshot(page, "04_search_results")
+
+            # ۴. کلیک روی اولین نتیجه (فوق‌مقاوم)
+            print("🖱️ کلیک روی اولین نتیجه...")
+            clicked = await _click_search_result(page, CHANNEL)
+
+            if not clicked:
+                await screenshot(page, "05_click_failed")
+                await context.close()
+                return
+            await screenshot(page, "05_entered_channel")
+
+            # ۵. اسکرول و استخراج
+            print("📜 شروع اسکرول و استخراج پست‌ها...")
+            seen_ids = set()
+            items = []
             scroll_attempts = 0
+            last_count = 0
 
-            while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
+            while len(items) < LIMIT and scroll_attempts < 12:
                 try:
                     messages = page.locator(
                         'div.message, div[data-message-id], article[role="article"], div.bubbles-group > div'
                     )
                     count = await messages.count()
-                    self.logger.info(f"🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
+                    print(f"   🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
 
                     for i in range(last_count, count):
                         try:
@@ -129,22 +195,22 @@ class TelegramChannelScraper:
                                 'id': msg_id,
                                 'text': text,
                                 'date': date,
-                                'url': f"https://t.me/{self.channel}/{msg_id}"
+                                'url': f"https://t.me/{CHANNEL}/{msg_id}"
                             })
                             seen_ids.add(msg_id)
                         except Exception:
                             continue
 
                     last_count = count
-                    self.logger.info(f"📊 {len(items)} پست یکتا جمع‌آوری شد.")
+                    print(f"   📊 {len(items)} پست یکتا جمع‌آوری شد.")
                 except Exception as e:
-                    self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
+                    print(f"   ❌ خطا: {e}")
 
-                if len(items) >= self.limit:
+                if len(items) >= LIMIT:
                     break
 
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
-                await page.evaluate(f"window.scrollBy(0, {SCROLL_STEP})")
+                await page.evaluate("window.scrollBy(0, 2000)")
                 await asyncio.sleep(2)
                 new_height = await page.evaluate("document.documentElement.scrollHeight")
 
@@ -153,201 +219,86 @@ class TelegramChannelScraper:
                 else:
                     scroll_attempts = 0
 
+                if scroll_attempts == 1 or len(items) % 8 == 0:
+                    await screenshot(page, f"06_scroll_{len(items)}")
+
+            await screenshot(page, "07_final_state")
+            print(f"✅ دیباگ تمام شد. {len(items)} پست استخراج شدند.")
+            print(f"اسکرین‌شات‌ها در پوشه {OUTPUT_DIR} قرار دارند.")
             await context.close()
 
-        self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
-        return items[:self.limit]
+    except Exception as e:
+        print(f"❌ خطای کلی در دیباگ: {e}")
 
-    # ═══════════════════ جستجو و ورود به کانال (مقاوم‌سازی کامل) ═══════════════════
-    async def _search_and_enter_channel(self, page) -> bool:
-        # ۱. پیدا کردن نوار جستجو
-        search_input = None
-        for sel in [
-            'input[placeholder*="Search"], input[placeholder*="جستجو"]',
-            'div.input-search input',
-            '[data-testid="search-input"]',
-            'input[role="textbox"]'
-        ]:
+async def _click_search_result(page, channel: str) -> bool:
+    """کلیک مقاوم با force + والد + fallback چندلایه"""
+    click_selectors = [
+        'div.search-result [role="button"]',
+        'div.search-result [role="link"]',
+        'div.chatlist-item',
+        'div[role="button"]',
+        'div.search-results div[role="button"]',
+        'div.search-result',
+        'a[data-peer-id]',
+    ]
+
+    for attempt in range(3):
+        for sel in click_selectors:
             try:
-                search_input = await page.wait_for_selector(sel, timeout=8000)
-                if search_input:
-                    self.logger.info(f"🔍 نوار جستجو پیدا شد: {sel[:50]}")
-                    break
-            except Exception:
-                continue
-        if not search_input:
-            self.logger.error("❌ نوار جستجو پیدا نشد.")
-            return False
+                loc = page.locator(sel).first
+                if await loc.count() == 0:
+                    continue
 
-        # ۲. جستجوی کانال
-        await search_input.fill(self.channel)
-        await asyncio.sleep(1)
-        await search_input.press("Enter")
+                await loc.wait_for(state="visible", timeout=6000)
+                print(f"   🖱️ تلاش کلیک با سلکتور: {sel} (attempt {attempt+1})")
 
-        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو (تا ۲۵ ثانیه)...")
-        await asyncio.sleep(5)
+                # استراتژی‌های کلیک
+                await loc.click(timeout=10000, force=True)
+                await asyncio.sleep(2)
 
-        # ۳. کلیک روی تب Channels (اگر وجود داشته باشد)
-        try:
-            channels_tab = page.get_by_role("tab", name="Channels").first
-            if await channels_tab.count() > 0:
-                await channels_tab.click()
+                # اگر force کار نکرد، روی والد کلیک کن
+                if not await page.locator('div.message, div[data-message-id]').count():
+                    parent = loc.locator("..").first
+                    if await parent.count() > 0:
+                        await parent.click(timeout=8000, force=True)
+
                 await asyncio.sleep(3)
-                self.logger.info("📑 تب Channels انتخاب شد.")
-        except Exception:
-            pass
-
-        # ۴. انتظار هوشمند برای نتایج
-        found = False
-        search_result_selectors = [
-            'div.search-result', 'div.chatlist-item', 'a[data-peer-id]',
-            'div.search-results', '[role="listitem"]', 'div[role="button"]'
-        ]
-
-        for wait_time in [8, 10, 12]:
-            try:
-                await page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            await asyncio.sleep(wait_time)
-
-            for sel in search_result_selectors:
                 try:
-                    count = await page.locator(sel).count()
-                    if count > 0:
-                        self.logger.info(f"✅ {count} نتیجه با سلکتور '{sel}' پیدا شد.")
-                        found = True
-                        break
-                except Exception:
-                    continue
-            if found:
-                break
-
-        if not found:
-            has_results = await page.evaluate(
-                """() => document.querySelectorAll('div.search-result, div.chatlist-item, a[data-peer-id]').length > 0"""
-            )
-            if has_results:
-                found = True
-
-        if not found:
-            self.logger.error("❌ نتایج جستجو بعد از ۲۵+ ثانیه پیدا نشد.")
-            await self._take_screenshot(page, "search_failed")
-            return False
-
-        self.logger.info("✅ نتایج جستجو ظاهر شدند.")
-        await asyncio.sleep(2)
-        return await self._click_search_result(page)
-
-    # ═══════════════════ کلیک روی نتیجه جستجو (فوق‌مقاوم با force + والد + fallback) ═══════════════════
-    async def _click_search_result(self, page) -> bool:
-        """کلیک مقاوم با force + کلیک روی والد + fallback قوی"""
-        click_selectors = [
-            'div.search-result [role="button"]',
-            'div.search-result [role="link"]',
-            'div.chatlist-item',
-            'div[role="button"]',
-            'div.search-results div[role="button"]',
-            'div.search-result',
-            'a[data-peer-id]',
-        ]
-
-        for attempt in range(3):
-            for sel in click_selectors:
-                try:
-                    loc = page.locator(sel).first
-                    if await loc.count() == 0:
-                        continue
-
-                    await loc.wait_for(state="visible", timeout=6000)
-                    self.logger.info(f"🖱️ تلاش کلیک با سلکتور: {sel} (attempt {attempt+1})")
-
-                    # استراتژی‌های کلیک مختلف
-                    await loc.click(timeout=10000, force=True)
+                    await page.wait_for_load_state("networkidle", timeout=15000)
                     await asyncio.sleep(2)
+                    await page.wait_for_selector('div.message, div[data-message-id]', timeout=10000)
+                    print("   ✅ کانال با موفقیت باز شد.")
+                    return True
+                except Exception:
+                    print("   ⚠️ کانال باز شد — ادامه...")
+                    return True
+            except Exception as e:
+                continue
 
-                    # اگر force کار نکرد، سعی روی والد
-                    if not await page.locator('div.message, div[data-message-id]').count():
-                        parent = loc.locator("..").first  # والد المنت
-                        if await parent.count() > 0:
-                            await parent.click(timeout=8000, force=True)
-
-                    await asyncio.sleep(3)
+    # Fallback نهایی با get_by_text
+    print("   🔄 تلاش fallback نهایی...")
+    for text in [channel, channel.upper(), channel.title()]:
+        try:
+            items = page.get_by_text(text, exact=False)
+            count = await items.count()
+            if count > 0:
+                print(f"   🎯 پیدا شد: {text} ({count} مورد)")
+                for i in range(min(3, count)):
                     try:
+                        item = items.nth(i)
+                        await item.click(timeout=10000, force=True)
+                        await asyncio.sleep(3)
                         await page.wait_for_load_state("networkidle", timeout=15000)
-                        await asyncio.sleep(2)
-                        await page.wait_for_selector(
-                            'div.message, div[data-message-id], article[role="article"]',
-                            timeout=10000
-                        )
-                        self.logger.info("✅ کانال با موفقیت باز شد.")
-                        return True
+                        if await page.locator('div.message, div[data-message-id]').count() > 0:
+                            print(f"   ✅ با fallback '{text}' موفق شدیم!")
+                            return True
                     except Exception:
-                        self.logger.warning("⚠️ کانال باز شد — ادامه استخراج...")
-                        return True
-                except Exception as e:
-                    self.logger.debug(f"سلکتور {sel} ناموفق: {str(e)[:100]}")
-                    continue
-
-        # Fallback خیلی قوی (آخرین امید)
-        self.logger.info("🔄 تلاش fallback نهایی...")
-        try:
-            # همه المان‌های حاوی نام کانال
-            for text in [self.channel, self.channel.upper(), self.channel.title()]:
-                items = page.get_by_text(text, exact=False)
-                count = await items.count()
-                if count > 0:
-                    self.logger.info(f"🎯 پیدا شد: {text} ({count} مورد)")
-                    for i in range(min(3, count)):
-                        try:
-                            item = items.nth(i)
-                            await item.click(timeout=10000, force=True)
-                            await asyncio.sleep(3)
-                            await page.wait_for_load_state("networkidle", timeout=15000)
-                            if await page.locator('div.message, div[data-message-id]').count() > 0:
-                                self.logger.info(f"✅ با fallback '{text}' موفق شدیم!")
-                                return True
-                        except Exception:
-                            continue
+                        continue
         except Exception as e:
-            self.logger.error(f"❌ fallback نهایی شکست: {e}")
+            continue
 
-        self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
-        await self._take_screenshot(page, "click_failed")
-        return False
+    print("❌ تمام روش‌های کلیک شکست خورد.")
+    return False
 
-    # ═══════════════════ اسکرین‌شات برای دیباگ ═══════════════════
-    async def _take_screenshot(self, page, name: str):
-        try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-            path = self.base_dir / f"debug_{name}.png"
-            await page.screenshot(path=path, full_page=True)
-            self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
-
-    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
-    async def _download_media(self, items: List[Dict]):
-        tasks = []
-        media_map = {str(item['id']): [] for item in items}
-        for item in items:
-            post_url = item.get('url', '')
-            if post_url:
-                tasks.append((post_url, str(item['id'])))
-
-        downloaded = 0
-        if tasks:
-            downloader = PlaywrightDownloader(
-                self.profile_dir, self.media_dir, self.max_media_bytes,
-                self.delay_between_posts
-            )
-            await downloader.download_all(tasks)
-
-            for f in self.media_dir.iterdir():
-                if f.is_file() and '_' in f.stem:
-                    pid = f.stem.split('_', 1)[0]
-                    if pid in media_map:
-                        media_map[pid].append(f"media/{f.name}")
-                        downloaded += 1
-
-        return media_map, downloaded
+if __name__ == "__main__":
+    asyncio.run(main())
