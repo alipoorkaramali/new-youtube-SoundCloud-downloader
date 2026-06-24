@@ -11,9 +11,10 @@ from playwright_downloader import PlaywrightDownloader
 from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
-MAX_SCROLL_ATTEMPTS = 10
-SCROLL_STEP = 1800
+MAX_SCROLL_ATTEMPTS = 12
+SCROLL_STEP = 2000
 HOME_URL = "https://web.telegram.org/a/"
+OVERALL_TIMEOUT = 35 * 60  # 35 دقیقه (هماهنگ با workflow)
 
 class TelegramChannelScraper:
 
@@ -39,8 +40,16 @@ class TelegramChannelScraper:
             self.logger.addHandler(fh)
             self.logger.addHandler(ch)
 
-    # ═══════════════════ متد اصلی ═══════════════════
+    # ═══════════════════ متد اصلی (با timeout کلی و محافظت) ═══════════════════
     async def run(self):
+        try:
+            await asyncio.wait_for(self._run_impl(), timeout=OVERALL_TIMEOUT)
+        except asyncio.TimeoutError:
+            self.logger.error("⏰ اسکریپت به دلیل محدودیت زمانی کلی متوقف شد.")
+        except Exception as e:
+            self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
+
+    async def _run_impl(self):
         self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
         items = await self._fetch_posts_from_telegram()
         if not items:
@@ -65,7 +74,7 @@ class TelegramChannelScraper:
 
         items = []
         seen_ids = set()
-        channel_clean = self.channel.lstrip('@')
+        last_count = 0
 
         async with async_playwright() as p:
             context = await p.chromium.launch_persistent_context(
@@ -76,10 +85,8 @@ class TelegramChannelScraper:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
-            await page.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-            )
 
+            # ۱. باز کردن صفحهٔ اصلی و ورود به کانال
             try:
                 await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
             except Exception as e:
@@ -92,103 +99,78 @@ class TelegramChannelScraper:
                 await context.close()
                 return []
 
-            last_height = 0
+            # ۲. اسکرول و استخراج پست‌ها
             scroll_attempts = 0
-            max_scrolls = (self.limit // 20) + MAX_SCROLL_ATTEMPTS
-            start_time = asyncio.get_event_loop().time()
 
-            while len(items) < self.limit and scroll_attempts < max_scrolls:
-                if asyncio.get_event_loop().time() - start_time > 300:
-                    self.logger.warning("⏰ محدودیت زمانی ۵ دقیقه‌ای اسکرول فرا رسید.")
-                    break
-
+            while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
                 try:
-                    new_posts = await page.evaluate("""
-                    (channel) => {
-                        const posts = [];
-                        const messageSelectors = [
-                            'div.message', 'div.bubbles-group > div', 'div[data-message-id]',
-                            '[data-peer-id] div.message', 'div.chatlist-message', 'div[class*="Message"]'
-                        ];
-                        const allMessages = new Set();
-                        messageSelectors.forEach(sel => {
-                            document.querySelectorAll(sel).forEach(el => allMessages.add(el));
-                        });
+                    messages = page.locator(
+                        'div.message, div[data-message-id], article[role="article"], div.bubbles-group > div'
+                    )
+                    count = await messages.count()
+                    self.logger.info(f"🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
 
-                        for (const el of allMessages) {
-                            let id = el.getAttribute('data-message-id') ||
-                                     el.closest('[data-message-id]')?.getAttribute('data-message-id') ||
-                                     el.querySelector('[data-message-id]')?.getAttribute('data-message-id');
-                            if (!id || posts.some(p => p.id === id)) continue;
+                    for i in range(last_count, count):
+                        try:
+                            msg = messages.nth(i)
+                            msg_id = await msg.get_attribute('data-message-id')
+                            if not msg_id:
+                                inner = msg.locator('[data-message-id]').first
+                                if await inner.count() > 0:
+                                    msg_id = await inner.get_attribute('data-message-id')
+                            if not msg_id or msg_id in seen_ids:
+                                continue
 
-                            const textEl = el.querySelector('.text-content, .message-text, .bubble-content, div[class*="text"]');
-                            const text = textEl ? textEl.innerText.trim() : '';
+                            text = (await msg.inner_text()).strip()[:600]
+                            date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
+                            date = ""
+                            if await date_el.count() > 0:
+                                date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
 
-                            const dateEl = el.querySelector('time, .message-date, span[class*="date"]');
-                            const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText) : '';
+                            items.append({
+                                'id': msg_id,
+                                'text': text,
+                                'date': date,
+                                'url': f"https://t.me/{self.channel}/{msg_id}"
+                            })
+                            seen_ids.add(msg_id)
+                        except Exception:
+                            continue
 
-                            const linkEl = el.querySelector(`a[href*="/${channel}/"]`);
-                            const url = linkEl ? linkEl.href : '';
-
-                            const hasMedia = !!el.querySelector('img, video, .media-wrapper, a[download], a[href*="/file/"]');
-                            const viewsEl = el.querySelector('.views, .message-views, .stats, .view-count');
-                            const views = viewsEl ? viewsEl.innerText.trim() : '';
-                            const is_forwarded = !!el.querySelector('.forwarded, .fwd, .forward-info');
-
-                            posts.push({ id, text, date, url, has_media: hasMedia, views, is_forwarded });
-                        }
-                        return posts;
-                    }
-                    """, channel_clean)
+                    last_count = count
+                    self.logger.info(f"📊 {len(items)} پست یکتا جمع‌آوری شد.")
                 except Exception as e:
                     self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
-                    await asyncio.sleep(1)
-                    continue
-
-                for post in new_posts:
-                    if post.get('id') and post['id'] not in seen_ids:
-                        seen_ids.add(post['id'])
-                        items.append(post)
 
                 if len(items) >= self.limit:
                     break
 
-                try:
-                    current_height = await page.evaluate("document.documentElement.scrollHeight")
-                except Exception:
-                    current_height = last_height
+                # اسکرول هوشمند
+                old_height = await page.evaluate("document.documentElement.scrollHeight")
+                await page.evaluate(f"window.scrollBy(0, {SCROLL_STEP})")
+                await asyncio.sleep(2)
+                new_height = await page.evaluate("document.documentElement.scrollHeight")
 
-                if current_height == last_height:
+                if new_height == old_height:
                     scroll_attempts += 1
-                    await asyncio.sleep(1.5)
                 else:
                     scroll_attempts = 0
-                last_height = current_height
-
-                try:
-                    await page.evaluate(f"window.scrollBy(0, {SCROLL_STEP})")
-                except Exception as e:
-                    self.logger.warning(f"⚠️ خطا در اسکرول: {e}")
-
-                await asyncio.sleep(self.delay_between_posts)
 
             await context.close()
 
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ جستجو و ورود به کانال (اصلاح‌شده با سلکتورهای جدید) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (با retry و fallback) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
-        """جستجو و ورود به کانال با سلکتورهای بهبودیافته"""
-        # ---------- ۱. پیدا کردن نوار جستجو ----------
-        search_selectors = [
+        # ۱. پیدا کردن نوار جستجو
+        search_input = None
+        for sel in [
             'input[placeholder*="Search"], input[placeholder*="جستجو"]',
             'div.input-search input',
             '[data-testid="search-input"]',
             'input[role="textbox"]'
-        ]
-        search_input = None
-        for sel in search_selectors:
+        ]:
             try:
                 search_input = await page.wait_for_selector(sel, timeout=8000)
                 if search_input:
@@ -200,62 +182,94 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
-        # ---------- ۲. پر کردن و ارسال جستجو ----------
+        # ۲. جستجوی کانال
         await search_input.fill(self.channel)
         await asyncio.sleep(0.5)
         await search_input.press("Enter")
-        self.logger.info(f"🔎 جستجوی @{self.channel} انجام شد.")
-
-        # ---------- ۳. انتظار برای ظاهر شدن نتایج ----------
         try:
-            await page.wait_for_selector('div.search-results, a[data-peer-id], div.search-result', timeout=12000)
+            await page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
+            self.logger.warning("⚠️ networkidle تایم‌اوت شد، منتظر نتایج می‌مانیم...")
+            await asyncio.sleep(3)
+            try:
+                await page.wait_for_selector('div.search-result, div.chatlist-item, a[data-peer-id]', timeout=10000)
+            except Exception:
+                self.logger.error("❌ نتایج جستجو پیدا نشدند.")
+                return False
+        await asyncio.sleep(1)
+
+        # ۳. بررسی وجود نتایج
+        has_results = await page.evaluate(
+            """() => !!document.querySelector('div.search-result, div.chatlist-item, a[data-peer-id]')"""
+        )
+        if not has_results:
             self.logger.error("❌ نتایج جستجو ظاهر نشد.")
             return False
 
-        # ---------- ۴. کلیک روی اولین نتیجه (بهبودیافته) ----------
+        # ۴. کلیک با retry (تا ۲ بار) و fallback به get_by_text
+        return await self._click_search_result(page)
+
+    async def _click_search_result(self, page) -> bool:
+        """تلاش برای کلیک روی نتیجه جستجو با چندین سلکتور و retry."""
         click_selectors = [
-            'div.search-result a',               # لینک داخل نتیجه
-            'a[data-peer-id]',                   # خود لینک چت
-            'div.chatlist-item a',               # آیتم‌های لیست چت
-            'div.search-result:first-child',     # اولین div نتیجه
-            'div[data-peer-id]',                 # div دارای peer-id
-            '.search-results a'                  # لینک داخل نتایج
+            'div.search-result [role="link"]',
+            'div.chatlist-item',
+            'a[href*="/c/"]',
+            'div.search-results div[role="button"]',
+            'div.search-result',
         ]
 
-        for sel in click_selectors:
-            try:
-                locator = page.locator(sel).first
-                # بررسی وجود عنصر قبل از کلیک
-                if await locator.count() == 0:
+        for attempt in range(2):
+            for sel in click_selectors:
+                try:
+                    loc = page.locator(sel).first
+                    if await loc.count() == 0:
+                        continue
+                    await loc.wait_for(state="visible", timeout=3000)
+                    self.logger.info(f"🖱️ تلاش برای کلیک با سلکتور: {sel} (دفعه {attempt+1})")
+                    await loc.click(timeout=5000)
+                    await asyncio.sleep(3)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=12000)
+                        await asyncio.sleep(2)
+                        await page.wait_for_selector(
+                            'div.message, div[data-message-id], article[role="article"]',
+                            timeout=8000
+                        )
+                        self.logger.info("✅ پیام‌ها به طور کامل بارگذاری شدند.")
+                        return True
+                    except Exception:
+                        self.logger.warning("⚠️ کانال باز شد — اما پیام‌ها کامل لود نشدند. ادامه می‌دهیم.")
+                        return True
+                except Exception:
                     continue
 
-                self.logger.info(f"🖱️ تلاش برای کلیک با سلکتور: {sel}")
-                await locator.click(timeout=5000)
-
-                # ---------- ۵. انتظار برای بارگذاری صفحه کانال ----------
-                try:
-                    await page.wait_for_selector(
-                        'div.message, div.bubbles-group, div[data-message-id], .bubble-content',
-                        timeout=15000
-                    )
-                    self.logger.info("✅ محتوای کانال بارگذاری شد.")
-                except Exception:
-                    # اگر پیامی نبود، حداقل منتظر network idle می‌مانیم
-                    await page.wait_for_load_state("networkidle", timeout=10000)
-                    self.logger.info("✅ صفحه کانال باز شد (بدون پیام قابل تشخیص).")
-
-                self.logger.info(f"✅ با موفقیت وارد کانال @{self.channel} شدیم.")
-                return True
-
+        # ۵. روش کمکی با get_by_role + fallback به get_by_text
+        self.logger.info("🔄 تلاش با get_by_role/get_by_text...")
+        for _ in range(2):
+            try:
+                link = page.get_by_role("link", name=self.channel).first
+                if await link.count() == 0:
+                    link = page.get_by_text(self.channel, exact=False).first
+                if await link.count() > 0:
+                    await link.click(timeout=5000)
+                    await asyncio.sleep(3)
+                    await page.wait_for_load_state("networkidle", timeout=12000)
+                    await asyncio.sleep(2)
+                    try:
+                        await page.wait_for_selector('div.message, div[data-message-id]', timeout=8000)
+                        self.logger.info("✅ با get_by_role/text وارد کانال شدیم.")
+                    except Exception:
+                        self.logger.warning("⚠️ ورود با get_by_role/text موفق بود، پیام‌ها شاید کامل نباشند.")
+                    return True
             except Exception as e:
-                self.logger.debug(f"Selector {sel} ناموفق: {e}")
-                continue
+                self.logger.error(f"❌ get_by_role/text شکست: {e}")
+            await asyncio.sleep(1)
 
         self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
         return False
 
-    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
+    # ═══════════════════ دانلود رسانه‌ها (شمارش دقیق) ═══════════════════
     async def _download_media(self, items: List[Dict]):
         tasks = []
         media_map = {str(item['id']): [] for item in items}
@@ -264,6 +278,7 @@ class TelegramChannelScraper:
             if post_url:
                 tasks.append((post_url, str(item['id'])))
 
+        downloaded = 0
         if tasks:
             downloader = PlaywrightDownloader(
                 self.profile_dir, self.media_dir, self.max_media_bytes,
@@ -271,12 +286,12 @@ class TelegramChannelScraper:
             )
             await downloader.download_all(tasks)
 
-        for f in self.media_dir.iterdir():
-            if f.is_file():
-                parts = f.stem.split('_', 1)
-                pid = parts[0] if parts else ''
-                if pid in media_map:
-                    media_map[pid].append(f"media/{f.name}")
+            # شمارش دقیق فایل‌هایی که با الگوی postid_ شروع می‌شوند
+            for f in self.media_dir.iterdir():
+                if f.is_file() and '_' in f.stem:
+                    pid = f.stem.split('_', 1)[0]
+                    if pid in media_map:
+                        media_map[pid].append(f"media/{f.name}")
+                        downloaded += 1
 
-        downloaded_count = sum(len(v) for v in media_map.values())
-        return media_map, downloaded_count
+        return media_map, downloaded
