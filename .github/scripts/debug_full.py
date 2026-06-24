@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
-هم روی لوکال (ویندوز + Chrome) و هم روی گیت‌هاب (لینوکس + کرومیوم) کار می‌کند.
-ورود به کانال از طریق جستجو با سلکتورهای بهبودیافته (همانند scraper.py).
+نسخهٔ اصلاح‌شده: جستجوی ساده + کلیک با سلکتورهای جدید.
 """
 
 import asyncio
@@ -11,7 +10,6 @@ import os
 from pathlib import Path
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
-# ⚙️ تنظیمات
 CHANNEL = os.getenv("CHANNEL", "bbcpersian").lstrip("@")
 LIMIT = int(os.getenv("LIMIT", "10"))
 PROFILE_DIR = Path("config/browser_profile")
@@ -20,7 +18,6 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 HOME_URL = "https://web.telegram.org/a/"
 
 def is_github_actions() -> bool:
-    """تشخیص خودکار محیط گیت‌هاب"""
     return os.getenv("GITHUB_ACTIONS", "").lower() == "true"
 
 async def screenshot(page, name: str):
@@ -30,7 +27,6 @@ async def screenshot(page, name: str):
 
 async def main():
     async with async_playwright() as p:
-        # تنظیمات متفاوت برای گیت‌هاب و لوکال
         if is_github_actions():
             print("☁️ محیط: گیت‌هاب (headless + کرومیوم)")
             context = await p.chromium.launch_persistent_context(
@@ -53,31 +49,26 @@ async def main():
 
         page = await context.new_page()
 
-        # ══════════════════════════════════════
-        # ۱. باز کردن صفحهٔ اصلی
-        # ══════════════════════════════════════
+        # ════════════ ۱. صفحه اصلی ════════════
         print("🌐 باز کردن صفحه اصلی تلگرام...")
         try:
             await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(2)
             await screenshot(page, "01_homepage")
         except Exception as e:
-            print(f"❌ خطا در باز کردن صفحه اصلی: {e}")
+            print(f"❌ خطا: {e}")
             await context.close()
             return
 
-        # ══════════════════════════════════════
-        # ۲. پیدا کردن نوار جستجو
-        # ══════════════════════════════════════
+        # ════════════ ۲. پیدا کردن نوار جستجو ════════════
         print("🔍 جستجوی نوار جستجو...")
-        search_selectors = [
+        search_input = None
+        for sel in [
             'input[placeholder*="Search"], input[placeholder*="جستجو"]',
             'div.input-search input',
             '[data-testid="search-input"]',
             'input[role="textbox"]'
-        ]
-        search_input = None
-        for sel in search_selectors:
+        ]:
             try:
                 search_input = await page.wait_for_selector(sel, timeout=8000)
                 if search_input:
@@ -92,9 +83,7 @@ async def main():
             return
         await screenshot(page, "02_searchbar_found")
 
-        # ══════════════════════════════════════
-        # ۳. جستجوی کانال
-        # ══════════════════════════════════════
+        # ════════════ ۳. جستجوی کانال ════════════
         print(f"🔎 جستجوی @{CHANNEL} ...")
         await search_input.fill(CHANNEL)
         await asyncio.sleep(0.5)
@@ -102,9 +91,7 @@ async def main():
         await asyncio.sleep(2)
         await screenshot(page, "03_after_search")
 
-        # ══════════════════════════════════════
-        # ۴. انتظار برای نتایج جستجو
-        # ══════════════════════════════════════
+        # ════════════ ۴. انتظار برای نتایج ════════════
         print("📋 منتظر نتایج جستجو...")
         try:
             await page.wait_for_selector('div.search-results, a[data-peer-id], div.search-result', timeout=12000)
@@ -116,43 +103,30 @@ async def main():
             await context.close()
             return
 
-        # ══════════════════════════════════════
-        # ۵. کلیک روی اولین نتیجه (سلکتورهای جدید)
-        # ══════════════════════════════════════
+        # ════════════ ۵. کلیک روی اولین نتیجه (سلکتورهای بهبودیافته) ════════════
         print("🖱️ کلیک روی اولین نتیجه...")
-        click_selectors = [
-            'div.search-result a',               # لینک داخل نتیجه
-            'a[data-peer-id]',                   # خود لینک چت
-            'div.chatlist-item a',               # آیتم‌های لیست چت
-            'div.search-result:first-child',     # اولین div نتیجه
-            'div[data-peer-id]',                 # div دارای peer-id
-            '.search-results a'                  # لینک داخل نتایج
-        ]
         clicked = False
-        for sel in click_selectors:
+        for sel in [
+            'div.search-result a', 'a[data-peer-id]', 'div.chatlist-item a',
+            'div.search-result:first-child', 'div[data-peer-id]', '.search-results a'
+        ]:
             try:
-                locator = page.locator(sel).first
-                if await locator.count() == 0:
+                loc = page.locator(sel).first
+                if await loc.count() == 0:
                     continue
                 print(f"   🖱️ تلاش برای کلیک با سلکتور: {sel}")
-                await locator.click(timeout=5000)
-
-                # منتظر بارگذاری کانال (پیام‌ها یا network idle)
+                await loc.click(timeout=5000)
+                await asyncio.sleep(2)
                 try:
-                    await page.wait_for_selector(
-                        'div.message, div.bubbles-group, div[data-message-id], .bubble-content',
-                        timeout=15000
-                    )
+                    await page.wait_for_selector('div.message, div[class*="Message"], div[data-message-id]', timeout=10000)
                     print("   ✅ محتوای کانال بارگذاری شد.")
                 except Exception:
                     await page.wait_for_load_state("networkidle", timeout=10000)
                     print("   ✅ صفحه کانال باز شد (بدون پیام قابل تشخیص).")
-
-                print(f"   ✅ کلیک موفق با selector: {sel}")
                 clicked = True
                 break
             except Exception as e:
-                print(f"   ⚠️ selector {sel} کار نکرد: {e}")
+                print(f"   ⚠️ سلکتور {sel} ناموفق: {e}")
                 continue
 
         if not clicked:
@@ -162,9 +136,7 @@ async def main():
             return
         await screenshot(page, "05_entered_channel")
 
-        # ══════════════════════════════════════
-        # ۶. اسکرول و استخراج پست‌ها
-        # ══════════════════════════════════════
+        # ════════════ ۶. اسکرول و استخراج پست‌ها ════════════
         print("📜 شروع اسکرول برای جمع‌آوری پست‌ها...")
         seen_ids = set()
         items = []
@@ -181,22 +153,17 @@ async def main():
                     messageSelectors.forEach(sel => {{
                         document.querySelectorAll(sel).forEach(el => allMessages.add(el));
                     }});
-
                     for (const el of allMessages) {{
                         let id = el.getAttribute('data-message-id') ||
                                  el.closest('[data-message-id]')?.getAttribute('data-message-id') ||
                                  el.querySelector('[data-message-id]')?.getAttribute('data-message-id');
                         if (!id || posts.some(p => p.id === id)) continue;
-
                         const textEl = el.querySelector('.text-content, .message-text, .bubble-content, div[class*="text"]');
                         const text = textEl ? textEl.innerText.trim() : '';
-
                         const dateEl = el.querySelector('time, .message-date, span[class*="date"]');
                         const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText) : '';
-
                         const linkEl = el.querySelector(`a[href*="/${{channel}}/"]`);
                         const url = linkEl ? linkEl.href : '';
-
                         posts.push({{ id, text, date, url }});
                     }}
                     return posts;
@@ -207,7 +174,7 @@ async def main():
                         items.append(p)
                 print(f"   📊 {len(items)} پست تا الان جمع‌آوری شده.")
             except Exception as e:
-                print(f"❌ خطا در استخراج پست‌ها: {e}")
+                print(f"❌ خطا: {e}")
 
             if len(items) >= LIMIT:
                 break
