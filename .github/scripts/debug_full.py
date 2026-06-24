@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 اسکریپت عیب‌یابی کامل برای Telegram Channel Scraper.
-رفع مشکل کلیک با هدف‌گیری لینک‌های داخل نتایج جستجو.
+نسخهٔ نهایی: استخراج پیام‌های جدید در هر اسکرول، انتظار مناسب، سلکتورهای گسترده.
 """
 
 import asyncio
@@ -83,77 +83,79 @@ async def main():
             return
         await screenshot(page, "02_searchbar_found")
 
-        # ════════════ ۳. جستجوی کانال ════════════
+        # ════════════ ۳. جستجوی کانال (منتظر network idle) ════════════
         print(f"🔎 جستجوی @{CHANNEL} ...")
         await search_input.fill(CHANNEL)
         await asyncio.sleep(0.5)
         await search_input.press("Enter")
-        await asyncio.sleep(2)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15000)
+            print("   ✅ نتایج جستجو بارگذاری شدند (networkidle).")
+        except Exception:
+            print("   ⚠️ networkidle تایم‌اوت شد؛ ادامه می‌دهیم...")
+        await asyncio.sleep(1)
         await screenshot(page, "03_after_search")
 
-        # ════════════ ۴. انتظار برای نتایج ════════════
-        print("📋 منتظر نتایج جستجو...")
-        try:
-            await page.wait_for_selector('div.search-results, a[data-peer-id], div.search-result', timeout=12000)
-            print("   ✅ نتایج جستجو ظاهر شدند.")
-            await screenshot(page, "04_search_results")
-        except Exception:
-            print("❌ نتایج جستجو ظاهر نشد.")
+        # ════════════ ۴. بررسی وجود نتایج ════════════
+        has_results = await page.evaluate(
+            """() => !!document.querySelector('div.search-result, div.chatlist-item, a[data-peer-id]')"""
+        )
+        if not has_results:
+            print("❌ هیچ نتیجه‌ای در صفحه پیدا نشد.")
             await screenshot(page, "04_no_search_results")
             await context.close()
             return
+        print("   ✅ نتایج جستجو در DOM موجودند.")
+        await screenshot(page, "04_search_results")
 
-        # ════════════ ۵. کلیک روی اولین نتیجه (هدف‌گیری لینک‌ها) ════════════
+        # ════════════ ۵. کلیک با سلکتورهای مقاوم ════════════
         print("🖱️ کلیک روی اولین نتیجه...")
         clicked = False
 
-        # اولویت با لینک‌های داخل نتایج
-        for sel in [
-            'div.search-result a',        # لینک داخل div نتیجه
-            'a[data-peer-id]',            # لینک با peer-id
-            '.search-results a',          # لینک عمومی در نتایج
-            'div.chatlist-item a'         # آیتم‌های لیست چت
-        ]:
+        click_selectors = [
+            'div.search-result [role="link"]',
+            'div.chatlist-item',
+            'a[href*="/c/"]',
+            'div.search-results div[role="button"]',
+            'div.search-result',
+        ]
+
+        for sel in click_selectors:
             try:
                 loc = page.locator(sel).first
                 if await loc.count() == 0:
                     continue
-                # صبر می‌کنیم تا لینک قابل کلیک (visible) شود
                 await loc.wait_for(state="visible", timeout=3000)
                 print(f"   🖱️ تلاش برای کلیک با سلکتور: {sel}")
                 await loc.click(timeout=5000)
+                # بعد از کلیک صبر برای رندر UI
                 await asyncio.sleep(2)
-                # بررسی بارگذاری کانال
                 try:
-                    await page.wait_for_selector('div.message, div[class*="Message"], div[data-message-id]', timeout=10000)
-                    print("   ✅ محتوای کانال بارگذاری شد.")
+                    await page.wait_for_load_state("networkidle", timeout=15000)
+                    await page.wait_for_selector('div.message, div[data-message-id], article[role="article"]', timeout=10000)
+                    print("   ✅ کانال با موفقیت باز شد.")
                 except Exception:
-                    await page.wait_for_load_state("networkidle", timeout=10000)
-                    print("   ✅ صفحه کانال باز شد (بدون پیام قابل تشخیص).")
+                    print("   ⚠️ کانال باز شد اما ممکن است خالی یا در حال لود باشد.")
                 clicked = True
                 break
             except Exception as e:
                 print(f"   ⚠️ سلکتور {sel} ناموفق: {e}")
                 continue
 
-        # روش کمکی: اگر هیچ لینکی کلیک نشد، با Enter روی div نتیجه
+        # روش کمکی: get_by_role
         if not clicked:
-            print("   🔄 تلاش با انتخاب div نتیجه و فشردن Enter...")
             try:
-                first_result = page.locator('div.search-result').first
-                if await first_result.count() > 0:
-                    await first_result.click()      # فوکوس روی نتیجه
-                    await asyncio.sleep(0.5)
-                    await page.keyboard.press("Enter")
+                print("   🔄 تلاش با get_by_role...")
+                link = page.get_by_role("link", name=CHANNEL).first
+                if await link.count() > 0:
+                    await link.click(timeout=5000)
                     await asyncio.sleep(2)
-                    try:
-                        await page.wait_for_selector('div.message, div[class*="Message"], div[data-message-id]', timeout=10000)
-                        print("   ✅ با Enter وارد کانال شدیم.")
-                        clicked = True
-                    except Exception:
-                        pass
+                    await page.wait_for_load_state("networkidle", timeout=12000)
+                    await page.wait_for_selector('div.message, div[data-message-id]', timeout=8000)
+                    print("   ✅ با get_by_role وارد کانال شدیم.")
+                    clicked = True
             except Exception as e:
-                print(f"   ❌ روش Enter هم شکست: {e}")
+                print(f"   ❌ روش get_by_role شکست: {e}")
 
         if not clicked:
             print("❌ کلیک روی هیچ نتیجه‌ای موفق نبود.")
@@ -162,59 +164,72 @@ async def main():
             return
         await screenshot(page, "05_entered_channel")
 
-        # ════════════ ۶. اسکرول و استخراج پست‌ها ════════════
-        print("📜 شروع اسکرول برای جمع‌آوری پست‌ها...")
+        # ════════════ ۶. اسکرول و استخراج پست‌ها (فقط پیام‌های جدید) ════════════
+        print("📜 شروع اسکرول و استخراج پست‌ها...")
         seen_ids = set()
         items = []
         scroll_attempts = 0
-        while len(items) < LIMIT and scroll_attempts < 10:
+        last_count = 0
+
+        while len(items) < LIMIT and scroll_attempts < 12:
             try:
-                new_posts = await page.evaluate(f"""(channel) => {{
-                    const posts = [];
-                    const messageSelectors = [
-                        'div.message', 'div.bubbles-group > div', 'div[data-message-id]',
-                        '[data-peer-id] div.message', 'div.chatlist-message', 'div[class*="Message"]'
-                    ];
-                    const allMessages = new Set();
-                    messageSelectors.forEach(sel => {{
-                        document.querySelectorAll(sel).forEach(el => allMessages.add(el));
-                    }});
-                    for (const el of allMessages) {{
-                        let id = el.getAttribute('data-message-id') ||
-                                 el.closest('[data-message-id]')?.getAttribute('data-message-id') ||
-                                 el.querySelector('[data-message-id]')?.getAttribute('data-message-id');
-                        if (!id || posts.some(p => p.id === id)) continue;
-                        const textEl = el.querySelector('.text-content, .message-text, .bubble-content, div[class*="text"]');
-                        const text = textEl ? textEl.innerText.trim() : '';
-                        const dateEl = el.querySelector('time, .message-date, span[class*="date"]');
-                        const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText) : '';
-                        const linkEl = el.querySelector(`a[href*="/${{channel}}/"]`);
-                        const url = linkEl ? linkEl.href : '';
-                        posts.push({{ id, text, date, url }});
-                    }}
-                    return posts;
-                }}""", CHANNEL)
-                for p in new_posts:
-                    if p['id'] and p['id'] not in seen_ids:
-                        seen_ids.add(p['id'])
-                        items.append(p)
-                print(f"   📊 {len(items)} پست تا الان جمع‌آوری شده.")
+                messages = page.locator(
+                    'div.message, div[data-message-id], article[role="article"], div.bubbles-group > div'
+                )
+                count = await messages.count()
+                print(f"   🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
+
+                # فقط پیام‌های جدید را از اندیس last_count به بعد پردازش کن
+                for i in range(last_count, count):
+                    try:
+                        msg = messages.nth(i)
+                        msg_id = await msg.get_attribute('data-message-id')
+
+                        if not msg_id:
+                            inner = msg.locator('[data-message-id]').first
+                            if await inner.count() > 0:
+                                msg_id = await inner.get_attribute('data-message-id')
+
+                        if not msg_id or msg_id in seen_ids:
+                            continue
+
+                        text = (await msg.inner_text()).strip()[:600]
+                        date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
+                        date = ""
+                        if await date_el.count() > 0:
+                            date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
+
+                        items.append({
+                            'id': msg_id,
+                            'text': text,
+                            'date': date,
+                            'url': f"https://t.me/{CHANNEL}/{msg_id}"
+                        })
+                        seen_ids.add(msg_id)
+                    except Exception:
+                        continue
+
+                last_count = count   # برای دور بعد
+                print(f"   📊 {len(items)} پست یکتا جمع‌آوری شد.")
             except Exception as e:
-                print(f"❌ خطا: {e}")
+                print(f"   ❌ خطا استخراج: {e}")
 
             if len(items) >= LIMIT:
                 break
 
+            # اسکرول
             old_height = await page.evaluate("document.documentElement.scrollHeight")
-            await page.evaluate("window.scrollBy(0, 1800)")
-            await asyncio.sleep(1.5)
+            await page.evaluate("window.scrollBy(0, 2000)")
+            await asyncio.sleep(2)
             new_height = await page.evaluate("document.documentElement.scrollHeight")
+
             if new_height == old_height:
                 scroll_attempts += 1
             else:
                 scroll_attempts = 0
 
-            if scroll_attempts == 1:
+            # اسکرین‌شات در اولین توقف یا هر ۸ پست
+            if scroll_attempts == 1 or len(items) % 8 == 0:
                 await screenshot(page, f"06_scroll_{len(items)}")
 
         await screenshot(page, "07_final_state")
