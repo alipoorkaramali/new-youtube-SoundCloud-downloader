@@ -100,7 +100,7 @@ class TelegramChannelScraper:
                 await context.close()
                 return []
 
-            # ═══════════════ ورود به کانال (منطق دقیق دیباگ) ═══════════════
+            # ═══════════════ جستجو + کلیک (کاملاً مطابق دیباگ) ═══════════════
             entered = await self._search_and_enter_channel(page)
             if not entered:
                 await context.close()
@@ -179,7 +179,7 @@ class TelegramChannelScraper:
 
                 # اسکرول به بالا (بارگذاری پست‌های قدیمی‌تر)
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
-                await page.evaluate("window.scrollBy(0, -2000)")   # مقدار منفی = به بالا
+                await page.evaluate("window.scrollBy(0, -2000)")
                 await asyncio.sleep(2)
                 new_height = await page.evaluate("document.documentElement.scrollHeight")
 
@@ -199,8 +199,9 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ جستجو و ورود به کانال (کاملاً مطابق دیباگ) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (منطق کامل دیباگ) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
+        """تمام مراحل جستجو، کلیک و انتظار برای ورود به کانال دقیقاً مطابق debug_full.py"""
         # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
@@ -223,7 +224,7 @@ class TelegramChannelScraper:
         await search_input.fill(self.channel)
         await asyncio.sleep(1)
         await search_input.press("Enter")
-        self.logger.info("⏳ منتظر بارگذاری نتایج جستجو...")
+        self.logger.info("⏳ منتظر نتایج...")
         await asyncio.sleep(5)
 
         # ۳. کلیک روی تب Channels (اگر وجود دارد)
@@ -252,21 +253,19 @@ class TelegramChannelScraper:
                 break
 
         if not found:
-            self.logger.error("❌ نتایج جستجو پیدا نشد.")
+            self.logger.error("❌ نتایج پیدا نشد.")
             await self._take_screenshot(page, "search_failed")
             return False
 
         self.logger.info("✅ نتایج جستجو ظاهر شدند.")
         await asyncio.sleep(2)
-        return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه (منطق دیباگ) ═══════════════════
-    async def _click_search_result(self, page) -> bool:
+        # ════════════ ۵. کلیک روی اولین نتیجه (دقیقاً مثل دیباگ) ════════════
         self.logger.info("🖱️ تلاش برای ورود به کانال...")
+        clicked = False
 
         # روش 1: سلکتورهای ساده + force click
-        click_selectors = ['div.chatlist-item', 'div[role="button"]', 'div.search-result', 'a[data-peer-id]']
-        for sel in click_selectors:
+        for sel in ['div.chatlist-item', 'div[role="button"]', 'div.search-result', 'a[data-peer-id]']:
             try:
                 loc = page.locator(sel).first
                 if await loc.count() == 0:
@@ -275,35 +274,39 @@ class TelegramChannelScraper:
                 self.logger.info(f" → کلیک با {sel}")
                 await loc.click(timeout=8000, force=True)
                 await asyncio.sleep(4)
-
-                # بررسی ورود به کانال
-                try:
-                    await page.wait_for_selector('div.message, div[data-message-id]', timeout=12000)
-                    self.logger.info("✅ کانال با موفقیت باز شد.")
-                    return True
-                except Exception:
-                    self.logger.warning("⚠️ پیام‌ها کامل لود نشدند، اما ادامه می‌دهیم...")
-                    return True
-            except Exception as e:
-                self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
-                continue
-
-        # روش 2: fallback با get_by_text
-        self.logger.info(" 🔄 fallback get_by_text...")
-        for name in [self.channel, self.channel.upper(), "BBCPersian"]:
-            try:
-                item = page.get_by_text(name, exact=False).first
-                if await item.count() > 0:
-                    await item.click(timeout=8000, force=True)
-                    await asyncio.sleep(4)
-                    self.logger.info(f" ✅ با fallback '{name}' وارد کانال شدیم.")
-                    return True
+                clicked = True
+                break
             except Exception:
                 continue
 
-        self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
-        await self._take_screenshot(page, "click_failed")
-        return False
+        # روش 2: fallback با get_by_text
+        if not clicked:
+            self.logger.info("   🔄 fallback get_by_text...")
+            for name in [self.channel, self.channel.upper(), "BBCPersian"]:
+                try:
+                    item = page.get_by_text(name, exact=False).first
+                    if await item.count() > 0:
+                        await item.click(timeout=8000, force=True)
+                        await asyncio.sleep(4)
+                        clicked = True
+                        self.logger.info(f"   ✅ با fallback '{name}' کلیک شد.")
+                        break
+                except Exception:
+                    continue
+
+        if not clicked:
+            self.logger.error("❌ کلیک ناموفق.")
+            await self._take_screenshot(page, "click_failed")
+            return False
+
+        # ۶. منتظر بارگذاری کانال (با پیام‌ها)
+        try:
+            await page.wait_for_selector('div.message, div[data-message-id], article[role="article"]', timeout=15000)
+            self.logger.info("✅ کانال با موفقیت باز شد.")
+        except Exception:
+            self.logger.warning("⚠️ کانال باز شد ولی پیام‌ها کامل لود نشدند. ادامه می‌دهیم...")
+
+        return True
 
     # ═══════════════════ اسکرین‌شات از تکتک پست‌ها (با اسکرول به المان) ═══════════════════
     async def _capture_post_screenshots(self, page, items: List[Dict]):
