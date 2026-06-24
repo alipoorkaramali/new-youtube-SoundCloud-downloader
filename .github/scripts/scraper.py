@@ -221,10 +221,10 @@ class TelegramChannelScraper:
         await asyncio.sleep(2)
         return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه (نسخهٔ نهایی با بهبودهای شما) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (نسخهٔ نهایی مقاوم) ═══════════════════
     async def _click_search_result(self, page) -> bool:
         self.logger.info("🖱️ تلاش برای ورود به کانال...")
-        await self._take_screenshot(page, "before_click")   # اسکرین‌شات قبل از کلیک
+        await self._take_screenshot(page, "before_click")
 
         click_selectors = [
             'div.chatlist-item',
@@ -241,17 +241,17 @@ class TelegramChannelScraper:
                     continue
                 await loc.wait_for(state="visible", timeout=6000)
                 self.logger.info(f" → کلیک با {sel}")
-                await loc.click(timeout=10000, force=True)
+                await loc.click(timeout=12000, force=True)
                 await asyncio.sleep(4)
 
-                # چک ورود به کانال با انتظار طولانی‌تر و انعطاف‌پذیر
+                # بررسی ورود به کانال
                 try:
                     await page.wait_for_selector('div.message, div[data-message-id]', timeout=12000)
                     self.logger.info("✅ کانال با موفقیت باز شد.")
                     return True
                 except Exception:
-                    self.logger.warning("⚠️ کانال باز شد ولی پیام‌ها کامل لود نشدند. ادامه می‌دهیم...")
-                    return True   # مهم: به هر حال وارد شده‌ایم
+                    self.logger.warning("⚠️ پیام‌ها کامل لود نشدند، اما ادامه می‌دهیم...")
+                    return True   # حتی اگر پیام‌ها کامل نباشند، احتمالاً وارد کانال شده‌ایم
             except Exception as e:
                 self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
                 continue
