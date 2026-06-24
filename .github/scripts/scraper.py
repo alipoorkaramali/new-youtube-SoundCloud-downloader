@@ -232,7 +232,7 @@ class TelegramChannelScraper:
 
         # ۴. انتظار هوشمند برای نتایج
         found = False
-        for wait_time in [6, 10, 14]:
+        for wait_time in [10, 20, 30]:
             await asyncio.sleep(wait_time)
             for sel in ['div[role="button"]', 'div.search-result', 'div.chatlist-item', 'a[data-peer-id]']:
                 try:
