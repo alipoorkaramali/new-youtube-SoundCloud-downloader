@@ -9,7 +9,7 @@ from playwright.async_api import async_playwright
 logger = logging.getLogger("TelegramScraper")
 
 class PlaywrightDownloader:
-    """دانلود رسانه‌ها با کلیک روی دکمهٔ دانلود و دریافت رویداد download."""
+    """دانلود رسانه‌ها با استخراج لینک از DOM و دانلود مستقیم با page.request"""
 
     def __init__(self, profile_dir: Path, media_dir: Path, max_bytes: int, delay: float = 1.5):
         self.profile_dir = profile_dir
@@ -26,12 +26,11 @@ class PlaywrightDownloader:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=str(self.profile_dir),
                 headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"]
+                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"]
             )
             page = await context.new_page()
 
-            # ابتدا صفحهٔ اصلی برای فعال‌سازی کامل سشن
-            logger.info("📄 باز کردن صفحهٔ اصلی تلگرام...")
+            # ابتدا صفحه اصلی را باز کن تا سشن کاملاً فعال شود
             await page.goto("https://web.telegram.org/a/", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(2)
 
@@ -39,7 +38,7 @@ class PlaywrightDownloader:
                 try:
                     await self._process_post(page, post_url, post_id)
                 except Exception as e:
-                    logger.error(f"❌ خطا در {post_url}: {e}")
+                    logger.error(f"❌ خطا در پردازش {post_url}: {e}")
                 await asyncio.sleep(self.delay)
 
             await context.close()
@@ -47,32 +46,52 @@ class PlaywrightDownloader:
     async def _process_post(self, page, post_url: str, post_id: str):
         logger.info(f"📄 باز کردن {post_url}")
         await page.goto(post_url, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(2)
+        # صبر برای بارگذاری کامل رسانه‌ها (lazy-load)
+        await asyncio.sleep(5)
 
-        # پیدا کردن همهٔ دکمه‌های دانلود
-        download_buttons = page.locator('a[download]')
-        count = await download_buttons.count()
-        logger.info(f"🔍 {count} دکمهٔ دانلود پیدا شد.")
+        # استخراج تمام لینک‌های رسانه (عکس، ویدئو، فایل، صدا)
+        media_links = await page.evaluate('''() => {
+            const links = new Set();
+            // تصاویر و ویدئوها: src, currentSrc, srcset
+            document.querySelectorAll('img, video source, audio source').forEach(el => {
+                let src = el.src || el.currentSrc || '';
+                if (!src) {
+                    const srcset = el.getAttribute('srcset');
+                    if (srcset) src = srcset.split(',')[0]?.trim()?.split(' ')[0] || '';
+                }
+                if (src && src.startsWith('http')) links.add(src);
+            });
+            // دکمه‌های دانلود فایل
+            document.querySelectorAll('a[download], a[href*="/file/"], a[href*="t.me/file"]').forEach(a => {
+                if (a.href) links.add(a.href);
+            });
+            return Array.from(links);
+        }''')
 
-        for i in range(count):
+        if not media_links:
+            logger.info(f"📭 هیچ رسانه‌ای در {post_url} یافت نشد.")
+            return
+
+        logger.info(f"🎯 {len(media_links)} لینک رسانه پیدا شد.")
+
+        for idx, link in enumerate(media_links):
             try:
-                btn = download_buttons.nth(i)
-                async with page.expect_download() as download_info:
-                    await btn.click()
-                download = await download_info.value
-                filename = download.suggested_filename or f"file_{post_id}_{i}"
-                filepath = self.media_dir / f"{post_id}_{filename}"
-
-                if filepath.exists():
-                    logger.info(f"⏩ از قبل موجود: {filepath.name}")
-                    continue
-
-                await download.save_as(str(filepath))
-                size = filepath.stat().st_size
-                if size > self.max_bytes:
-                    filepath.unlink()
-                    logger.info(f"⏩ رد شد (حجم {size/1024/1024:.1f}MB): {filename}")
+                # درخواست با هدرهای مناسب (Referrer مهم است)
+                response = await page.request.get(link, {
+                    "headers": {"Referer": "https://web.telegram.org/"}
+                })
+                if response.ok:
+                    body = await response.body()
+                    if len(body) > self.max_bytes:
+                        logger.info(f"⏩ رد شد (حجم {len(body)/1024/1024:.1f}MB): {link}")
+                        continue
+                    # استخراج پسوند
+                    ext = link.split('.')[-1].split('?')[0][:5] or "bin"
+                    filepath = self.media_dir / f"{post_id}_{idx}.{ext}"
+                    with open(filepath, 'wb') as f:
+                        f.write(body)
+                    logger.info(f"✅ دانلود شد: {filepath.name} ({len(body)/1024/1024:.1f} MB)")
                 else:
-                    logger.info(f"✅ دانلود شد: {filepath.name} ({size/1024/1024:.1f} MB)")
+                    logger.warning(f"⚠️ HTTP {response.status} برای {link}")
             except Exception as e:
-                logger.error(f"❌ خطا در کلیک/دانلود دکمهٔ {i}: {e}")
+                logger.error(f"❌ خطا در دانلود {link}: {e}")
