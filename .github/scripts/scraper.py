@@ -12,9 +12,9 @@ from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
 MAX_SCROLL_ATTEMPTS = 12
-SCROLL_STEP = 2000
+SCROLL_UP = -2000                # اسکرول به سمت بالا
 HOME_URL = "https://web.telegram.org/a/"
-OVERALL_TIMEOUT = 35 * 60  # 35 دقیقه
+OVERALL_TIMEOUT = 35 * 60        # 35 دقیقه
 
 class TelegramChannelScraper:
 
@@ -45,7 +45,7 @@ class TelegramChannelScraper:
 
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
 
-    # ═══════════════════ متد اصلی (با timeout کلی و محافظت) ═══════════════════
+    # ═══════════════════ متد اصلی ═══════════════════
     async def run(self):
         try:
             await asyncio.wait_for(self._run_impl(), timeout=OVERALL_TIMEOUT)
@@ -62,9 +62,6 @@ class TelegramChannelScraper:
             return
         self.logger.info(f"📥 {len(items)} پست استخراج شد.")
 
-        # گرفتن اسکرین‌شات از تکتک پست‌ها (بعد از استخراج)
-        await self._capture_post_screenshots(page, items)
-
         media_map, downloaded = await self._download_media(items)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
 
@@ -76,14 +73,14 @@ class TelegramChannelScraper:
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    # ═══════════════════ استخراج پست‌ها (بدون اسکرین‌شات) ═══════════════════
+    # ═══════════════════ استخراج پست‌ها ═══════════════════
     async def _fetch_posts_from_telegram(self) -> List[Dict]:
         from playwright.async_api import async_playwright
 
         items = []
         seen_ids = set()
         last_count = 0
-        self._page = None  # ذخیره page برای استفاده در اسکرین‌شات
+        self._page = None
 
         async with async_playwright() as p:
             context = await p.chromium.launch_persistent_context(
@@ -103,6 +100,7 @@ class TelegramChannelScraper:
                 await context.close()
                 return []
 
+            # ═══════════════ ورود به کانال (منطق دقیق دیباگ) ═══════════════
             entered = await self._search_and_enter_channel(page)
             if not entered:
                 await context.close()
@@ -111,7 +109,7 @@ class TelegramChannelScraper:
             # اسکرین‌شات اولیه
             await self._save_screenshot(page, "initial")
 
-            # پرش به آخرین پست‌ها
+            # پرش به آخرین پست‌ها (همانند دیباگ)
             self.logger.info("⬇️ تلاش برای پرش به آخرین پست‌ها...")
             try:
                 scroll_button_selectors = [
@@ -133,7 +131,7 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
 
-            # حلقه اسکرول و استخراج پست‌ها
+            # حلقهٔ اسکرول و استخراج (اسکرول به بالا)
             scroll_attempts = 0
 
             while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
@@ -168,7 +166,6 @@ class TelegramChannelScraper:
                                 'url': f"https://t.me/{self.channel}/{msg_id}"
                             })
                             seen_ids.add(msg_id)
-                            # اسکرین‌شات دیگر اینجا گرفته نمی‌شود
                         except Exception:
                             continue
 
@@ -180,8 +177,9 @@ class TelegramChannelScraper:
                 if len(items) >= self.limit:
                     break
 
+                # اسکرول به بالا (بارگذاری پست‌های قدیمی‌تر)
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
-                await page.evaluate(f"window.scrollBy(0, {SCROLL_STEP})")
+                await page.evaluate("window.scrollBy(0, -2000)")   # مقدار منفی = به بالا
                 await asyncio.sleep(2)
                 new_height = await page.evaluate("document.documentElement.scrollHeight")
 
@@ -192,7 +190,7 @@ class TelegramChannelScraper:
 
             await self._save_screenshot(page, "final")
 
-            # حالا نوبت اسکرین‌شات از تکتک پست‌هاست
+            # گرفتن اسکرین‌شات از تکتک پست‌ها
             await self._capture_post_screenshots(page, items)
 
             await context.close()
@@ -201,49 +199,9 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
         return items[:self.limit]
 
-    # ═══════════════════ اسکرین‌شات از تکتک پست‌ها (با اسکرول به المان) ═══════════════════
-    async def _capture_post_screenshots(self, page, items: List[Dict]):
-        self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
-        for idx, item in enumerate(items):
-            msg_id = item['id']
-            try:
-                # پیدا کردن المان پیام با data-message-id
-                locator = page.locator(f'[data-message-id="{msg_id}"]').first
-                if await locator.count() == 0:
-                    self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
-                    continue
-
-                # اسکرول به سمت المان
-                await locator.scroll_into_view_if_needed()
-                await asyncio.sleep(0.5)  # کمی صبر برای رندر
-
-                # اسکرین‌شات (فقط viewport یا full_page? بهتر است viewport تا پست فوکوس شود)
-                path = self.screenshots_dir / f"post_{msg_id}.png"
-                await page.screenshot(path=path, full_page=False)  # فقط ناحیهٔ قابل مشاهده
-                self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
-
-                # هر ۱۰ پست یک بار لاگ بده
-                if (idx + 1) % 10 == 0:
-                    self.logger.info(f"   {idx+1}/{len(items)} اسکرین‌شات گرفته شد.")
-
-            except Exception as e:
-                self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {e}")
-                continue
-
-        self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
-
-    # ═══════════════════ ذخیرهٔ اسکرین‌شات ساده (بدون تغییر) ═══════════════════
-    async def _save_screenshot(self, page, name: str):
-        try:
-            path = self.screenshots_dir / f"{name}.png"
-            await page.screenshot(path=path, full_page=True)
-            self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
-
-    # ═══════════════════ جستجو و ورود به کانال (بدون تغییر) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (کاملاً مطابق دیباگ) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
-        # ... (همان کد قبلی، بدون تغییر)
+        # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -261,12 +219,14 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
+        # ۲. جستجوی کانال
         await search_input.fill(self.channel)
         await asyncio.sleep(1)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر بارگذاری نتایج جستجو...")
         await asyncio.sleep(5)
 
+        # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
@@ -276,6 +236,7 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
+        # ۴. بررسی وجود نتایج (چندمرحله‌ای)
         found = False
         for wait_time in [6, 10, 14]:
             await asyncio.sleep(wait_time)
@@ -299,29 +260,23 @@ class TelegramChannelScraper:
         await asyncio.sleep(2)
         return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه (بدون تغییر) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (منطق دیباگ) ═══════════════════
     async def _click_search_result(self, page) -> bool:
         self.logger.info("🖱️ تلاش برای ورود به کانال...")
-        await self._take_screenshot(page, "before_click")
 
-        click_selectors = [
-            'div.chatlist-item',
-            'div[role="button"]',
-            'div.search-result',
-            'a[data-peer-id]',
-            'div.search-results div[role="button"]'
-        ]
-
+        # روش 1: سلکتورهای ساده + force click
+        click_selectors = ['div.chatlist-item', 'div[role="button"]', 'div.search-result', 'a[data-peer-id]']
         for sel in click_selectors:
             try:
                 loc = page.locator(sel).first
                 if await loc.count() == 0:
                     continue
-                await loc.wait_for(state="visible", timeout=6000)
+                await loc.wait_for(state="visible", timeout=5000)
                 self.logger.info(f" → کلیک با {sel}")
-                await loc.click(timeout=12000, force=True)
+                await loc.click(timeout=8000, force=True)
                 await asyncio.sleep(4)
 
+                # بررسی ورود به کانال
                 try:
                     await page.wait_for_selector('div.message, div[data-message-id]', timeout=12000)
                     self.logger.info("✅ کانال با موفقیت باز شد.")
@@ -333,22 +288,57 @@ class TelegramChannelScraper:
                 self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
                 continue
 
+        # روش 2: fallback با get_by_text
         self.logger.info(" 🔄 fallback get_by_text...")
-        for name in [self.channel, self.channel.upper(), "BBCPersian", self.channel.title()]:
+        for name in [self.channel, self.channel.upper(), "BBCPersian"]:
             try:
                 item = page.get_by_text(name, exact=False).first
                 if await item.count() > 0:
-                    self.logger.info(f" → fallback '{name}'")
-                    await item.click(timeout=10000, force=True)
+                    await item.click(timeout=8000, force=True)
                     await asyncio.sleep(4)
-                    self.logger.info("✅ با fallback وارد کانال شدیم.")
+                    self.logger.info(f" ✅ با fallback '{name}' وارد کانال شدیم.")
                     return True
-            except:
+            except Exception:
                 continue
 
         self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
         await self._take_screenshot(page, "click_failed")
         return False
+
+    # ═══════════════════ اسکرین‌شات از تکتک پست‌ها (با اسکرول به المان) ═══════════════════
+    async def _capture_post_screenshots(self, page, items: List[Dict]):
+        self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
+        for idx, item in enumerate(items):
+            msg_id = item['id']
+            try:
+                locator = page.locator(f'[data-message-id="{msg_id}"]').first
+                if await locator.count() == 0:
+                    self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
+                    continue
+
+                await locator.scroll_into_view_if_needed()
+                await asyncio.sleep(0.5)
+
+                path = self.screenshots_dir / f"post_{msg_id}.png"
+                await page.screenshot(path=path, full_page=False)
+                self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+
+                if (idx + 1) % 10 == 0:
+                    self.logger.info(f"   {idx+1}/{len(items)} اسکرین‌شات گرفته شد.")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {e}")
+                continue
+
+        self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
+
+    # ═══════════════════ ذخیرهٔ اسکرین‌شات ساده ═══════════════════
+    async def _save_screenshot(self, page, name: str):
+        try:
+            path = self.screenshots_dir / f"{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
 
     # ═══════════════════ اسکرین‌شات دیباگ (خطاها) ═══════════════════
     async def _take_screenshot(self, page, name: str):
