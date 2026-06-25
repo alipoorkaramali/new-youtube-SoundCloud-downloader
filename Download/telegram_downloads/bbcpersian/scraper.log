@@ -1,91 +1,259 @@
-2026-06-25 16:10:01,087 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-25 16:10:01,088 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
-2026-06-25 16:10:17,673 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-25 16:10:19,243 [INFO] ⏳ منتظر نتایج...
-2026-06-25 16:10:26,058 [INFO] ✅ عبارت 'bbcpersian' در صفحه یافت شد.
-2026-06-25 16:10:26,058 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
-2026-06-25 16:10:26,210 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
-2026-06-25 16:10:34,624 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-06-25 16:10:34,839 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
-2026-06-25 16:10:34,892 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
-2026-06-25 16:11:03,061 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
-2026-06-25 16:11:03,255 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
-2026-06-25 16:11:06,787 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
-2026-06-25 16:11:06,826 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
-2026-06-25 16:11:06,827 [INFO] 📥 [1/5] پست 285031
-2026-06-25 16:11:06,827 [INFO] 📍 شروع پردازش پست 285031
-2026-06-25 16:11:10,281 [INFO]    📍 پست 285031 آماده شد. منتظر لود کامل...
-2026-06-25 16:11:12,393 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 2
-2026-06-25 16:11:12,401 [INFO] 🎯 2 مدیای واقعی در پست 285031 یافت شد.
-2026-06-25 16:11:14,007 [INFO]    ▶️ شروع پردازش المان 0 از پست 285031
-2026-06-25 16:11:14,168 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_element_285031_0_pre.png
-2026-06-25 16:11:14,170 [INFO]    📸 اسکرین‌شات پیش‌نمایش با ضربدر ذخیره شد (element_285031_0_pre)
-2026-06-25 16:11:15,626 [INFO]    🏷️ نوع مدیا تشخیص داده شد: image
-2026-06-25 16:11:15,626 [INFO]    🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد
-2026-06-25 16:11:15,828 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_media_285031_0_cross.png
-2026-06-25 16:11:16,374 [INFO]    ✅ کلیک انجام شد (media_285031_0)
-2026-06-25 16:11:16,374 [INFO]    ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...
-2026-06-25 16:11:29,727 [WARNING]    ❌ Media Viewer باز نشد: Page.wait_for_selector: Timeout 12000ms exceeded.
+2026-06-25 17:03:52,919 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-25 17:03:52,919 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
+2026-06-25 17:04:08,816 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-25 17:04:10,449 [INFO] ⏳ منتظر نتایج...
+2026-06-25 17:04:16,498 [INFO] ✅ عبارت 'bbcpersian' در صفحه یافت شد.
+2026-06-25 17:04:16,498 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-25 17:04:16,692 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
+2026-06-25 17:04:24,242 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-25 17:04:24,411 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
+2026-06-25 17:04:29,442 [INFO]    ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.
+2026-06-25 17:04:54,966 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
+2026-06-25 17:04:55,149 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
+2026-06-25 17:04:58,658 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
+2026-06-25 17:04:58,708 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
+2026-06-25 17:04:58,709 [INFO] 📥 [1/5] پست 285032
+2026-06-25 17:04:58,709 [INFO] 📍 شروع پردازش پست 285032
+2026-06-25 17:05:01,216 [INFO]    📍 پست 285032 آماده شد. منتظر لود کامل...
+2026-06-25 17:05:04,183 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 6
+2026-06-25 17:05:04,205 [INFO] 🎯 6 مدیای واقعی در پست 285032 یافت شد.
+2026-06-25 17:05:06,510 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 0 از پست 285032
+2026-06-25 17:05:08,132 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 557)
+2026-06-25 17:05:13,133 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
 Call log:
-  - waiting for locator("div.media-viewer, div[class*=\"MediaViewer\"], div[class*=\"lightbox\"], div.media-viewer-content") to be visible
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
 
-2026-06-25 16:11:29,937 [INFO]    📸 اسکرین‌شات بعد از شکست در باز شدن Viewer: debug_viewer_failed_285031_0.png
-2026-06-25 16:11:29,937 [INFO]    🔄 Fallback: استخراج لینک‌های مستقیم شروع شد
-2026-06-25 16:11:29,955 [INFO]    🔗 0 لینک در fallback پیدا شد
-2026-06-25 16:11:29,955 [INFO]    ▶️ شروع پردازش المان 1 از پست 285031
-2026-06-25 16:11:30,148 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_element_285031_1_pre.png
-2026-06-25 16:11:30,150 [INFO]    📸 اسکرین‌شات پیش‌نمایش با ضربدر ذخیره شد (element_285031_1_pre)
-2026-06-25 16:11:31,445 [INFO]    🏷️ نوع مدیا تشخیص داده شد: image
-2026-06-25 16:11:31,445 [INFO]    🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد
-2026-06-25 16:11:31,654 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_media_285031_1_cross.png
-2026-06-25 16:11:32,370 [INFO]    ✅ کلیک انجام شد (media_285031_1)
-2026-06-25 16:11:32,370 [INFO]    ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...
-2026-06-25 16:11:46,027 [WARNING]    ❌ Media Viewer باز نشد: Page.wait_for_selector: Timeout 12000ms exceeded.
+2026-06-25 17:05:13,133 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:05:13,796 [INFO] ✅ مستقیم: 285032_0.png (0.0 MB)
+2026-06-25 17:05:13,796 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 1 از پست 285032
+2026-06-25 17:05:15,084 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 446)
+2026-06-25 17:05:20,085 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
 Call log:
-  - waiting for locator("div.media-viewer, div[class*=\"MediaViewer\"], div[class*=\"lightbox\"], div.media-viewer-content") to be visible
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
 
-2026-06-25 16:11:46,218 [INFO]    📸 اسکرین‌شات بعد از شکست در باز شدن Viewer: debug_viewer_failed_285031_1.png
-2026-06-25 16:11:46,218 [INFO]    🔄 Fallback: استخراج لینک‌های مستقیم شروع شد
-2026-06-25 16:11:46,228 [INFO]    🔗 0 لینک در fallback پیدا شد
-2026-06-25 16:11:47,283 [INFO] 📥 [2/5] پست 285030
-2026-06-25 16:11:47,284 [INFO] 📍 شروع پردازش پست 285030
-2026-06-25 16:11:50,307 [INFO]    📍 پست 285030 آماده شد. منتظر لود کامل...
-2026-06-25 16:11:53,521 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 6
-2026-06-25 16:11:53,545 [INFO] 🎯 6 مدیای واقعی در پست 285030 یافت شد.
-2026-06-25 16:11:54,863 [INFO]    ▶️ شروع پردازش المان 0 از پست 285030
-2026-06-25 16:11:55,091 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_element_285030_0_pre.png
-2026-06-25 16:11:55,099 [INFO]    📸 اسکرین‌شات پیش‌نمایش با ضربدر ذخیره شد (element_285030_0_pre)
-2026-06-25 16:11:56,328 [INFO]    🏷️ نوع مدیا تشخیص داده شد: video
-2026-06-25 16:11:56,328 [INFO]    🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد
-2026-06-25 16:11:56,569 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_media_285030_0_cross.png
-2026-06-25 16:11:57,227 [INFO]    ✅ کلیک انجام شد (media_285030_0)
-2026-06-25 16:11:57,227 [INFO]    ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...
-2026-06-25 16:11:58,482 [INFO]    ✅ Media Viewer باز شد
-2026-06-25 16:12:01,320 [INFO]    🔍 تعداد دکمه دانلود در Media Viewer: 1
-2026-06-25 16:12:01,671 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_btn_285030_0_cross.png
-2026-06-25 16:12:02,472 [INFO]    ✅ کلیک انجام شد (download_btn_285030_0)
-2026-06-25 16:12:02,472 [INFO]    ✅ کلیک روی دکمه دانلود انجام شد
-2026-06-25 16:12:09,072 [INFO]    ▶️ شروع پردازش المان 1 از پست 285030
-2026-06-25 16:12:39,073 [WARNING]    ⚠️ المان 1 پست 285030 رد شد: Locator.bounding_box: Timeout 30000ms exceeded.
+2026-06-25 17:05:20,086 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:05:20,095 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 2 از پست 285032
+2026-06-25 17:05:21,070 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 446)
+2026-06-25 17:05:26,072 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
 Call log:
-  - waiting for locator("[data-message-id=\"285030\"]").first.locator("div.media-photo, div.media-video, div.document, a.media-photo, video, img[src], div[class*=\"media\"]").nth(1)
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
 
-2026-06-25 16:12:39,251 [INFO]    📸 اسکرین‌شات بعد از شکست: debug_element_fail_285030_1.png
-2026-06-25 16:12:39,251 [INFO]    ▶️ شروع پردازش المان 2 از پست 285030
-2026-06-25 16:13:02,284 [WARNING] ⏰ پست 285030 تایم‌اوت کلی شد، رد می‌شود.
-2026-06-25 16:13:03,629 [INFO] 📥 [3/5] پست 285029
-2026-06-25 16:13:03,629 [INFO] 📍 شروع پردازش پست 285029
-2026-06-25 16:14:18,632 [WARNING] ⏰ پست 285029 تایم‌اوت کلی شد، رد می‌شود.
-2026-06-25 16:14:19,894 [INFO] 📥 [4/5] پست 285028
-2026-06-25 16:14:19,894 [INFO] 📍 شروع پردازش پست 285028
-2026-06-25 16:15:34,896 [WARNING] ⏰ پست 285028 تایم‌اوت کلی شد، رد می‌شود.
-2026-06-25 16:15:35,833 [INFO] 📥 [5/5] پست 285027
-2026-06-25 16:15:35,833 [INFO] 📍 شروع پردازش پست 285027
-2026-06-25 16:16:50,836 [WARNING] ⏰ پست 285027 تایم‌اوت کلی شد، رد می‌شود.
-2026-06-25 16:16:50,836 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
-2026-06-25 16:16:50,836 [INFO] 📊 media_map برای 0 پست پر شد.
-2026-06-25 16:16:50,836 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
-2026-06-25 16:16:50,837 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
-2026-06-25 16:16:50,872 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
-2026-06-25 16:16:51,195 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
-2026-06-25 16:16:51,850 [INFO] ✅ پایان موفقیت‌آمیز.
+2026-06-25 17:05:26,072 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:05:26,082 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 3 از پست 285032
+2026-06-25 17:05:27,950 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 446)
+2026-06-25 17:05:32,953 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:05:32,953 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:05:32,971 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 4 از پست 285032
+2026-06-25 17:05:34,408 [INFO]    🖱️ راست‌کلیک انجام شد در (576, 242)
+2026-06-25 17:05:39,408 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:05:39,408 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:05:39,418 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 5 از پست 285032
+2026-06-25 17:05:41,206 [INFO]    🖱️ راست‌کلیک انجام شد در (849, 678)
+2026-06-25 17:05:46,207 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:05:46,208 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:05:46,217 [INFO] 📦 پست 285032: 1 رسانه دانلود شد.
+2026-06-25 17:05:47,650 [INFO] 📥 [2/5] پست 285031
+2026-06-25 17:05:47,650 [INFO] 📍 شروع پردازش پست 285031
+2026-06-25 17:05:50,649 [INFO]    📍 پست 285031 آماده شد. منتظر لود کامل...
+2026-06-25 17:05:53,355 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 2
+2026-06-25 17:05:53,362 [INFO] 🎯 2 مدیای واقعی در پست 285031 یافت شد.
+2026-06-25 17:05:55,579 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 0 از پست 285031
+2026-06-25 17:05:56,499 [INFO]    🖱️ راست‌کلیک انجام شد در (979, -105)
+2026-06-25 17:06:01,500 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+
+2026-06-25 17:06:01,500 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:01,510 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 1 از پست 285031
+2026-06-25 17:06:02,571 [INFO]    🖱️ راست‌کلیک انجام شد در (948, -95)
+2026-06-25 17:06:07,572 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+
+2026-06-25 17:06:07,572 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:09,547 [INFO] 📥 [3/5] پست 285030
+2026-06-25 17:06:09,548 [INFO] 📍 شروع پردازش پست 285030
+2026-06-25 17:06:11,961 [INFO]    📍 پست 285030 آماده شد. منتظر لود کامل...
+2026-06-25 17:06:14,355 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 6
+2026-06-25 17:06:14,374 [INFO] 🎯 6 مدیای واقعی در پست 285030 یافت شد.
+2026-06-25 17:06:15,682 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 0 از پست 285030
+2026-06-25 17:06:17,038 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 486)
+2026-06-25 17:06:22,039 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:06:22,039 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:22,144 [INFO] ✅ مستقیم: 285030_0.png (0.0 MB)
+2026-06-25 17:06:22,144 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 1 از پست 285030
+2026-06-25 17:06:23,320 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 175)
+2026-06-25 17:06:28,321 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:06:28,321 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:28,331 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 2 از پست 285030
+2026-06-25 17:06:30,171 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 175)
+2026-06-25 17:06:35,172 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:06:35,173 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:35,220 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 3 از پست 285030
+2026-06-25 17:06:36,317 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 175)
+2026-06-25 17:06:41,320 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:06:41,320 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:41,336 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 4 از پست 285030
+2026-06-25 17:06:42,193 [INFO]    🖱️ راست‌کلیک انجام شد در (568, -29)
+2026-06-25 17:06:47,194 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+
+2026-06-25 17:06:47,194 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:47,207 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 5 از پست 285030
+2026-06-25 17:06:48,654 [INFO]    🖱️ راست‌کلیک انجام شد در (849, 407)
+2026-06-25 17:06:53,655 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:06:53,655 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:06:53,665 [INFO] 📦 پست 285030: 1 رسانه دانلود شد.
+2026-06-25 17:06:55,747 [INFO] 📥 [4/5] پست 285029
+2026-06-25 17:06:55,747 [INFO] 📍 شروع پردازش پست 285029
+2026-06-25 17:06:58,620 [INFO]    📍 پست 285029 آماده شد. منتظر لود کامل...
+2026-06-25 17:07:01,358 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 6
+2026-06-25 17:07:01,378 [INFO] 🎯 6 مدیای واقعی در پست 285029 یافت شد.
+2026-06-25 17:07:03,111 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 0 از پست 285029
+2026-06-25 17:07:04,260 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 486)
+2026-06-25 17:07:09,261 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:09,261 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:09,365 [INFO] ✅ مستقیم: 285029_0.png (0.0 MB)
+2026-06-25 17:07:09,365 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 1 از پست 285029
+2026-06-25 17:07:10,899 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 217)
+2026-06-25 17:07:15,901 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:15,901 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:15,911 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 2 از پست 285029
+2026-06-25 17:07:17,405 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 217)
+2026-06-25 17:07:22,405 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:22,405 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:22,416 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 3 از پست 285029
+2026-06-25 17:07:23,574 [INFO]    🖱️ راست‌کلیک انجام شد در (707, 217)
+2026-06-25 17:07:28,574 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:28,574 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:28,586 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 4 از پست 285029
+2026-06-25 17:07:29,488 [INFO]    🖱️ راست‌کلیک انجام شد در (576, 13)
+2026-06-25 17:07:34,489 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:34,489 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:34,499 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 5 از پست 285029
+2026-06-25 17:07:35,420 [INFO]    🖱️ راست‌کلیک انجام شد در (849, 449)
+2026-06-25 17:07:40,421 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:40,421 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:40,432 [INFO] 📦 پست 285029: 1 رسانه دانلود شد.
+2026-06-25 17:07:42,044 [INFO] 📥 [5/5] پست 285028
+2026-06-25 17:07:42,044 [INFO] 📍 شروع پردازش پست 285028
+2026-06-25 17:07:44,985 [INFO]    📍 پست 285028 آماده شد. منتظر لود کامل...
+2026-06-25 17:07:47,881 [INFO]    🔍 تعداد المان‌های مدیا یافت‌شده: 6
+2026-06-25 17:07:47,903 [INFO] 🎯 6 مدیای واقعی در پست 285028 یافت شد.
+2026-06-25 17:07:49,312 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 0 از پست 285028
+2026-06-25 17:07:50,283 [INFO]    🖱️ راست‌کلیک انجام شد در (779, 486)
+2026-06-25 17:07:55,284 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:07:55,284 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:07:55,387 [INFO] ✅ مستقیم: 285028_0.png (0.0 MB)
+2026-06-25 17:07:55,387 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 1 از پست 285028
+2026-06-25 17:07:56,963 [INFO]    🖱️ راست‌کلیک انجام شد در (779, 365)
+2026-06-25 17:08:01,965 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:08:01,965 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:08:01,976 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 2 از پست 285028
+2026-06-25 17:08:03,786 [INFO]    🖱️ راست‌کلیک انجام شد در (779, 365)
+2026-06-25 17:08:08,787 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:08:08,787 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:08:08,817 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 3 از پست 285028
+2026-06-25 17:08:09,896 [INFO]    🖱️ راست‌کلیک انجام شد در (779, 365)
+2026-06-25 17:08:14,896 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:08:14,896 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:08:14,908 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 4 از پست 285028
+2026-06-25 17:08:15,733 [INFO]    🖱️ راست‌کلیک انجام شد در (568, 246)
+2026-06-25 17:08:20,734 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    5 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:08:20,734 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:08:20,744 [INFO]    ▶️ شروع دانلود با راست‌کلیک برای المان 5 از پست 285028
+2026-06-25 17:08:22,508 [INFO]    🖱️ راست‌کلیک انجام شد در (993, 511)
+2026-06-25 17:08:27,508 [WARNING]    ❌ خطا در راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    13 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-25 17:08:27,508 [INFO]    🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم
+2026-06-25 17:08:27,519 [INFO] 📦 پست 285028: 1 رسانه دانلود شد.
+2026-06-25 17:08:27,519 [INFO] 🖼️ 4 فایل رسانه دانلود شد.
+2026-06-25 17:08:27,519 [INFO] 📊 media_map برای 4 پست پر شد.
+2026-06-25 17:08:27,520 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-25 17:08:27,520 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-25 17:08:27,574 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
+2026-06-25 17:08:27,729 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
+2026-06-25 17:08:28,103 [INFO] ✅ پایان موفقیت‌آمیز.
