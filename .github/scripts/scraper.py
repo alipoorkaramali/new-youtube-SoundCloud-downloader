@@ -12,8 +12,8 @@ from playwright_downloader import PlaywrightDownloader
 from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
-MAX_SCROLL_ATTEMPTS = 8      # کاهش چشمگیر
-SCROLL_UP = -1200            # اسکرول محدودتر
+MAX_SCROLL_ATTEMPTS = 8
+SCROLL_UP = -1200
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60
 
@@ -146,8 +146,8 @@ class TelegramChannelScraper:
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
-                # استفاده از locator دقیق‌تر: فقط div با data-message-id
-                messages = page.locator('div[data-message-id]').all()
+                # 🔥 اصلاح بحرانی: await فراموش نشود
+                messages = await page.locator('div[data-message-id]').all()
                 # از پایین به بالا (جدیدترین اول) پیمایش می‌کنیم
                 for msg in reversed(messages):
                     try:
@@ -367,8 +367,8 @@ class TelegramChannelScraper:
 
     # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        # 🌟 ترتیب natural: جدیدترین پست‌ها اول هستند (items از جدیدترین به قدیمی‌ترین)
-        post_ids = [str(item['id']) for item in items]   # بدون reversed
+        # 🌟 ترتیب natural: جدیدترین پست‌ها اول هستند
+        post_ids = [str(item['id']) for item in items]
         media_map = {}
 
         downloaded = 0
