@@ -117,36 +117,40 @@ class TelegramChannelScraper:
 
         await self._save_screenshot(page, "initial")
 
-        # پرش به آخرین (جدیدترین) پست‌ها
-        self.logger.info("⬇️ پرش به جدیدترین پست‌ها...")
-        try:
-            scroll_button_selectors = [
-                'button[title="Go to bottom"]',
-                'div[class*="scroll-to-bottom"]',
-                'div[class*="ScrollButton"]',
-                '[aria-label="Scroll to bottom"]',
-                'button:has(svg[class*="arrow-down"])',
-            ]
-            for sel in scroll_button_selectors:
+        # 🌟 پرش به جدیدترین پست‌ها (بدون اخطارهای بیهوده)
+        self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+        clicked = False
+
+        scroll_button_selectors = [
+            'button[title="Go to bottom"]',
+            'div[class*="scroll-to-bottom"]',
+            'div[class*="ScrollButton"]',
+            '[aria-label="Scroll to bottom"]',
+            'button:has(svg[class*="arrow-down"])',
+        ]
+
+        for sel in scroll_button_selectors:
+            try:
                 btn = page.locator(sel).first
                 if await btn.count() > 0:
-                    await btn.click(timeout=3000)
+                    await btn.click(timeout=5000)
                     self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                    await human_sleep(4, 0.4)
+                    clicked = True
+                    await human_sleep(3.5, 0.4)
                     break
-            else:
-                self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد.")
-        except Exception as e:
-            self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
+            except Exception:
+                continue
 
-        # 🌟 جمع‌آوری جدیدترین پست‌ها (با locator قوی‌تر)
+        if not clicked:
+            self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
+
+        # جمع‌آوری جدیدترین پست‌ها (با locator قوی‌تر)
         items = []
         seen_ids = set()
         scroll_attempts = 0
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
-                # 🔥 اصلاح بحرانی: await فراموش نشود
                 messages = await page.locator('div[data-message-id]').all()
                 # از پایین به بالا (جدیدترین اول) پیمایش می‌کنیم
                 for msg in reversed(messages):
@@ -198,7 +202,7 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
-        # 🌟 اسکرول به جدیدترین پست (اولین آیتم در لیست) برای آماده‌سازی دانلود
+        # آماده‌سازی viewport برای دانلود
         if items:
             first_id = items[0]['id']   # جدیدترین
             try:
@@ -367,7 +371,6 @@ class TelegramChannelScraper:
 
     # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        # 🌟 ترتیب natural: جدیدترین پست‌ها اول هستند
         post_ids = [str(item['id']) for item in items]
         media_map = {}
 
