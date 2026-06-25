@@ -1,41 +1,70 @@
-2026-06-25 13:26:45,817 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-25 13:26:45,818 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
-2026-06-25 13:26:55,735 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-25 13:26:57,616 [INFO] ⏳ منتظر نتایج...
-2026-06-25 13:27:04,416 [INFO] ✅ نام کانال 'bbcpersian' در صفحه یافت شد.
-2026-06-25 13:27:04,416 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
-2026-06-25 13:27:04,569 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
-2026-06-25 13:27:13,506 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-06-25 13:27:13,701 [INFO] ⬇️ پرش به جدیدترین پست‌ها...
-2026-06-25 13:27:13,740 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
-2026-06-25 13:27:17,335 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
-2026-06-25 13:27:17,507 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
-2026-06-25 13:27:21,161 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
-2026-06-25 13:27:21,190 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
-2026-06-25 13:27:21,191 [INFO] 📥 [1/5] پست 285019
-2026-06-25 13:27:23,138 [INFO] 📍 پست 285019 به viewport آورده شد. منتظر لود مدیاها...
-2026-06-25 13:27:24,932 [INFO] 🎯 15 المان مدیا در پست 285019 یافت شد.
-2026-06-25 13:27:39,284 [INFO] ✅ مستقیم: 285019_0.png (0.0 MB)
-2026-06-25 13:27:39,446 [INFO] ✅ مستقیم: 285019_0_1.png (0.0 MB)
-2026-06-25 13:27:43,073 [INFO] ✅ دانلود شد: 285019_1.jpg (0.2 MB)
-2026-06-25 13:27:47,993 [INFO] ✅ دانلود شد: 285019_2.jpg (0.2 MB)
-2026-06-25 13:27:53,129 [INFO] ✅ دانلود شد: 285019_3.jpg (0.2 MB)
-2026-06-25 13:27:58,336 [INFO] ✅ دانلود شد: 285019_4.jpg (0.2 MB)
-2026-06-25 13:28:03,514 [INFO] ✅ دانلود شد: 285019_5.jpg (0.1 MB)
-2026-06-25 13:28:09,566 [INFO] ✅ دانلود شد: 285019_6.jpg (0.2 MB)
-2026-06-25 13:28:21,194 [WARNING] ⏰ پست 285019 تایم‌اوت شد، رد می‌شود.
-2026-06-25 13:28:23,116 [INFO] 📥 [2/5] پست 285018
-2026-06-25 13:29:23,119 [WARNING] ⏰ پست 285018 تایم‌اوت شد، رد می‌شود.
-2026-06-25 13:29:25,025 [INFO] 📥 [3/5] پست 285017
-2026-06-25 13:30:25,026 [WARNING] ⏰ پست 285017 تایم‌اوت شد، رد می‌شود.
-2026-06-25 13:30:26,703 [INFO] 📥 [4/5] پست 285016
-2026-06-25 13:31:26,707 [WARNING] ⏰ پست 285016 تایم‌اوت شد، رد می‌شود.
-2026-06-25 13:31:27,691 [INFO] 📥 [5/5] پست 285015
-2026-06-25 13:32:27,691 [WARNING] ⏰ پست 285015 تایم‌اوت شد، رد می‌شود.
-2026-06-25 13:32:27,692 [INFO] 🖼️ 8 فایل رسانه دانلود شد.
-2026-06-25 13:32:27,692 [INFO] 📊 media_map برای 1 پست پر شد.
-2026-06-25 13:32:27,692 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
-2026-06-25 13:32:27,692 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
-2026-06-25 13:32:27,703 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
-2026-06-25 13:32:27,883 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
-2026-06-25 13:32:28,150 [INFO] ✅ پایان موفقیت‌آمیز.
+2026-06-25 13:44:48,733 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-25 13:44:48,733 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
+2026-06-25 13:45:08,976 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-25 13:45:10,600 [INFO] ⏳ منتظر نتایج...
+2026-06-25 13:45:17,913 [INFO] ✅ نام کانال 'bbcpersian' در صفحه یافت شد.
+2026-06-25 13:45:17,913 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-25 13:45:18,108 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
+2026-06-25 13:45:25,527 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-25 13:45:25,717 [INFO] ⬇️ پرش به جدیدترین پست‌ها...
+2026-06-25 13:45:28,724 [WARNING]    ⚠️ خطا در کلیک دکمه پرش: Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator("button[title=\"Go to bottom\"]").first
+    - locator resolved to <button type="button" title="Go to bottom" aria-label="Go to bottom" class="Button HtxjjRCC default secondary round">…</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div id="message-285025" data-message-id="285025" class="Message message-list-item first-in-group allow-selection last-in-group last-in-list has-views shown open">…</div> from <div class="with-bottom-snap Transition MessageList custom-scroll no-avatars no-composer with-default-bg scrolled">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div id="message-285025" data-message-id="285025" class="Message message-list-item first-in-group allow-selection last-in-group last-in-list has-views shown open">…</div> from <div class="with-bottom-snap Transition MessageList custom-scroll no-avatars no-composer with-default-bg scrolled">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    5 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div id="message-285025" data-message-id="285025" class="Message message-list-item first-in-group allow-selection last-in-group last-in-list has-views shown open">…</div> from <div class="with-bottom-snap Transition MessageList custom-scroll no-avatars no-composer with-default-bg scrolled">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+2026-06-25 13:45:28,794 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
+2026-06-25 13:45:28,984 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
+2026-06-25 13:45:33,046 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
+2026-06-25 13:45:33,080 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
+2026-06-25 13:45:33,080 [INFO] 📥 [1/5] پست 285025
+2026-06-25 13:45:35,027 [INFO] 📍 پست 285025 به viewport آورده شد. منتظر لود مدیاها...
+2026-06-25 13:45:36,130 [INFO] 🎯 6 مدیای واقعی در پست 285025 یافت شد.
+2026-06-25 13:46:35,003 [INFO] 📥 [2/5] پست 285019
+2026-06-25 13:47:39,918 [WARNING] ⚠️ المان پست 285019 بعد از ۴ تلاش پیدا نشد: Locator.scroll_into_view_if_needed: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator("[data-message-id=\"285019\"]").first
+
+2026-06-25 13:47:40,876 [INFO] 📥 [3/5] پست 285018
+2026-06-25 13:48:47,226 [WARNING] ⚠️ المان پست 285018 بعد از ۴ تلاش پیدا نشد: Locator.scroll_into_view_if_needed: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator("[data-message-id=\"285018\"]").first
+
+2026-06-25 13:48:48,661 [INFO] 📥 [4/5] پست 285017
+2026-06-25 13:49:54,678 [WARNING] ⚠️ المان پست 285017 بعد از ۴ تلاش پیدا نشد: Locator.scroll_into_view_if_needed: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator("[data-message-id=\"285017\"]").first
+
+2026-06-25 13:49:55,681 [INFO] 📥 [5/5] پست 285016
+2026-06-25 13:51:00,588 [WARNING] ⚠️ المان پست 285016 بعد از ۴ تلاش پیدا نشد: Locator.scroll_into_view_if_needed: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator("[data-message-id=\"285016\"]").first
+
+2026-06-25 13:51:00,589 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
+2026-06-25 13:51:00,589 [INFO] 📊 media_map برای 0 پست پر شد.
+2026-06-25 13:51:00,589 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-25 13:51:00,589 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-25 13:51:00,611 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
+2026-06-25 13:51:00,770 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
+2026-06-25 13:51:01,245 [INFO] ✅ پایان موفقیت‌آمیز.
