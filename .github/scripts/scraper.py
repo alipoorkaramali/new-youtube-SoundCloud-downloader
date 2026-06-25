@@ -12,14 +12,13 @@ from playwright_downloader import PlaywrightDownloader
 from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
-MAX_SCROLL_ATTEMPTS = 12
-SCROLL_UP = -2000
+MAX_SCROLL_ATTEMPTS = 8      # کاهش چشمگیر
+SCROLL_UP = -1200            # اسکرول محدودتر
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60
 
 # ═══════════════════ Human-like sleep ═══════════════════
 async def human_sleep(base: float, jitter: float = 0.4):
-    """خواب با زمان تصادفی حول مقدار base (base ± jitter) برای شبیه‌سازی رفتار انسانی"""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
@@ -72,9 +71,8 @@ class TelegramChannelScraper:
             if context:
                 await context.close()
             return
-        self.logger.info(f"📥 {len(items)} پست استخراج شد.")
+        self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
 
-        # دانلود رسانه‌ها با همان page و context (بدون باز کردن مرورگر جدید)
         media_map, downloaded = await self._download_media(items, page, context)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
@@ -90,13 +88,9 @@ class TelegramChannelScraper:
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    # ═══════════════════ استخراج پست‌ها (context باز می‌ماند) ═══════════════════
+    # ═══════════════════ استخراج پست‌ها (منطق جدید) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         from playwright.async_api import async_playwright
-
-        items = []
-        seen_ids = set()
-        last_count = 0
 
         p = await async_playwright().start()
         context = await p.chromium.launch_persistent_context(
@@ -122,8 +116,8 @@ class TelegramChannelScraper:
 
         await self._save_screenshot(page, "initial")
 
-        # پرش به آخرین پست‌ها
-        self.logger.info("⬇️ تلاش برای پرش به آخرین پست‌ها...")
+        # پرش به آخرین (جدیدترین) پست‌ها
+        self.logger.info("⬇️ پرش به جدیدترین پست‌ها...")
         try:
             scroll_button_selectors = [
                 'button[title="Go to bottom"]',
@@ -136,7 +130,7 @@ class TelegramChannelScraper:
                 btn = page.locator(sel).first
                 if await btn.count() > 0:
                     await btn.click(timeout=3000)
-                    self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری آخرین پست‌ها...")
+                    self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
                     await human_sleep(4, 0.4)
                     break
             else:
@@ -144,24 +138,19 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
 
+        # 🌟 جمع‌آوری جدیدترین پست‌ها (بدون اسکرول بی‌رویه به بالا)
+        items = []
+        seen_ids = set()
         scroll_attempts = 0
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
-                messages = page.locator(
-                    'div.message, div[data-message-id], article[role="article"], div.bubbles-group > div'
-                )
-                count = await messages.count()
-                self.logger.info(f"🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
-
-                for i in range(last_count, count):
+                # تمام المان‌های پیام مرئی
+                messages = page.locator('div.message, div[data-message-id], article[role="article"]').all()
+                # از پایین به بالا (جدیدترین اول) پیمایش می‌کنیم
+                for msg in reversed(messages):
                     try:
-                        msg = messages.nth(i)
                         msg_id = await msg.get_attribute('data-message-id')
-                        if not msg_id:
-                            inner = msg.locator('[data-message-id]').first
-                            if await inner.count() > 0:
-                                msg_id = await inner.get_attribute('data-message-id')
                         if not msg_id or msg_id in seen_ids:
                             continue
 
@@ -178,20 +167,21 @@ class TelegramChannelScraper:
                             'url': f"https://t.me/{self.channel}/{msg_id}"
                         })
                         seen_ids.add(msg_id)
+
+                        if len(items) >= self.limit:
+                            break
                     except Exception:
                         continue
-
-                last_count = count
-                self.logger.info(f"📊 {len(items)} پست یکتا جمع‌آوری شد.")
             except Exception as e:
                 self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
 
             if len(items) >= self.limit:
                 break
 
+            # اسکرول محدود به بالا فقط در صورت نیاز
             old_height = await page.evaluate("document.documentElement.scrollHeight")
-            await page.evaluate("window.scrollBy(0, -2000)")
-            await human_sleep(4, 0.5)
+            await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+            await human_sleep(2.5, 0.5)
             new_height = await page.evaluate("document.documentElement.scrollHeight")
 
             if new_height == old_height:
@@ -199,19 +189,24 @@ class TelegramChannelScraper:
             else:
                 scroll_attempts = 0
 
+        # برش نهایی به تعداد limit
+        items = items[:self.limit]
+        self.logger.info(f"📊 {len(items)} پست جدیدترین جمع‌آوری شد.")
+
+        # اسکرین‌شات فقط از پست‌های نهایی (limit تایی)
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
-        # 🌟 اسکرول به آخرین پست برای آماده‌سازی viewport دانلود
+        # 🌟 اسکرول به جدیدترین پست (اولین آیتم در لیست) برای آماده‌سازی دانلود
         if items:
-            last_id = items[-1]['id']
+            first_id = items[0]['id']   # جدیدترین
             try:
-                await page.locator(f'[data-message-id="{last_id}"]').scroll_into_view_if_needed()
+                await page.locator(f'[data-message-id="{first_id}"]').scroll_into_view_if_needed()
                 await human_sleep(1, 0.3)
             except Exception:
                 pass
 
-        return items[:self.limit], context, page
+        return items, context, page
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
@@ -371,8 +366,8 @@ class TelegramChannelScraper:
 
     # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        # 🌟 ترتیب معکوس: دانلود از جدیدترین (پایین‌ترین) به قدیمی‌ترین
-        post_ids = [str(item['id']) for item in reversed(items)]
+        # 🌟 ترتیب natural: جدیدترین پست‌ها اول هستند (items از جدیدترین به قدیمی‌ترین)
+        post_ids = [str(item['id']) for item in items]   # بدون reversed
         media_map = {}
 
         downloaded = 0
