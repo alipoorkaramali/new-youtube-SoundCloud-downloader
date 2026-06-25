@@ -1,47 +1,7 @@
-2026-06-25 13:10:11,199 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTV
-2026-06-25 13:10:11,199 [INFO] 🚀 شروع اسکریپر مستقل برای @IranintlTV (limit=5)
-2026-06-25 13:10:36,976 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-25 13:10:38,709 [INFO] ⏳ منتظر نتایج...
-2026-06-25 13:10:47,674 [INFO] ✅ نام کانال 'IranintlTV' در صفحه یافت شد.
-2026-06-25 13:10:47,675 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
-2026-06-25 13:10:47,877 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_IranintlTV_search_results_IranintlTV.png
-2026-06-25 13:10:55,404 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-06-25 13:10:55,628 [INFO] ⬇️ پرش به جدیدترین پست‌ها...
-2026-06-25 13:10:55,682 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
-2026-06-25 13:10:58,564 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
-2026-06-25 13:10:58,750 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
-2026-06-25 13:11:02,447 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
-2026-06-25 13:11:02,511 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
-2026-06-25 13:11:02,511 [INFO] 📥 [1/5] پست 344301
-2026-06-25 13:11:03,557 [INFO] 🎯 5 المان مدیا در پست 344301 یافت شد.
-2026-06-25 13:11:40,430 [ERROR] ❌ خطا در پست 344301: Locator.evaluate: Timeout 30000ms exceeded.
-Call log:
-  - waiting for locator("[data-message-id=\"344301\"]").first.locator("div.media-photo, div.media-video, div.document, a.media-photo, video, img[src], div[class*=\"media\"]").nth(1)
-
-2026-06-25 13:11:42,069 [INFO] 📥 [2/5] پست 344300
-2026-06-25 13:12:03,929 [WARNING] ⚠️ المان پست 344300 پیدا نشد (حتی با اسکرول): Locator.wait_for: Timeout 10000ms exceeded.
-Call log:
-  - waiting for locator("[data-message-id=\"344300\"]").first to be visible
-
-2026-06-25 13:12:06,169 [INFO] 📥 [3/5] پست 344299
-2026-06-25 13:12:28,096 [WARNING] ⚠️ المان پست 344299 پیدا نشد (حتی با اسکرول): Locator.wait_for: Timeout 10000ms exceeded.
-Call log:
-  - waiting for locator("[data-message-id=\"344299\"]").first to be visible
-
-2026-06-25 13:12:29,187 [INFO] 📥 [4/5] پست 344298
-2026-06-25 13:12:50,859 [WARNING] ⚠️ المان پست 344298 پیدا نشد (حتی با اسکرول): Locator.wait_for: Timeout 10000ms exceeded.
-Call log:
-  - waiting for locator("[data-message-id=\"344298\"]").first to be visible
-
-2026-06-25 13:12:52,420 [INFO] 📥 [5/5] پست 344297
-2026-06-25 13:13:14,393 [WARNING] ⚠️ المان پست 344297 پیدا نشد (حتی با اسکرول): Locator.wait_for: Timeout 10000ms exceeded.
-Call log:
-  - waiting for locator("[data-message-id=\"344297\"]").first to be visible
-
-2026-06-25 13:13:14,394 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
-2026-06-25 13:13:14,394 [INFO] 📊 media_map برای 0 پست پر شد.
-2026-06-25 13:13:14,394 [INFO] 📄 JSON: Download/telegram_downloads/IranintlTV/posts.json
-2026-06-25 13:13:14,394 [INFO] 📊 CSV: Download/telegram_downloads/IranintlTV/posts.csv
-2026-06-25 13:13:14,442 [INFO] 🌐 HTML: Download/telegram_downloads/IranintlTV/posts.html
-2026-06-25 13:13:14,593 [INFO] 📦 ZIP: Download/telegram_downloads/IranintlTV/IranintlTV_archive.zip
-2026-06-25 13:13:15,090 [INFO] ✅ پایان موفقیت‌آمیز.
+2026-06-25 14:03:44,495 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTV
+2026-06-25 14:03:44,495 [INFO] 🚀 شروع اسکریپر مستقل برای @IranintlTV (limit=5)
+2026-06-25 14:03:56,274 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-25 14:03:57,817 [INFO] ⏳ منتظر نتایج...
+2026-06-25 14:04:33,307 [ERROR] ❌ نتایج جستجو برای این کانال پیدا نشد (حتی پس از ۳۰ ثانیه).
+2026-06-25 14:04:33,471 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_IranintlTV_search_failed.png
+2026-06-25 14:04:33,719 [WARNING] هیچ پستی دریافت نشد.
