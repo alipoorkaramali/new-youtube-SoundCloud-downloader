@@ -66,7 +66,7 @@ class TelegramChannelScraper:
     async def _run_impl(self):
         self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
 
-        # 🌟 استخراج پست‌ها به همراه context و page (دیگر context بسته نمی‌شود)
+        # استخراج پست‌ها (context و page باز می‌مانند)
         items, context, page = await self._fetch_posts_from_telegram()
         if not items:
             self.logger.warning("هیچ پستی دریافت نشد.")
@@ -75,7 +75,7 @@ class TelegramChannelScraper:
             return
         self.logger.info(f"📥 {len(items)} پست استخراج شد.")
 
-        # 🌟 دانلود مدیا با همان page و context (فقط یک مرورگر باز می‌شود)
+        # دانلود رسانه‌ها با همان page و context (بدون باز کردن مرورگر جدید)
         media_map, downloaded = await self._download_media(items, page, context)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
 
@@ -85,22 +85,21 @@ class TelegramChannelScraper:
         gen.generate_html()
         gen.create_zip()
 
-        # 🌟 حالا دیگر context را می‌بندیم
+        # اکنون context را می‌بندیم
         if context:
             await context.close()
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    # ═══════════════════ استخراج پست‌ها (با مدیریت context) ═══════════════════
+    # ═══════════════════ استخراج پست‌ها (context باز می‌ماند) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
-        """برگرداندن لیست پست‌ها، context و page (context باز می‌ماند)"""
+        """برگرداندن (items, context, page) – context و page تا پایان دانلود باز می‌مانند."""
         from playwright.async_api import async_playwright
 
         items = []
         seen_ids = set()
         last_count = 0
 
-        # 🌟 به‌جای async with، context را دستی می‌سازیم تا بتوانیم بعداً ببندیم
         p = await async_playwright().start()
         context = await p.chromium.launch_persistent_context(
             user_data_dir=str(self.profile_dir),
@@ -205,7 +204,7 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
-        # 🌟 Context و page را برمی‌گردانیم، ولی نمی‌بندیم
+        # context و page را بدون بستن برمی‌گردانیم
         return items[:self.limit], context, page
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
@@ -270,13 +269,13 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
 
-        # ۵. کلیک روی اولین نتیجه
+        # ۵. کلیک روی اولین نتیجه (مکانیسم مقاوم)
         return await self._click_search_result(page)
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page) -> bool:
-        """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
-        # لایهٔ ۱: سلکتورهای رایج
+        """کلیک هوشمند: ابتدا سلکتورهای رایج، سپس JavaScript با نام کانال یا اولین آیتم."""
+        # لایهٔ ۱: سلکتورهای رایج با force click
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
@@ -295,7 +294,7 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
-        # لایهٔ ۲: کلیک با JavaScript روی اسم کانال
+        # لایهٔ ۲: کلیک با JavaScript روی نام کانال
         self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
         try:
             await page.evaluate(f'''(channel) => {{
@@ -375,29 +374,35 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
 
-    # ═══════════════════ دانلود رسانه‌ها (با page و context مشترک) ═══════════════════
+    # ═══════════════════ دانلود رسانه‌ها (یکپارچه با page و context اسکرپر) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        tasks = []
+        """دانلود مدیا با استفاده از همان page و context (بدون باز کردن مرورگر جدید)."""
+        # فقط شناسه‌های پست‌ها را به دانلودر می‌دهیم
+        post_ids = [str(item['id']) for item in items]
         media_map = {str(item['id']): [] for item in items}
-        for item in items:
-            post_url = item.get('url', '')
-            if post_url:
-                tasks.append((post_url, str(item['id'])))
 
         downloaded = 0
-        if tasks:
-            # 🌟 دانلودر از همان page و context استفاده می‌کند (بدون راه‌اندازی مجدد)
+        if post_ids:
             downloader = PlaywrightDownloader(
                 self.profile_dir, self.media_dir, self.max_media_bytes,
                 self.delay_between_posts
             )
-            await downloader.download_all(page, context, tasks)
+            # دانلودر مستقیماً روی page کار می‌کند
+            await downloader.download_all(page, context, post_ids)
 
+            # نقشهٔ مدیا را از فایل‌های دانلودشده می‌سازیم
             for f in self.media_dir.iterdir():
-                if f.is_file() and '_' in f.stem:
-                    pid = f.stem.split('_', 1)[0]
-                    if pid in media_map:
-                        media_map[pid].append(f"media/{f.name}")
-                        downloaded += 1
+                if f.is_file():
+                    # تلاش برای استخراج post_id از نام فایل (اگر با ساختار post_id_... ذخیره شده باشد)
+                    stem = f.stem
+                    if '_' in stem:
+                        pid = stem.split('_', 1)[0]
+                        if pid in media_map:
+                            media_map[pid].append(f"media/{f.name}")
+                            downloaded += 1
+                    else:
+                        # فایل‌های با نام اصلی (از download event) را هم به اولین post_id مناسب نسبت می‌دهیم
+                        # برای سادگی از این کار صرف‌نظر می‌کنیم (در صورت نیاز می‌توان آدرس داد)
+                        pass
 
         return media_map, downloaded
