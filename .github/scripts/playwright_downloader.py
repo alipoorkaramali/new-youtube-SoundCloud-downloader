@@ -13,6 +13,7 @@ logger = logging.getLogger("TelegramScraper")
 
 
 async def human_sleep(base: float, jitter: float = 0.4):
+    """خواب انسانی با کمی تصادف"""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
@@ -51,9 +52,10 @@ class PlaywrightDownloader:
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
+                # افزایش timeout کلی به ۶۰ ثانیه
                 await asyncio.wait_for(
                     self._process_post(page, post_id, media_map),
-                    timeout=45
+                    timeout=60
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"⏰ پست {post_id} تایم‌اوت شد، رد می‌شود.")
@@ -64,24 +66,39 @@ class PlaywrightDownloader:
 
     async def _process_post(self, page: Page, post_id: str,
                             media_map: Dict[str, List[str]]) -> None:
+        """پردازش یک پست با تلاش مجدد برای نمایش در viewport"""
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        try:
-            await message_locator.scroll_into_view_if_needed(timeout=10000)
-            await human_sleep(0.8, 0.3)
-            await message_locator.wait_for(state="visible", timeout=15000)
-        except Exception:
+        # 🌟 تلاش چندباره برای نمایان کردن پست (مقابله با lazy loading شدید)
+        success = False
+        for attempt in range(4):
             try:
-                await page.evaluate(f'''(id) => {{
-                    const el = document.querySelector(`[data-message-id="${{id}}"]`);
-                    if (el) el.scrollIntoView({{ behavior: "smooth", block: "center" }});
-                }}''', post_id)
-                await human_sleep(1.5, 0.4)
-                await message_locator.wait_for(state="visible", timeout=10000)
+                await message_locator.scroll_into_view_if_needed(timeout=15000)
+                # صبر بیشتر در اولین تلاش
+                wait = 1.5 if attempt == 0 else 1.0
+                await human_sleep(wait, 0.4)
+                await message_locator.wait_for(state="visible", timeout=18000)
+                await human_sleep(0.8, 0.3)
+                if await message_locator.count() > 0:
+                    success = True
+                    break
             except Exception as e:
-                logger.warning(f"⚠️ المان پست {post_id} پیدا نشد (حتی با اسکرول): {e}")
-                return
+                if attempt < 3:
+                    # اسکرول کمکی و صبر دوباره
+                    await page.evaluate("window.scrollBy(0, -800)")
+                    await human_sleep(2.0, 0.5)
+                else:
+                    logger.warning(f"⚠️ المان پست {post_id} بعد از ۴ تلاش پیدا نشد: {e}")
+                    return
 
+        if not success:
+            return
+
+        logger.info(f"📍 پست {post_id} به viewport آورده شد. منتظر لود مدیاها...")
+        # 🌟 زمان بیشتر برای لود اولیه عکس‌ها/ویدیوها
+        await human_sleep(1.5, 0.4)
+
+        # استخراج المان‌های مدیا
         media_elements = message_locator.locator(
             'div.media-photo, div.media-video, div.document, a.media-photo, '
             'video, img[src], div[class*="media"]'
@@ -92,9 +109,11 @@ class PlaywrightDownloader:
             return
 
         logger.info(f"🎯 {media_count} المان مدیا در پست {post_id} یافت شد.")
-        await human_sleep(0.5, 0.2)
+        # 🌟 صبر برای لود کامل همهٔ مدیاها
+        await human_sleep(2.0, 0.5)
 
         for i in range(media_count):
+            # ساخت locator تازه برای هر المان
             msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
             current_element = msg_locator.locator(
                 'div.media-photo, div.media-video, div.document, a.media-photo, '
@@ -166,7 +185,9 @@ class PlaywrightDownloader:
         ]
         viewer_selector = ", ".join(viewer_selectors)
         try:
-            await page.wait_for_selector(viewer_selector, timeout=8000)
+            await page.wait_for_selector(viewer_selector, timeout=10000)
+            # 🌟 صبر برای لود کامل عکس در بیننده
+            await human_sleep(1.8, 0.4)
         except Exception:
             logger.debug("Media Viewer باز نشد.")
             await self._direct_download_from_element(page, element, post_id, idx, media_map)
@@ -251,6 +272,7 @@ class PlaywrightDownloader:
             logger.error(f"❌ ذخیره دانلود: {e}")
 
     async def _human_click(self, locator):
+        """کلیک همراه با حرکت تصادفی موس و تأخیر بیشتر"""
         try:
             await locator.scroll_into_view_if_needed()
             box = await locator.bounding_box()
@@ -258,7 +280,8 @@ class PlaywrightDownloader:
                 x = box['x'] + box['width'] / 2 + random.uniform(-5, 5)
                 y = box['y'] + box['height'] / 2 + random.uniform(-5, 5)
                 await locator.page.mouse.move(x, y)
-            await human_sleep(0.3, 0.4)
+            # 🌟 تأخیر بیشتر قبل از کلیک
+            await human_sleep(0.6, 0.3)
             await locator.click(timeout=5000, force=True)
         except Exception:
             await locator.click(timeout=5000, force=True)
