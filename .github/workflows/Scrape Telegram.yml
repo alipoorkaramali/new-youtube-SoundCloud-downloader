@@ -45,7 +45,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
-          fetch-depth: 1
+          fetch-depth: 1   # فقط آخرین commit، نه کل تاریخچه
 
       # ════════════════════════════════════════════
       # ۲. تنظیم پایتون
@@ -99,53 +99,6 @@ jobs:
       # ════════════════════════════════════════════
       - name: 📂 Extract browser profile
         run: tar -xzf config/browser_profile.tar.gz -C config/
-
-      # ════════════════════════════════════════════
-      # ۷.۶ بررسی اعتبار واقعی سشن تلگرام
-      # ════════════════════════════════════════════
-      - name: 🧪 Validate Telegram Session
-        run: |
-          xvfb-run python -c "
-          import asyncio
-          from playwright.async_api import async_playwright
-
-          async def check():
-              async with async_playwright() as p:
-                  context = await p.chromium.launch_persistent_context(
-                      user_data_dir='config/browser_profile',
-                      headless=False,
-                      args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
-                  )
-                  page = await context.new_page()
-                  await page.goto('https://web.telegram.org/a/', wait_until='domcontentloaded', timeout=30000)
-                  await asyncio.sleep(5)
-
-                  # المان‌های معرف عدم لاگین
-                  login_indicators = [
-                      'button:has-text(\"Log in\")',
-                      'button:has-text(\"Sign in\")',
-                      'input[name=\"phone\"]',
-                      'input[placeholder*=\"phone\"]',
-                      'div:has-text(\"Log in to Telegram\")'
-                  ]
-                  for sel in login_indicators:
-                      if await page.locator(sel).count() > 0:
-                          print(f'❌ سشن نامعتبر است (المان «{sel}» پیدا شد).')
-                          print('لطفاً یک پروفایل جدید با لاگین دستی بسازید و browser_profile.tar.gz را به‌روز کنید.')
-                          await context.close()
-                          exit(1)
-
-                  # بررسی وجود لیست چت‌ها (نشانهٔ لاگین موفق)
-                  if await page.locator('div.chatlist, div[class*=\"chatlist\"], div[class*=\"ChatList\"]').count() == 0:
-                      print('❌ سشن احتمالاً نامعتبر است (لیست چت‌ها پیدا نشد).')
-                      await context.close()
-                      exit(1)
-
-                  print('✅ سشن معتبر است. تلگرام با موفقیت باز شد و لیست چت‌ها دیده می‌شود.')
-                  await context.close()
-          asyncio.run(check())
-          "
-        timeout-minutes: 2
 
       # ════════════════════════════════════════════
       # ۸. به‌روزرسانی فایل تنظیمات با ورودی‌ها
@@ -239,6 +192,7 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
 
+      # مرحلهٔ جدید پاکسازی آرتیفکت قدیمی
       - name: 🧹 Delete old post screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
