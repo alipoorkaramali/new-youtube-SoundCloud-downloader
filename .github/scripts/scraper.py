@@ -27,7 +27,7 @@ class TelegramChannelScraper:
     def __init__(self, config: Config):
         self.config = config
         self.channel = config.channel.lstrip('@')
-        self.channel_name = getattr(config, 'channel_name', '') or ''   # ← نام نمایشی (اختیاری)
+        self.channel_name = getattr(config, 'channel_name', '') or ''
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
@@ -241,12 +241,10 @@ class TelegramChannelScraper:
             pass
 
         # ۴. انتظار هوشمند برای نتایج (بر اساس المان نتیجه + نام کانال)
-        # اگر کاربر نام نمایشی وارد کرده باشد، همان را مبنا قرار می‌دهیم، وگرنه نام کاربری
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
         for wait_time in [8, 12, 16]:
             await human_sleep(wait_time, 0.3)
-            # بررسی وجود نام کانال در حداقل یک المان نتیجه
             text_exists = await page.evaluate(f'''(term) => {{
                 const results = document.querySelectorAll(
                     'div.chatlist-item, div.search-result, a[data-peer-id], div[class*="ListItem"]'
@@ -272,13 +270,30 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
 
-        # ۵. کلیک روی اولین نتیجه (مکانیسم اصلی و قدرتمند)
-        return await self._click_search_result(page)
+        # ۵. کلیک روی اولین نتیجه (نسخه بهبودیافته)
+        return await self._click_search_result(page, search_term)
 
-    # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
-    async def _click_search_result(self, page) -> bool:
-        """کلیک هوشمند با تأخیرهای انسانی"""
-        # لایهٔ ۱: سلکتورهای رایج
+    # ═══════════════════ کلیک روی نتیجه (روش مقاوم با get_by_text) ═══════════════════
+    async def _click_search_result(self, page, search_term: str) -> bool:
+        """کلیک هوشمند با اولویت بالای get_by_text + روش‌های قبلی به‌عنوان پشتیبان"""
+        # لایهٔ ۱: استفاده از get_by_text (بسیار مقاوم)
+        self.logger.info(f"🔍 تلاش کلیک با get_by_text روی '{search_term}'...")
+        try:
+            # ممکن است چندین المان با این متن وجود داشته باشد؛ اولین را برمی‌داریم
+            item = page.get_by_text(search_term, exact=False).first
+            if await item.count() > 0:
+                # کلیک با force (حتی اگر عنصر پوشانده شده باشد)
+                await item.click(timeout=8000, force=True)
+                await human_sleep(5, 0.4)
+                if await page.locator('div.message, div[data-message-id]').count() > 0:
+                    self.logger.info("✅ کانال با موفقیت باز شد (get_by_text).")
+                    return True
+                else:
+                    self.logger.debug("get_by_text کلیک کرد ولی پیام‌ها ظاهر نشدند.")
+        except Exception as e:
+            self.logger.debug(f"get_by_text ناموفق: {e}")
+
+        # لایهٔ ۲: سلکتورهای رایج با force click
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
@@ -297,11 +312,9 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
-        # لایهٔ ۲: کلیک با JavaScript روی اسم کانال
+        # لایهٔ ۳: کلیک با JavaScript روی اسم کانال
         self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
         try:
-            # اینجا هم از search_term استفاده می‌کنیم
-            search_term = self.channel_name if self.channel_name else self.channel
             await page.evaluate(f'''(term) => {{
                 const els = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"], div[class*="name"], span[class*="peer-title"]'));
                 const target = els.find(el => el.textContent.trim().toLowerCase() === term.toLowerCase());
@@ -316,7 +329,7 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.debug("JavaScript name click: %s", e)
 
-        # لایهٔ ۳: کلیک روی اولین آیتم
+        # لایهٔ ۴: کلیک روی اولین آیتم
         self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
             await page.evaluate('''() => {
