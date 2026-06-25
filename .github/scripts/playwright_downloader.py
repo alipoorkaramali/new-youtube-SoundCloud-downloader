@@ -20,19 +20,11 @@ async def human_sleep(base: float, jitter: float = 0.4):
 
 class PlaywrightDownloader:
     """
-    **نسخهٔ دیباگ راست‌کلیک**
-    فقط راست‌کلیک روی مدیاها انجام می‌دهد، اسکرین‌شات می‌گیرد، سپس با یک کلیک چپ
-    در جای امن منو را می‌بندد و به سراغ المان بعدی می‌رود.
-    هیچ دانلودی انجام نمی‌شود.
+    **نسخهٔ دیباگ راست‌کلیک – یک کلیک روی کل پیام**
+    برای هر پست، یک بار روی حباب پیام راست‌کلیک می‌کند، اسکرین‌شات می‌گیرد،
+    منو را با کلیک چپ می‌بندد و به پست بعدی می‌رود.
+    هیچ پردازشی روی مدیاهای درون پیام انجام نمی‌شود.
     """
-
-    MIME_TO_EXT = {
-        "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",
-        "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm",
-        "audio/mpeg": "mp3", "audio/ogg": "ogg", "application/pdf": "pdf",
-        "application/zip": "zip", "application/x-rar-compressed": "rar",
-        "application/octet-stream": "bin",
-    }
 
     def __init__(self, profile_dir: Path, media_dir: Path, max_bytes: int,
                  delay: float = 5.0, max_retries: int = 2):
@@ -43,13 +35,13 @@ class PlaywrightDownloader:
         self.max_retries = max_retries
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
-        # پوشهٔ مخصوص اسکرین‌شات‌های دیباگ راست‌کلیک
+        # پوشهٔ دیباگ
         self.debug_dir = self.media_dir.parent / "debug_rightclick"
         self.debug_dir.mkdir(parents=True, exist_ok=True)
 
     async def download_all(self, page: Page, context, post_ids: List[str],
                            media_map: Optional[Dict[str, List[str]]] = None) -> None:
-        """حلقهٔ اصلی – فقط راست‌کلیک، اسکرین‌شات، بستن با کلیک چپ"""
+        """حلقهٔ اصلی – فقط راست‌کلیک روی پیام، اسکرین‌شات، بستن با کلیک چپ"""
         if not post_ids:
             logger.info("هیچ پستی برای بررسی وجود ندارد.")
             return
@@ -59,7 +51,7 @@ class PlaywrightDownloader:
             try:
                 await asyncio.wait_for(
                     self._process_post(page, post_id),
-                    timeout=75
+                    timeout=45      # کاهش timeout چون کار زیادی انجام نمی‌شود
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"⏰ پست {post_id} تایم‌اوت کلی شد، رد می‌شود.")
@@ -69,12 +61,12 @@ class PlaywrightDownloader:
                 await human_sleep(self.delay, 0.5)
 
     async def _process_post(self, page: Page, post_id: str) -> None:
-        """نمایش پست، سپس راست‌کلیک روی هر المان مدیا، اسکرین‌شات، بستن با کلیک چپ"""
+        """نمایان کردن پست، راست‌کلیک روی خود پیام، اسکرین‌شات، بستن منو"""
         logger.info(f"📍 شروع بررسی پست {post_id}")
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # تلاش برای نمایان کردن پست
+        # تلاش برای نمایان کردن پست (۵ تلاش مثل قبل)
         success = False
         for attempt in range(5):
             try:
@@ -101,88 +93,40 @@ class PlaywrightDownloader:
         if not success:
             return
 
-        logger.info(f"   📍 پست {post_id} آماده شد. منتظر لود کامل...")
-        await human_sleep(2.2, 0.5)
+        logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک روی پیام...")
+        await human_sleep(1.5, 0.4)
 
-        # استخراج المان‌های مدیا
-        media_elements = message_locator.locator(
-            'div.media-photo, div.media-video, div.document, a.media-photo, '
-            'video, img[src], div[class*="media"]'
-        )
-        media_count = await media_elements.count()
-        logger.info(f"   🔍 تعداد المان‌های مدیا یافت‌شده: {media_count}")
-        if media_count == 0:
-            logger.debug(f"📝 پست {post_id} بدون مدیا.")
-            return
+        try:
+            # ۱. راست‌کلیک روی مرکز حباب پیام
+            box = await message_locator.bounding_box()
+            if box:
+                x = box['x'] + box['width'] / 2
+                y = box['y'] + box['height'] / 2
+                await page.mouse.click(x, y, button='right')
+                logger.info(f"   🖱️ راست‌کلیک روی پیام انجام شد در ({x:.0f}, {y:.0f})")
+            else:
+                await message_locator.click(button='right')
+                logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
 
-        # فیلتر visible
-        visible_indices = []
-        for i in range(media_count):
+            # ۲. صبر برای ظاهر شدن منوی context
+            await human_sleep(1.5, 0.3)
+
+            # ۳. اسکرین‌شات از صفحه
+            screenshot_path = self.debug_dir / f"rightclick_{post_id}.png"
+            await page.screenshot(path=screenshot_path, full_page=False)
+            logger.info(f"   📸 اسکرین‌شات ذخیره شد: {screenshot_path.name}")
+
+            # ۴. بستن منو با کلیک چپ در نقطه‌ای امن
+            await page.mouse.click(10, 10)
+            await human_sleep(0.3, 0.2)
+
+        except Exception as e:
+            logger.warning(f"   ⚠️ خطا در پردازش پست {post_id}: {e}")
             try:
-                el = media_elements.nth(i)
-                if await el.is_visible(timeout=6000):
-                    visible_indices.append(i)
-                    logger.debug(f"   ✅ المان {i} visible است")
-                else:
-                    logger.debug(f"   ⚠️ المان {i} visible نیست")
-            except Exception as e:
-                logger.debug(f"   ❌ خطا در بررسی visibility المان {i}: {e}")
-
-        if not visible_indices:
-            logger.debug(f"📝 پست {post_id} مدیای visible ندارد.")
-            return
-
-        logger.info(f"🎯 {len(visible_indices)} مدیای واقعی در پست {post_id} یافت شد.")
-        await human_sleep(1.8, 0.4)
-
-        # برای هر المان visible: راست‌کلیک، اسکرین‌شات، سپس کلیک چپ برای بستن منو
-        for i in visible_indices:
-            logger.info(f"   ▶️ راست‌کلیک روی المان {i} از پست {post_id}")
-            try:
-                msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
-                current_element = msg_locator.locator(
-                    'div.media-photo, div.media-video, div.document, a.media-photo, '
-                    'video, img[src], div[class*="media"]'
-                ).nth(i)
-
-                await human_sleep(1.3, 0.4)
-                await current_element.wait_for(state="visible", timeout=12000)
-                logger.debug(f"   ✅ المان {i} visible شد")
-
-                # ۱. راست‌کلیک روی مرکز المان
-                box = await current_element.bounding_box()
-                if box:
-                    x = box['x'] + box['width'] / 2
-                    y = box['y'] + box['height'] / 2
-                    await page.mouse.click(x, y, button='right')
-                    logger.info(f"   🖱️ راست‌کلیک انجام شد در ({x:.0f}, {y:.0f})")
-                else:
-                    await current_element.click(button='right')
-                    logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
-
-                # ۲. کمی صبر برای ظاهر شدن منو
-                await human_sleep(1.5, 0.3)
-
-                # ۳. اسکرین‌شات از کل صفحه (با منوی باز)
-                screenshot_path = self.debug_dir / f"rightclick_{post_id}_{i}.png"
-                await page.screenshot(path=screenshot_path, full_page=False)
-                logger.info(f"   📸 اسکرین‌شات ذخیره شد: {screenshot_path.name}")
-
-                # ۴. بستن منوی context با کلیک چپ در نقطه‌ای امن (گوشهٔ بالا‑چپ)
-                await page.mouse.click(10, 10)          # دور از المان‌ها
-                await human_sleep(0.3, 0.2)
-
-            except Exception as e:
-                logger.warning(f"   ⚠️ خطا در پردازش المان {i} پست {post_id}: {e}")
-                # اسکرین‌شات خطا
-                try:
-                    path = self.debug_dir / f"error_{post_id}_{i}.png"
-                    await page.screenshot(path=path)
-                    logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
-                except:
-                    pass
-                continue
+                path = self.debug_dir / f"error_{post_id}.png"
+                await page.screenshot(path=path)
+                logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
+            except:
+                pass
 
         logger.info(f"   ✅ پایان بررسی پست {post_id}")
-
-    # تمام متدهای دانلود حذف شده‌اند.
