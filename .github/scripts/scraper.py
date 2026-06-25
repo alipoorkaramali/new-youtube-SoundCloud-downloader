@@ -19,6 +19,7 @@ OVERALL_TIMEOUT = 35 * 60
 
 # ═══════════════════ Human-like sleep ═══════════════════
 async def human_sleep(base: float, jitter: float = 0.4):
+    """خواب با زمان تصادفی حول مقدار base (base ± jitter) برای شبیه‌سازی رفتار انسانی"""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
@@ -138,15 +139,15 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
 
-        # 🌟 جمع‌آوری جدیدترین پست‌ها (بدون اسکرول بی‌رویه به بالا)
+        # 🌟 جمع‌آوری جدیدترین پست‌ها (با locator قوی‌تر)
         items = []
         seen_ids = set()
         scroll_attempts = 0
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
-                # تمام المان‌های پیام مرئی
-                messages = page.locator('div.message, div[data-message-id], article[role="article"]').all()
+                # استفاده از locator دقیق‌تر: فقط div با data-message-id
+                messages = page.locator('div[data-message-id]').all()
                 # از پایین به بالا (جدیدترین اول) پیمایش می‌کنیم
                 for msg in reversed(messages):
                     try:
