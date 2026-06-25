@@ -65,12 +65,15 @@ class PlaywrightDownloader:
 
     async def _process_post(self, page: Page, post_id: str, media_map: Dict[str, List[str]]) -> None:
         """پردازش یک پست با تلاش قوی‌تر برای نمایش و فیلتر مدیاهای واقعی"""
+        logger.info(f"📍 شروع پردازش پست {post_id}")
+
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
         # تلاش قوی‌تر برای نمایان کردن پست (۵ تلاش)
         success = False
         for attempt in range(5):
             try:
+                logger.debug(f"   🔄 تلاش {attempt+1} برای نمایان کردن پست")
                 await message_locator.scroll_into_view_if_needed(timeout=20000)
                 wait = 1.8 if attempt == 0 else 1.2
                 await human_sleep(wait, 0.4)
@@ -79,9 +82,11 @@ class PlaywrightDownloader:
 
                 if await message_locator.count() > 0:
                     success = True
+                    logger.debug(f"   ✅ پست بعد از {attempt+1} تلاش نمایان شد")
                     break
             except Exception:
                 if attempt < 4:
+                    logger.debug(f"   🔄 تلاش ناموفق — اسکرول کمکی و صبر دوباره")
                     await page.evaluate("window.scrollBy(0, -1200)")
                     await human_sleep(2.5, 0.5)
                 else:
@@ -91,8 +96,7 @@ class PlaywrightDownloader:
         if not success:
             return
 
-        # 🌟 افزایش اندکی برای لود کامل‌تر
-        logger.info(f"📍 پست {post_id} آماده شد. منتظر لود کامل...")
+        logger.info(f"   📍 پست {post_id} آماده شد. منتظر لود کامل...")
         await human_sleep(2.2, 0.5)
 
         # استخراج المان‌های مدیا
@@ -101,60 +105,63 @@ class PlaywrightDownloader:
             'video, img[src], div[class*="media"]'
         )
         media_count = await media_elements.count()
+        logger.info(f"   🔍 تعداد المان‌های مدیا یافت‌شده: {media_count}")
         if media_count == 0:
             logger.debug(f"📝 پست {post_id} بدون مدیا.")
             return
 
-        # فیلتر visible با timeout افزایش‌یافته
+        # فیلتر visible
         visible_indices = []
         for i in range(media_count):
             try:
                 el = media_elements.nth(i)
                 if await el.is_visible(timeout=6000):
                     visible_indices.append(i)
-            except Exception:
-                continue
+                    logger.debug(f"   ✅ المان {i} visible است")
+                else:
+                    logger.debug(f"   ⚠️ المان {i} visible نیست")
+            except Exception as e:
+                logger.debug(f"   ❌ خطا در بررسی visibility المان {i}: {e}")
 
         if not visible_indices:
             logger.debug(f"📝 پست {post_id} مدیای visible ندارد.")
             return
 
         logger.info(f"🎯 {len(visible_indices)} مدیای واقعی در پست {post_id} یافت شد.")
-        # صبر کوتاه قبل از پردازش تکتک
         await human_sleep(1.8, 0.4)
 
-        # پردازش فقط المان‌های visible با مدیریت خطا برای هرکدام
         for i in visible_indices:
+            logger.info(f"   ▶️ شروع پردازش المان {i} از پست {post_id}")
             try:
-                # ساخت locator تازه
                 msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
                 current_element = msg_locator.locator(
                     'div.media-photo, div.media-video, div.document, a.media-photo, '
                     'video, img[src], div[class*="media"]'
                 ).nth(i)
 
-                # تأخیر بیشتر قبل از پردازش و timeout بالاتر
                 await human_sleep(1.3, 0.4)
                 await current_element.wait_for(state="visible", timeout=12000)
+                logger.debug(f"   ✅ المان {i} visible شد")
 
                 media_type = await self._detect_media_type(current_element)
+                logger.info(f"   🏷️ نوع مدیا تشخیص داده شد: {media_type}")
+
                 if media_type == "document":
                     await self._download_document(page, current_element, post_id, i, media_map)
                 else:
                     await self._download_media_viewer(page, current_element, post_id, i, media_map)
             except Exception as e:
-                logger.debug(f"المان {i} پست {post_id} رد شد: {e}")
+                logger.warning(f"   ⚠️ المان {i} پست {post_id} رد شد: {e}")
                 continue
 
         if post_id in media_map:
             logger.info(f"📦 پست {post_id}: {len(media_map[post_id])} رسانه دانلود شد.")
 
-    # ═══════════════════ بقیهٔ متدها (بدون تغییر) ═══════════════════
-
     async def _detect_media_type(self, element) -> str:
         has_img = await element.evaluate("el => !!el.querySelector('img')")
         has_video = await element.evaluate("el => !!el.querySelector('video, div.media-video')")
         has_file = await element.evaluate("el => !!el.querySelector('a[href*=\"/file/\"]')")
+        logger.debug(f"   🔎 تشخیص: img={has_img}, video={has_video}, file={has_file}")
         if has_file:
             return "document"
         if has_video:
@@ -168,37 +175,47 @@ class PlaywrightDownloader:
 
     async def _download_document(self, page: Page, element, post_id: str,
                                  idx: int, media_map: Dict[str, List[str]]):
+        logger.info(f"   📄 دانلود فایل (document) شروع شد")
         download_occurred = [False]
 
         async def on_download(download: Download):
             download_occurred[0] = True
+            logger.info(f"   📥 رویداد دانلود فعال شد: {download.suggested_filename}")
             await self._save_download(download, post_id, idx, media_map)
 
         page.on("download", on_download)
         try:
             await self._human_click(element)
+            logger.info(f"   ✅ کلیک روی المان فایل انجام شد")
             await human_sleep(3, 0.4)
             if not download_occurred[0]:
                 download_btn = element.locator(
                     'button[aria-label="Download"], [title="Download"], .icon-download, [class*="download"]'
                 ).first
-                if await download_btn.count() > 0:
+                btn_count = await download_btn.count()
+                logger.info(f"   🔍 تعداد دکمه دانلود فایل: {btn_count}")
+                if btn_count > 0:
                     await self._human_click(download_btn)
+                    logger.info(f"   ✅ کلیک روی دکمه دانلود فایل انجام شد")
                     await human_sleep(3, 0.4)
         except Exception as e:
-            logger.debug(f"خطا در کلیک فایل: {e}")
+            logger.warning(f"   ⚠️ خطا در کلیک فایل: {e}")
         finally:
             page.remove_listener("download", on_download)
 
         if not download_occurred[0]:
+            logger.info(f"   🔄 رویداد دانلود فعال نشد — رفتن به fallback")
             await self._direct_download_from_element(page, element, post_id, idx, media_map)
 
     async def _download_media_viewer(self, page: Page, element, post_id: str,
                                      idx: int, media_map: Dict[str, List[str]]):
+        logger.info(f"   🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد")
         try:
             await self._human_click(element)
+            logger.info(f"   ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...")
+            await human_sleep(1.5, 0.4)
         except Exception as e:
-            logger.debug(f"کلیک اولیه ناموفق: {e}")
+            logger.warning(f"   ❌ کلیک اولیه ناموفق: {e}")
             return
 
         viewer_selectors = [
@@ -207,10 +224,11 @@ class PlaywrightDownloader:
         ]
         viewer_selector = ", ".join(viewer_selectors)
         try:
-            await page.wait_for_selector(viewer_selector, timeout=10000)
-            await human_sleep(1.8, 0.4)
-        except Exception:
-            logger.debug("Media Viewer باز نشد.")
+            await page.wait_for_selector(viewer_selector, timeout=12000)
+            logger.info(f"   ✅ Media Viewer باز شد")
+            await human_sleep(2.2, 0.5)   # صبر بیشتر
+        except Exception as e:
+            logger.warning(f"   ❌ Media Viewer باز نشد: {e}")
             await self._direct_download_from_element(page, element, post_id, idx, media_map)
             return
 
@@ -221,20 +239,24 @@ class PlaywrightDownloader:
 
             async def on_download(download: Download):
                 download_occurred[0] = True
+                logger.info(f"   📥 رویداد دانلود در آلبوم: {download.suggested_filename}")
                 await self._save_download(download, post_id, current_album_idx, media_map)
 
             page.on("download", on_download)
             try:
                 download_btn = page.locator(
-                    'button[aria-label="Download"], [title="Download"], .btn-download'
+                    'button[aria-label="Download"], [title="Download"], .btn-download, button:has(svg)'
                 ).first
-                if await download_btn.count() > 0:
+                btn_count = await download_btn.count()
+                logger.info(f"   🔍 تعداد دکمه دانلود در Media Viewer: {btn_count}")
+                if btn_count > 0:
                     await self._human_click(download_btn)
-                    await human_sleep(2, 0.3)
+                    logger.info(f"   ✅ کلیک روی دکمه دانلود در Media Viewer انجام شد")
+                    await human_sleep(3, 0.5)
                 else:
-                    logger.debug("دکمهٔ دانلود در Media Viewer پیدا نشد.")
+                    logger.warning("   ⚠️ دکمه دانلود در Media Viewer پیدا نشد!")
             except Exception as e:
-                logger.debug(f"خطا در دانلود آیتم آلبوم: {e}")
+                logger.warning(f"   ❌ خطا در کلیک دکمه دانلود: {e}")
             finally:
                 page.remove_listener("download", on_download)
 
@@ -244,29 +266,37 @@ class PlaywrightDownloader:
                 'button[aria-label="Next"], [title="Next"], .btn-next, '
                 'div[class*="nav-next"], button:has(svg[class*="arrow"])'
             ).first
-            if await next_btn.count() > 0:
+            next_count = await next_btn.count()
+            logger.debug(f"   🔍 دکمه Next: {next_count}")
+            if next_count > 0:
                 try:
                     await self._human_click(next_btn)
+                    logger.info(f"   ➡️ رفتن به آیتم بعدی آلبوم")
                     await human_sleep(1.5, 0.4)
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"   ⚠️ خطا در کلیک Next: {e}")
                     break
             else:
+                logger.debug(f"   🏁 آلبوم به پایان رسید")
                 break
 
         await self._close_media_viewer(page)
 
     async def _close_media_viewer(self, page: Page):
+        logger.debug(f"   🚪 بستن Media Viewer")
         close_btn = page.locator('button[aria-label="Close"], [title="Close"], .btn-close').first
         if await close_btn.count() > 0:
             try:
                 await close_btn.click(timeout=3000)
                 await human_sleep(0.5, 0.2)
+                logger.debug(f"   ✅ با دکمه بسته شد")
                 return
             except Exception:
                 pass
         try:
             await page.keyboard.press("Escape")
             await human_sleep(0.5, 0.2)
+            logger.debug(f"   ✅ با کلید Escape بسته شد")
         except Exception:
             pass
 
@@ -307,6 +337,7 @@ class PlaywrightDownloader:
 
     async def _direct_download_from_element(self, page: Page, element, post_id: str,
                                             idx: int, media_map: Dict[str, List[str]]):
+        logger.info(f"   🔄 Fallback: استخراج لینک‌های مستقیم شروع شد")
         links = await element.evaluate('''(el) => {
             const links = new Set();
             const add = (url) => { if (url && url.startsWith('http')) links.add(url); };
@@ -315,7 +346,9 @@ class PlaywrightDownloader:
             el.querySelectorAll('a[href*="/file/"]').forEach(a => add(a.href));
             return Array.from(links);
         }''')
+        logger.info(f"   🔗 {len(links)} لینک در fallback پیدا شد")
         if not links:
+            logger.debug("   ⚠️ هیچ لینکی پیدا نشد.")
             return
         for link in links:
             for attempt in range(self.max_retries + 1):
@@ -338,6 +371,8 @@ class PlaywrightDownloader:
                         logger.info(f"✅ مستقیم: {filepath.name} ({len(body)/1024/1024:.1f} MB)")
                         media_map.setdefault(post_id, []).append(f"media/{filepath.name}")
                         break
+                    else:
+                        logger.warning(f"⚠️ HTTP {resp.status} برای {link}")
                 except Exception as e:
                     logger.error(f"❌ خطای دانلود: {e}")
                 if attempt < self.max_retries:
