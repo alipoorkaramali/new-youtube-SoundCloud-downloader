@@ -52,7 +52,6 @@ class PlaywrightDownloader:
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
-                # افزایش timeout کلی به ۷۵ ثانیه
                 await asyncio.wait_for(
                     self._process_post(page, post_id, media_map),
                     timeout=75
@@ -64,36 +63,37 @@ class PlaywrightDownloader:
             if idx < len(post_ids):
                 await human_sleep(self.delay, 0.5)
 
-    async def _process_post(self, page: Page, post_id: str,
-                            media_map: Dict[str, List[str]]) -> None:
-        """پردازش یک پست با تلاش مجدد برای نمایش و فیلتر مدیاهای واقعی"""
+    async def _process_post(self, page: Page, post_id: str, media_map: Dict[str, List[str]]) -> None:
+        """پردازش یک پست با تلاش قوی‌تر برای نمایش و فیلتر مدیاهای واقعی"""
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # تلاش چندباره برای نمایان کردن پست
+        # تلاش قوی‌تر برای نمایان کردن پست (۵ تلاش)
         success = False
-        for attempt in range(4):
+        for attempt in range(5):
             try:
-                await message_locator.scroll_into_view_if_needed(timeout=15000)
-                wait = 1.5 if attempt == 0 else 1.0
+                await message_locator.scroll_into_view_if_needed(timeout=20000)
+                wait = 1.8 if attempt == 0 else 1.2
                 await human_sleep(wait, 0.4)
-                await message_locator.wait_for(state="visible", timeout=18000)
-                await human_sleep(0.8, 0.3)
+                await message_locator.wait_for(state="visible", timeout=20000)
+                await human_sleep(1.0, 0.3)
+
                 if await message_locator.count() > 0:
                     success = True
                     break
-            except Exception as e:
-                if attempt < 3:
-                    await page.evaluate("window.scrollBy(0, -800)")
-                    await human_sleep(2.0, 0.5)
+            except Exception:
+                if attempt < 4:
+                    await page.evaluate("window.scrollBy(0, -1200)")
+                    await human_sleep(2.5, 0.5)
                 else:
-                    logger.warning(f"⚠️ المان پست {post_id} بعد از ۴ تلاش پیدا نشد: {e}")
+                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد.")
                     return
 
         if not success:
             return
 
-        logger.info(f"📍 پست {post_id} به viewport آورده شد. منتظر لود مدیاها...")
-        await human_sleep(1.5, 0.4)
+        # 🌟 افزایش اندکی برای لود کامل‌تر
+        logger.info(f"📍 پست {post_id} آماده شد. منتظر لود کامل...")
+        await human_sleep(2.2, 0.5)
 
         # استخراج المان‌های مدیا
         media_elements = message_locator.locator(
@@ -105,26 +105,25 @@ class PlaywrightDownloader:
             logger.debug(f"📝 پست {post_id} بدون مدیا.")
             return
 
-        # 🌟 فیلتر واقعی: فقط المان‌های visible را بشمار
-        real_media = 0
+        # فیلتر visible با timeout افزایش‌یافته
         visible_indices = []
         for i in range(media_count):
             try:
                 el = media_elements.nth(i)
-                if await el.is_visible(timeout=3000):
-                    real_media += 1
+                if await el.is_visible(timeout=6000):
                     visible_indices.append(i)
             except Exception:
                 continue
 
-        if real_media == 0:
-            logger.debug(f"📝 پست {post_id} فقط متن است (بدون مدیای visible).")
+        if not visible_indices:
+            logger.debug(f"📝 پست {post_id} مدیای visible ندارد.")
             return
 
-        logger.info(f"🎯 {real_media} مدیای واقعی در پست {post_id} یافت شد.")
-        await human_sleep(2.0, 0.5)
+        logger.info(f"🎯 {len(visible_indices)} مدیای واقعی در پست {post_id} یافت شد.")
+        # صبر کوتاه قبل از پردازش تکتک
+        await human_sleep(1.8, 0.4)
 
-        # 🌟 پردازش فقط المان‌های visible با مدیریت خطا برای هرکدام
+        # پردازش فقط المان‌های visible با مدیریت خطا برای هرکدام
         for i in visible_indices:
             try:
                 # ساخت locator تازه
@@ -134,9 +133,9 @@ class PlaywrightDownloader:
                     'video, img[src], div[class*="media"]'
                 ).nth(i)
 
-                # صبر بیشتر قبل از پردازش
-                await human_sleep(1.0, 0.3)
-                await current_element.wait_for(state="visible", timeout=8000)
+                # تأخیر بیشتر قبل از پردازش و timeout بالاتر
+                await human_sleep(1.3, 0.4)
+                await current_element.wait_for(state="visible", timeout=12000)
 
                 media_type = await self._detect_media_type(current_element)
                 if media_type == "document":
@@ -149,6 +148,8 @@ class PlaywrightDownloader:
 
         if post_id in media_map:
             logger.info(f"📦 پست {post_id}: {len(media_map[post_id])} رسانه دانلود شد.")
+
+    # ═══════════════════ بقیهٔ متدها (بدون تغییر) ═══════════════════
 
     async def _detect_media_type(self, element) -> str:
         has_img = await element.evaluate("el => !!el.querySelector('img')")
