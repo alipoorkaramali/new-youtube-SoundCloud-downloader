@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import random
 from pathlib import Path
 from typing import List, Dict
 
@@ -16,6 +17,11 @@ SCROLL_UP = -2000
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60
 
+# ═══════════════════ Human-like sleep ═══════════════════
+async def human_sleep(base: float, jitter: float = 0.4):
+    time = base * (1 + random.uniform(-jitter, jitter))
+    await asyncio.sleep(max(0.1, time))
+
 class TelegramChannelScraper:
 
     def __init__(self, config: Config):
@@ -28,6 +34,10 @@ class TelegramChannelScraper:
         self.media_dir.mkdir(parents=True, exist_ok=True)
         self.profile_dir = Path(config.profile_dir)
         self.delay_between_posts = config.delay_between_posts
+
+        # افزایش پایهٔ تأخیر بین پست‌ها (اگر کمتر از ۵ باشد)
+        if self.delay_between_posts < 5:
+            self.delay_between_posts = 5.0
 
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -83,7 +93,6 @@ class TelegramChannelScraper:
         self._page = None
 
         async with async_playwright() as p:
-            # 🌟 تغییر کلیدی: headless=False + xvfb در workflow
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=str(self.profile_dir),
                 headless=False,
@@ -123,7 +132,7 @@ class TelegramChannelScraper:
                     if await btn.count() > 0:
                         await btn.click(timeout=3000)
                         self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری آخرین پست‌ها...")
-                        await asyncio.sleep(3)
+                        await human_sleep(4, 0.4)   # افزایش و تصادفی
                         break
                 else:
                     self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد.")
@@ -177,7 +186,7 @@ class TelegramChannelScraper:
 
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
                 await page.evaluate("window.scrollBy(0, -2000)")
-                await asyncio.sleep(2)
+                await human_sleep(4, 0.5)   # افزایش قابل‌توجه
                 new_height = await page.evaluate("document.documentElement.scrollHeight")
 
                 if new_height == old_height:
@@ -216,25 +225,25 @@ class TelegramChannelScraper:
 
         # ۲. جستجوی کانال
         await search_input.fill(self.channel)
-        await asyncio.sleep(1)
+        await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
-        await asyncio.sleep(5)
+        await human_sleep(6, 0.5)   # قبلاً ۵ ثابت
 
         # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
                 await channels_tab.click()
-                await asyncio.sleep(3)
+                await human_sleep(4, 0.4)
                 self.logger.info("📑 تب Channels انتخاب شد.")
         except Exception:
             pass
 
-        # ۴. انتظار هوشمند برای نتایج (روش اثبات‌شده با سلکتورها، مثل debug)
+        # ۴. انتظار هوشمند برای نتایج (با زمان‌های تصادفی)
         found = False
-        for wait_time in [6, 10, 14]:
-            await asyncio.sleep(wait_time)
+        for wait_time in [8, 12, 16]:   # افزایش پایه
+            await human_sleep(wait_time, 0.3)
             for sel in ['div[role="button"]', 'div.search-result', 'div.chatlist-item', 'a[data-peer-id]']:
                 try:
                     if await page.locator(sel).count() > 0:
@@ -253,14 +262,14 @@ class TelegramChannelScraper:
 
         self.logger.info("✅ نتایج جستجو ظاهر شدند.")
         await self._take_screenshot(page, f"search_results_{self.channel}")
-        await asyncio.sleep(2)
+        await human_sleep(2, 0.3)
 
-        # ۵. کلیک روی اولین نتیجه (مکانیسم اصلی و قدرتمند)
+        # ۵. کلیک روی اولین نتیجه (با تأخیر تصادفی درون متد)
         return await self._click_search_result(page)
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page) -> bool:
-        """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
+        """کلیک هوشمند با تأخیرهای انسانی"""
         # لایهٔ ۱: سلکتورهای رایج
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
@@ -272,16 +281,15 @@ class TelegramChannelScraper:
                 loc = page.locator(sel).first
                 if await loc.count() == 0:
                     continue
-                # سعی می‌کنیم حتی اگر visible نباشد با force کلیک کنیم
                 await loc.click(timeout=8000, force=True)
-                await asyncio.sleep(4)
+                await human_sleep(5, 0.4)   # قبلاً ۴ ثابت
                 if await page.locator('div.message, div[data-message-id]').count() > 0:
                     self.logger.info("✅ کانال با موفقیت باز شد (سلکتور %s).", sel)
                     return True
             except Exception as e:
                 self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
-        # لایهٔ ۲: کلیک با JavaScript روی اسم کانال (در لیست نتایج)
+        # لایهٔ ۲: کلیک با JavaScript روی اسم کانال
         self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
         try:
             await page.evaluate(f'''(channel) => {{
@@ -291,21 +299,21 @@ class TelegramChannelScraper:
                     target.closest('div[role="button"], div.chatlist-item, a')?.click();
                 }}
             }}''', self.channel)
-            await asyncio.sleep(4)
+            await human_sleep(5, 0.4)
             if await page.locator('div.message, div[data-message-id]').count() > 0:
                 self.logger.info("✅ با JavaScript (نام کانال) وارد شدیم.")
                 return True
         except Exception as e:
             self.logger.debug("JavaScript name click: %s", e)
 
-        # لایهٔ ۳: کلیک روی اولین آیتم موجود در لیست (بدون توجه به نام)
+        # لایهٔ ۳: کلیک روی اولین آیتم
         self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
             await page.evaluate('''() => {
                 const item = document.querySelector('div.chatlist-item, div[role="button"], div.search-result, a[data-peer-id]');
                 if (item) item.click();
             }''')
-            await asyncio.sleep(4)
+            await human_sleep(5, 0.4)
             if await page.locator('div.message, div[data-message-id]').count() > 0:
                 self.logger.info("✅ با JavaScript (اولین نتیجه) وارد شدیم.")
                 return True
@@ -328,7 +336,7 @@ class TelegramChannelScraper:
                     continue
 
                 await locator.scroll_into_view_if_needed()
-                await asyncio.sleep(0.5)
+                await human_sleep(0.5, 0.2)   # کمی تصادفی
 
                 path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"
                 await page.screenshot(path=path, full_page=False)
@@ -374,7 +382,7 @@ class TelegramChannelScraper:
         if tasks:
             downloader = PlaywrightDownloader(
                 self.profile_dir, self.media_dir, self.max_media_bytes,
-                self.delay_between_posts
+                self.delay_between_posts   # اکنون ≥۵ و در downloader هم تصادفی می‌شود
             )
             await downloader.download_all(tasks)
 
