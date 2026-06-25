@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: 'نام کانال بدون @'
+        description: 'نام کاربری کانال بدون @'
         required: true
         default: 'bbcpersian'
+      channel_name:
+        description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
+        required: false
+        default: ''
       limit:
         description: 'تعداد پست‌ها'
         required: false
@@ -89,11 +93,6 @@ jobs:
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
-     #---------------------------
-     # ۶.۱. تست وجود head
-     #---------------------------
-      - name: 🖥️ Ensure xvfb is installed
-        run: sudo apt-get install -y xvfb
 
       # ════════════════════════════════════════════
       # ۷. استخراج پروفایل مرورگر
@@ -111,6 +110,7 @@ jobs:
           with open('config/config.yaml', 'r') as f:
               c = yaml.safe_load(f)
           c['channel'] = '${{ github.event.inputs.channel }}'
+          c['channel_name'] = '${{ github.event.inputs.channel_name }}'
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
           with open('config/config.yaml', 'w') as f:
