@@ -13,7 +13,6 @@ logger = logging.getLogger("TelegramScraper")
 
 
 async def human_sleep(base: float, jitter: float = 0.4):
-    """خواب انسانی با کمی تصادف"""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
@@ -43,7 +42,6 @@ class PlaywrightDownloader:
 
     async def download_all(self, page: Page, context, post_ids: List[str],
                            media_map: Optional[Dict[str, List[str]]] = None) -> None:
-        """دانلود مدیای تمام پست‌های داده‌شده و پر کردن media_map"""
         if media_map is None:
             media_map = {}
         if not post_ids:
@@ -66,10 +64,8 @@ class PlaywrightDownloader:
 
     async def _process_post(self, page: Page, post_id: str,
                             media_map: Dict[str, List[str]]) -> None:
-        """پردازش یک پست و دانلود تمام رسانه‌هایش"""
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # 🌟 اسکرول به پست و visible شدن
         try:
             await message_locator.scroll_into_view_if_needed(timeout=10000)
             await human_sleep(0.8, 0.3)
@@ -86,7 +82,6 @@ class PlaywrightDownloader:
                 logger.warning(f"⚠️ المان پست {post_id} پیدا نشد (حتی با اسکرول): {e}")
                 return
 
-        # استخراج المان‌های مدیا
         media_elements = message_locator.locator(
             'div.media-photo, div.media-video, div.document, a.media-photo, '
             'video, img[src], div[class*="media"]'
@@ -97,10 +92,9 @@ class PlaywrightDownloader:
             return
 
         logger.info(f"🎯 {media_count} المان مدیا در پست {post_id} یافت شد.")
-        await human_sleep(0.5, 0.2)   # تنفس کوتاه برای لود کامل
+        await human_sleep(0.5, 0.2)
 
         for i in range(media_count):
-            # ساخت locator تازه برای جلوگیری از stale
             msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
             current_element = msg_locator.locator(
                 'div.media-photo, div.media-video, div.document, a.media-photo, '
@@ -117,7 +111,6 @@ class PlaywrightDownloader:
             logger.info(f"📦 پست {post_id}: {len(media_map[post_id])} رسانه دانلود شد.")
 
     async def _detect_media_type(self, element) -> str:
-        """تشخیص نوع مدیا (عکس/ویدیو یا فایل) با بررسی DOM داخلی"""
         has_img = await element.evaluate("el => !!el.querySelector('img')")
         has_video = await element.evaluate("el => !!el.querySelector('video, div.media-video')")
         has_file = await element.evaluate("el => !!el.querySelector('a[href*=\"/file/\"]')")
@@ -134,7 +127,6 @@ class PlaywrightDownloader:
 
     async def _download_document(self, page: Page, element, post_id: str,
                                  idx: int, media_map: Dict[str, List[str]]):
-        """دانلود فایل/ویس با کلیک روی المان و سپس دکمهٔ دانلود"""
         download_occurred = [False]
 
         async def on_download(download: Download):
@@ -162,7 +154,6 @@ class PlaywrightDownloader:
 
     async def _download_media_viewer(self, page: Page, element, post_id: str,
                                      idx: int, media_map: Dict[str, List[str]]):
-        """دانلود عکس/ویدیو با باز کردن Media Viewer و پیمایش آلبوم"""
         try:
             await self._human_click(element)
         except Exception as e:
@@ -183,7 +174,6 @@ class PlaywrightDownloader:
 
         album_idx = idx
         while True:
-            # 🌟 کپی صریح از album_idx برای جلوگیری از closure bug
             current_album_idx = album_idx
             download_occurred = [False]
 
@@ -224,7 +214,6 @@ class PlaywrightDownloader:
         await self._close_media_viewer(page)
 
     async def _close_media_viewer(self, page: Page):
-        """بستن Media Viewer با دکمه یا کلید Escape"""
         close_btn = page.locator('button[aria-label="Close"], [title="Close"], .btn-close').first
         if await close_btn.count() > 0:
             try:
@@ -241,7 +230,6 @@ class PlaywrightDownloader:
 
     async def _save_download(self, download: Download, post_id: str,
                              idx: int, media_map: Dict[str, List[str]]):
-        """ذخیرهٔ فایل و ثبت در media_map، با جلوگیری از بازنویسی"""
         try:
             suggested = download.suggested_filename
             ext = suggested.rsplit('.', 1)[-1] if '.' in suggested else "bin"
@@ -263,7 +251,6 @@ class PlaywrightDownloader:
             logger.error(f"❌ ذخیره دانلود: {e}")
 
     async def _human_click(self, locator):
-        """کلیک همراه با حرکت تصادفی موس"""
         try:
             await locator.scroll_into_view_if_needed()
             box = await locator.bounding_box()
@@ -278,7 +265,6 @@ class PlaywrightDownloader:
 
     async def _direct_download_from_element(self, page: Page, element, post_id: str,
                                             idx: int, media_map: Dict[str, List[str]]):
-        """Fallback: استخراج و دانلود مستقیم لینک‌های مدیا از المان"""
         links = await element.evaluate('''(el) => {
             const links = new Set();
             const add = (url) => { if (url && url.startsWith('http')) links.add(url); };
