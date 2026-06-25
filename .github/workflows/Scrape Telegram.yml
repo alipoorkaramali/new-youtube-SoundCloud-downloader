@@ -123,7 +123,7 @@ jobs:
       # ════════════════════════════════════════════
       - name: 🚀 Run Telegram Scraper
         if: ${{ !inputs.debug_mode }}
-        run: python .github/scripts/main.py --config config/config.yaml
+        run: xvfb-run python .github/scripts/main.py --config config/config.yaml
         timeout-minutes: 35
 
       - name: 🐞 Run debug script with screenshots
