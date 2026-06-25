@@ -21,7 +21,7 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا مستقیماً از صفحهٔ کانال (بدون باز کردن لینک جداگانه).
-    نسخهٔ دیباگ پیشرفته: ضربدر قرمز روی نقطهٔ کلیک برای تشخیص دقیق.
+    نسخهٔ دیباگ پیشرفته: ضربدر قرمز روی هر المان قبل از پردازش + اسکرین‌شات وضعیت.
     """
 
     MIME_TO_EXT = {
@@ -68,11 +68,12 @@ class PlaywrightDownloader:
                 await human_sleep(self.delay, 0.5)
 
     async def _process_post(self, page: Page, post_id: str, media_map: Dict[str, List[str]]) -> None:
-        """پردازش یک پست با تلاش قوی‌تر برای نمایش و فیلتر مدیاهای واقعی"""
+        """پردازش یک پست با دیباگ کامل"""
         logger.info(f"📍 شروع پردازش پست {post_id}")
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
+        # تلاش برای نمایان کردن پست
         success = False
         for attempt in range(5):
             try:
@@ -93,7 +94,10 @@ class PlaywrightDownloader:
                     await page.evaluate("window.scrollBy(0, -1200)")
                     await human_sleep(2.5, 0.5)
                 else:
-                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد.")
+                    # اسکرین‌شات از وضعیت نهایی صفحه وقتی پست پیدا نشد
+                    path = self.debug_dir / f"debug_post_not_found_{post_id}.png"
+                    await page.screenshot(path=path)
+                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد. اسکرین‌شات: {path.name}")
                     return
 
         if not success:
@@ -102,6 +106,7 @@ class PlaywrightDownloader:
         logger.info(f"   📍 پست {post_id} آماده شد. منتظر لود کامل...")
         await human_sleep(2.2, 0.5)
 
+        # استخراج المان‌های مدیا
         media_elements = message_locator.locator(
             'div.media-photo, div.media-video, div.document, a.media-photo, '
             'video, img[src], div[class*="media"]'
@@ -141,6 +146,16 @@ class PlaywrightDownloader:
                     'video, img[src], div[class*="media"]'
                 ).nth(i)
 
+                # 🌟 گرفتن مختصات و رسم ضربدر قبل از هرگونه تلاش
+                box = await current_element.bounding_box()
+                if box:
+                    x = box['x'] + box['width'] / 2
+                    y = box['y'] + box['height'] / 2
+                    await self._draw_debug_cross(page, x, y, f"element_{post_id}_{i}_pre")
+                    logger.info(f"   📸 اسکرین‌شات پیش‌نمایش با ضربدر ذخیره شد (element_{post_id}_{i}_pre)")
+                else:
+                    logger.debug(f"   ⚠️ bounding_box برای المان {i} در دسترس نیست")
+
                 await human_sleep(1.3, 0.4)
                 await current_element.wait_for(state="visible", timeout=12000)
                 logger.debug(f"   ✅ المان {i} visible شد")
@@ -154,16 +169,20 @@ class PlaywrightDownloader:
                     await self._download_media_viewer(page, current_element, post_id, i, media_map)
             except Exception as e:
                 logger.warning(f"   ⚠️ المان {i} پست {post_id} رد شد: {e}")
+                # در صورت شکست، اسکرین‌شات وضعیت فعلی
+                path = self.debug_dir / f"debug_element_fail_{post_id}_{i}.png"
+                await page.screenshot(path=path)
+                logger.info(f"   📸 اسکرین‌شات بعد از شکست: {path.name}")
                 continue
 
         if post_id in media_map:
             logger.info(f"📦 پست {post_id}: {len(media_map[post_id])} رسانه دانلود شد.")
 
+    # سایر متدها بدون تغییر (همان نسخهٔ قبلی)
     async def _detect_media_type(self, element) -> str:
         has_img = await element.evaluate("el => !!el.querySelector('img')")
         has_video = await element.evaluate("el => !!el.querySelector('video, div.media-video')")
         has_file = await element.evaluate("el => !!el.querySelector('a[href*=\"/file/\"]')")
-        logger.debug(f"   🔎 تشخیص: img={has_img}, video={has_video}, file={has_file}")
         if has_file:
             return "document"
         if has_video:
@@ -213,7 +232,6 @@ class PlaywrightDownloader:
                                      idx: int, media_map: Dict[str, List[str]]):
         logger.info(f"   🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد")
         try:
-            # کلیک با ضربدر قرمز برای دیباگ
             await self._human_click(element, debug_name=f"media_{post_id}_{idx}", draw_cross=True)
             logger.info(f"   ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...")
             await human_sleep(1.5, 0.4)
@@ -226,15 +244,12 @@ class PlaywrightDownloader:
             'div[class*="lightbox"]', 'div.media-viewer-content'
         ]
         viewer_selector = ", ".join(viewer_selectors)
-        viewer_opened = False
         try:
             await page.wait_for_selector(viewer_selector, timeout=12000)
-            viewer_opened = True
             logger.info(f"   ✅ Media Viewer باز شد")
             await human_sleep(2.2, 0.5)
         except Exception as e:
             logger.warning(f"   ❌ Media Viewer باز نشد: {e}")
-            # اسکرین‌شات اضافی از وضعیت صفحه بعد از شکست
             debug_path = self.debug_dir / f"debug_viewer_failed_{post_id}_{idx}.png"
             await page.screenshot(path=debug_path)
             logger.info(f"   📸 اسکرین‌شات بعد از شکست در باز شدن Viewer: {debug_path.name}")
@@ -332,7 +347,6 @@ class PlaywrightDownloader:
             logger.error(f"❌ ذخیره دانلود: {e}")
 
     async def _human_click(self, locator, debug_name: str = "", draw_cross: bool = False):
-        """کلیک همراه با حرکت موس و امکان رسم ضربدر قرمز قبل از کلیک"""
         try:
             await locator.scroll_into_view_if_needed()
             box = await locator.bounding_box()
@@ -342,7 +356,6 @@ class PlaywrightDownloader:
                 await locator.page.mouse.move(x, y)
 
                 if draw_cross and debug_name:
-                    # رسم ضربدر و گرفتن اسکرین‌شات
                     await self._draw_debug_cross(locator.page, x, y, f"{debug_name}_cross")
             else:
                 x = y = None
@@ -350,7 +363,6 @@ class PlaywrightDownloader:
             await human_sleep(0.6, 0.3)
 
             if debug_name and not draw_cross:
-                # اسکرین‌شات ساده
                 path = self.debug_dir / f"debug_click_{debug_name}.png"
                 await locator.page.screenshot(path=path)
                 logger.info(f"   📸 اسکرین‌شات قبل از کلیک ذخیره شد: {path.name}")
@@ -362,8 +374,7 @@ class PlaywrightDownloader:
             await locator.click(timeout=8000, force=True)
 
     async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
-        """رسم ضربدر قرمز در مختصات مشخص و ذخیره اسکرین‌شات"""
-        # ایجاد یک container برای ضربدر
+        """رسم ضربدر قرمز در مختصات و ذخیره اسکرین‌شات"""
         await page.evaluate(f"""
             () => {{
                 const container = document.createElement('div');
@@ -372,7 +383,7 @@ class PlaywrightDownloader:
                 container.style.left = '0px';
                 container.style.top = '0px';
                 container.style.zIndex = '99999';
-                container.style.pointerEvents = 'none';  // مانع کلیک نشود
+                container.style.pointerEvents = 'none';
                 document.body.appendChild(container);
 
                 const cross = document.createElement('div');
@@ -390,11 +401,9 @@ class PlaywrightDownloader:
                 container.appendChild(cross);
             }}
         """)
-        # گرفتن اسکرین‌شات
         path = self.debug_dir / f"debug_click_{name}.png"
         await page.screenshot(path=path)
         logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
-        # حذف ضربدر
         await page.evaluate("""
             () => {
                 const container = document.getElementById('debug-cross-container');
