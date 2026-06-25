@@ -21,8 +21,9 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     **نسخهٔ دیباگ راست‌کلیک**
-    فقط راست‌کلیک روی مدیاها انجام می‌دهد، اسکرین‌شات می‌گیرد و هیچ دانلودی انجام نمی‌شود.
-    هدف: بررسی ظاهر شدن منوی context و گزینه‌های آن.
+    فقط راست‌کلیک روی مدیاها انجام می‌دهد، اسکرین‌شات می‌گیرد، سپس با یک کلیک چپ
+    در جای امن منو را می‌بندد و به سراغ المان بعدی می‌رود.
+    هیچ دانلودی انجام نمی‌شود.
     """
 
     MIME_TO_EXT = {
@@ -48,8 +49,7 @@ class PlaywrightDownloader:
 
     async def download_all(self, page: Page, context, post_ids: List[str],
                            media_map: Optional[Dict[str, List[str]]] = None) -> None:
-        """حلقهٔ اصلی – فقط راست‌کلیک و اسکرین‌شات، بدون دانلود"""
-        # media_map را نادیده می‌گیریم چون دانلودی در کار نیست
+        """حلقهٔ اصلی – فقط راست‌کلیک، اسکرین‌شات، بستن با کلیک چپ"""
         if not post_ids:
             logger.info("هیچ پستی برای بررسی وجود ندارد.")
             return
@@ -69,7 +69,7 @@ class PlaywrightDownloader:
                 await human_sleep(self.delay, 0.5)
 
     async def _process_post(self, page: Page, post_id: str) -> None:
-        """نمایش پست، سپس راست‌کلیک روی هر المان مدیا و اسکرین‌شات"""
+        """نمایش پست، سپس راست‌کلیک روی هر المان مدیا، اسکرین‌شات، بستن با کلیک چپ"""
         logger.info(f"📍 شروع بررسی پست {post_id}")
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
@@ -135,7 +135,7 @@ class PlaywrightDownloader:
         logger.info(f"🎯 {len(visible_indices)} مدیای واقعی در پست {post_id} یافت شد.")
         await human_sleep(1.8, 0.4)
 
-        # برای هر المان visible: راست‌کلیک، اسکرین‌شات، سپس بستن منو
+        # برای هر المان visible: راست‌کلیک، اسکرین‌شات، سپس کلیک چپ برای بستن منو
         for i in visible_indices:
             logger.info(f"   ▶️ راست‌کلیک روی المان {i} از پست {post_id}")
             try:
@@ -149,7 +149,7 @@ class PlaywrightDownloader:
                 await current_element.wait_for(state="visible", timeout=12000)
                 logger.debug(f"   ✅ المان {i} visible شد")
 
-                # انجام راست‌کلیک
+                # ۱. راست‌کلیک روی مرکز المان
                 box = await current_element.bounding_box()
                 if box:
                     x = box['x'] + box['width'] / 2
@@ -160,21 +160,21 @@ class PlaywrightDownloader:
                     await current_element.click(button='right')
                     logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
 
-                # کمی صبر برای ظاهر شدن منو
+                # ۲. کمی صبر برای ظاهر شدن منو
                 await human_sleep(1.5, 0.3)
 
-                # اسکرین‌شات از کل صفحه (با منوی باز)
+                # ۳. اسکرین‌شات از کل صفحه (با منوی باز)
                 screenshot_path = self.debug_dir / f"rightclick_{post_id}_{i}.png"
                 await page.screenshot(path=screenshot_path, full_page=False)
                 logger.info(f"   📸 اسکرین‌شات ذخیره شد: {screenshot_path.name}")
 
-                # بستن منوی context (با کلید Escape)
-                await page.keyboard.press("Escape")
-                await human_sleep(0.5, 0.2)
+                # ۴. بستن منوی context با کلیک چپ در نقطه‌ای امن (گوشهٔ بالا‑چپ)
+                await page.mouse.click(10, 10)          # دور از المان‌ها
+                await human_sleep(0.3, 0.2)
 
             except Exception as e:
                 logger.warning(f"   ⚠️ خطا در پردازش المان {i} پست {post_id}: {e}")
-                # در صورت خطا هم یک اسکرین‌شات بگیریم
+                # اسکرین‌شات خطا
                 try:
                     path = self.debug_dir / f"error_{post_id}_{i}.png"
                     await page.screenshot(path=path)
@@ -185,5 +185,4 @@ class PlaywrightDownloader:
 
         logger.info(f"   ✅ پایان بررسی پست {post_id}")
 
-    # تمام متدهای دانلود (save, direct, context_menu) در این نسخه کامنت شده یا حذف شده‌اند.
-    # فقط _guess_ext (اگر لازم باشد) می‌تواند باقی بماند.
+    # تمام متدهای دانلود حذف شده‌اند.
