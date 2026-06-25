@@ -21,8 +21,7 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا مستقیماً از صفحهٔ کانال (بدون باز کردن لینک جداگانه).
-    رفتار کاملاً انسانی: کلیک روی مدیا، Media Viewer، دانلود، پیمایش آلبوم و fallback.
-    نسخهٔ دیباگ: با اسکرین‌شات قبل از هر کلیک برای بررسی محل دقیق کلیک.
+    نسخهٔ دیباگ پیشرفته: ضربدر قرمز روی نقطهٔ کلیک برای تشخیص دقیق.
     """
 
     MIME_TO_EXT = {
@@ -42,7 +41,7 @@ class PlaywrightDownloader:
         self.max_retries = max_retries
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
-        # پوشهٔ مخصوص اسکرین‌شات‌های دیباگ کلیک
+        # پوشهٔ مخصوص دیباگ
         self.debug_dir = self.media_dir.parent / "debug_clicks"
         self.debug_dir.mkdir(parents=True, exist_ok=True)
 
@@ -188,8 +187,7 @@ class PlaywrightDownloader:
 
         page.on("download", on_download)
         try:
-            # کلیک روی خود المان فایل
-            await self._human_click(element, debug_name=f"file_{post_id}_{idx}")
+            await self._human_click(element, debug_name=f"file_{post_id}_{idx}", draw_cross=True)
             logger.info(f"   ✅ کلیک روی المان فایل انجام شد")
             await human_sleep(3, 0.4)
             if not download_occurred[0]:
@@ -199,7 +197,7 @@ class PlaywrightDownloader:
                 btn_count = await download_btn.count()
                 logger.info(f"   🔍 تعداد دکمه دانلود فایل: {btn_count}")
                 if btn_count > 0:
-                    await self._human_click(download_btn, debug_name=f"file_download_btn_{post_id}_{idx}")
+                    await self._human_click(download_btn, debug_name=f"file_download_btn_{post_id}_{idx}", draw_cross=True)
                     logger.info(f"   ✅ کلیک روی دکمه دانلود فایل انجام شد")
                     await human_sleep(3, 0.4)
         except Exception as e:
@@ -215,8 +213,8 @@ class PlaywrightDownloader:
                                      idx: int, media_map: Dict[str, List[str]]):
         logger.info(f"   🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد")
         try:
-            # کلیک روی عکس/ویدیو برای باز کردن Media Viewer
-            await self._human_click(element, debug_name=f"media_{post_id}_{idx}")
+            # کلیک با ضربدر قرمز برای دیباگ
+            await self._human_click(element, debug_name=f"media_{post_id}_{idx}", draw_cross=True)
             logger.info(f"   ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...")
             await human_sleep(1.5, 0.4)
         except Exception as e:
@@ -228,12 +226,18 @@ class PlaywrightDownloader:
             'div[class*="lightbox"]', 'div.media-viewer-content'
         ]
         viewer_selector = ", ".join(viewer_selectors)
+        viewer_opened = False
         try:
             await page.wait_for_selector(viewer_selector, timeout=12000)
+            viewer_opened = True
             logger.info(f"   ✅ Media Viewer باز شد")
             await human_sleep(2.2, 0.5)
         except Exception as e:
             logger.warning(f"   ❌ Media Viewer باز نشد: {e}")
+            # اسکرین‌شات اضافی از وضعیت صفحه بعد از شکست
+            debug_path = self.debug_dir / f"debug_viewer_failed_{post_id}_{idx}.png"
+            await page.screenshot(path=debug_path)
+            logger.info(f"   📸 اسکرین‌شات بعد از شکست در باز شدن Viewer: {debug_path.name}")
             await self._direct_download_from_element(page, element, post_id, idx, media_map)
             return
 
@@ -255,8 +259,7 @@ class PlaywrightDownloader:
                 btn_count = await download_btn.count()
                 logger.info(f"   🔍 تعداد دکمه دانلود در Media Viewer: {btn_count}")
                 if btn_count > 0:
-                    # کلیک روی دکمه دانلود داخل بیننده
-                    await self._human_click(download_btn, debug_name=f"download_btn_{post_id}_{current_album_idx}")
+                    await self._human_click(download_btn, debug_name=f"download_btn_{post_id}_{current_album_idx}", draw_cross=True)
                     logger.info(f"   ✅ کلیک روی دکمه دانلود انجام شد")
                     await human_sleep(3, 0.5)
                 else:
@@ -328,8 +331,8 @@ class PlaywrightDownloader:
         except Exception as e:
             logger.error(f"❌ ذخیره دانلود: {e}")
 
-    async def _human_click(self, locator, debug_name: str = ""):
-        """کلیک همراه با حرکت تصادفی موس و اسکرین‌شات اختیاری برای دیباگ"""
+    async def _human_click(self, locator, debug_name: str = "", draw_cross: bool = False):
+        """کلیک همراه با حرکت موس و امکان رسم ضربدر قرمز قبل از کلیک"""
         try:
             await locator.scroll_into_view_if_needed()
             box = await locator.bounding_box()
@@ -337,11 +340,17 @@ class PlaywrightDownloader:
                 x = box['x'] + box['width'] / 2 + random.uniform(-8, 8)
                 y = box['y'] + box['height'] / 2 + random.uniform(-8, 8)
                 await locator.page.mouse.move(x, y)
-            
+
+                if draw_cross and debug_name:
+                    # رسم ضربدر و گرفتن اسکرین‌شات
+                    await self._draw_debug_cross(locator.page, x, y, f"{debug_name}_cross")
+            else:
+                x = y = None
+
             await human_sleep(0.6, 0.3)
 
-            # 🌟 اسکرین‌شات قبل از کلیک برای دیباگ
-            if debug_name:
+            if debug_name and not draw_cross:
+                # اسکرین‌شات ساده
                 path = self.debug_dir / f"debug_click_{debug_name}.png"
                 await locator.page.screenshot(path=path)
                 logger.info(f"   📸 اسکرین‌شات قبل از کلیک ذخیره شد: {path.name}")
@@ -350,8 +359,48 @@ class PlaywrightDownloader:
             logger.info(f"   ✅ کلیک انجام شد ({debug_name})")
         except Exception as e:
             logger.warning(f"   ⚠️ کلیک ناموفق ({debug_name}): {e}")
-            # تلاش مجدد با force click ساده
             await locator.click(timeout=8000, force=True)
+
+    async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
+        """رسم ضربدر قرمز در مختصات مشخص و ذخیره اسکرین‌شات"""
+        # ایجاد یک container برای ضربدر
+        await page.evaluate(f"""
+            () => {{
+                const container = document.createElement('div');
+                container.id = 'debug-cross-container';
+                container.style.position = 'fixed';
+                container.style.left = '0px';
+                container.style.top = '0px';
+                container.style.zIndex = '99999';
+                container.style.pointerEvents = 'none';  // مانع کلیک نشود
+                document.body.appendChild(container);
+
+                const cross = document.createElement('div');
+                cross.style.position = 'absolute';
+                cross.style.left = '{x}px';
+                cross.style.top = '{y}px';
+                cross.style.width = '24px';
+                cross.style.height = '24px';
+                cross.style.transform = 'translate(-50%, -50%)';
+                cross.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
+                        <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
+                    </svg>`;
+                container.appendChild(cross);
+            }}
+        """)
+        # گرفتن اسکرین‌شات
+        path = self.debug_dir / f"debug_click_{name}.png"
+        await page.screenshot(path=path)
+        logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
+        # حذف ضربدر
+        await page.evaluate("""
+            () => {
+                const container = document.getElementById('debug-cross-container');
+                if (container) container.remove();
+            }
+        """)
 
     async def _direct_download_from_element(self, page: Page, element, post_id: str,
                                             idx: int, media_map: Dict[str, List[str]]):
@@ -392,17 +441,4 @@ class PlaywrightDownloader:
                     else:
                         logger.warning(f"⚠️ HTTP {resp.status} برای {link}")
                 except Exception as e:
-                    logger.error(f"❌ خطای دانلود: {e}")
-                if attempt < self.max_retries:
-                    await human_sleep(2, 0.5)
-
-    def _guess_ext(self, response, url: str) -> str:
-        ct = response.headers.get("content-type", "").split(";")[0].strip().lower()
-        if ct in self.MIME_TO_EXT:
-            return self.MIME_TO_EXT[ct]
-        path = url.split("?")[0]
-        if '.' in path:
-            ext = path.rsplit('.', 1)[-1][:5]
-            if ext.isalnum():
-                return ext
-        return "bin"
+                    logger.error(f"❌ خطای دانل
