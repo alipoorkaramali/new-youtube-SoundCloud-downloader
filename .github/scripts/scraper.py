@@ -5,7 +5,7 @@ import asyncio
 import logging
 import random
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from config_loader import Config
 from playwright_downloader import PlaywrightDownloader
@@ -29,6 +29,7 @@ class TelegramChannelScraper:
     def __init__(self, config: Config):
         self.config = config
         self.channel = config.channel.lstrip('@')
+        self.channel_name = getattr(config, 'channel_name', '') or ''
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
@@ -64,13 +65,18 @@ class TelegramChannelScraper:
 
     async def _run_impl(self):
         self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
-        items = await self._fetch_posts_from_telegram()
+
+        # 🌟 استخراج پست‌ها به همراه context و page (دیگر context بسته نمی‌شود)
+        items, context, page = await self._fetch_posts_from_telegram()
         if not items:
             self.logger.warning("هیچ پستی دریافت نشد.")
+            if context:
+                await context.close()
             return
         self.logger.info(f"📥 {len(items)} پست استخراج شد.")
 
-        media_map, downloaded = await self._download_media(items)
+        # 🌟 دانلود مدیا با همان page و context (فقط یک مرورگر باز می‌شود)
+        media_map, downloaded = await self._download_media(items, page, context)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
 
         gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
@@ -79,127 +85,128 @@ class TelegramChannelScraper:
         gen.generate_html()
         gen.create_zip()
 
+        # 🌟 حالا دیگر context را می‌بندیم
+        if context:
+            await context.close()
+
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    # ═══════════════════ استخراج پست‌ها ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> List[Dict]:
+    # ═══════════════════ استخراج پست‌ها (با مدیریت context) ═══════════════════
+    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
+        """برگرداندن لیست پست‌ها، context و page (context باز می‌ماند)"""
         from playwright.async_api import async_playwright
 
         items = []
         seen_ids = set()
         last_count = 0
-        self._page = None
 
-        async with async_playwright() as p:
-            context = await p.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile_dir),
-                headless=False,
-                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-                viewport={"width": 1366, "height": 900},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
-            self._page = page
+        # 🌟 به‌جای async with، context را دستی می‌سازیم تا بتوانیم بعداً ببندیم
+        p = await async_playwright().start()
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=str(self.profile_dir),
+            headless=False,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+            viewport={"width": 1366, "height": 900},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
 
+        try:
+            await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
+            await context.close()
+            return [], None, None
+
+        entered = await self._search_and_enter_channel(page)
+        if not entered:
+            await context.close()
+            return [], None, None
+
+        await self._save_screenshot(page, "initial")
+
+        # پرش به آخرین پست‌ها
+        self.logger.info("⬇️ تلاش برای پرش به آخرین پست‌ها...")
+        try:
+            scroll_button_selectors = [
+                'button[title="Go to bottom"]',
+                'div[class*="scroll-to-bottom"]',
+                'div[class*="ScrollButton"]',
+                '[aria-label="Scroll to bottom"]',
+                'button:has(svg[class*="arrow-down"])',
+            ]
+            for sel in scroll_button_selectors:
+                btn = page.locator(sel).first
+                if await btn.count() > 0:
+                    await btn.click(timeout=3000)
+                    self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری آخرین پست‌ها...")
+                    await human_sleep(4, 0.4)
+                    break
+            else:
+                self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد.")
+        except Exception as e:
+            self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
+
+        scroll_attempts = 0
+
+        while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
-                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
-            except Exception as e:
-                self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
-                await context.close()
-                return []
+                messages = page.locator(
+                    'div.message, div[data-message-id], article[role="article"], div.bubbles-group > div'
+                )
+                count = await messages.count()
+                self.logger.info(f"🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
 
-            entered = await self._search_and_enter_channel(page)
-            if not entered:
-                await context.close()
-                return []
-
-            await self._save_screenshot(page, "initial")
-
-            # پرش به آخرین پست‌ها
-            self.logger.info("⬇️ تلاش برای پرش به آخرین پست‌ها...")
-            try:
-                scroll_button_selectors = [
-                    'button[title="Go to bottom"]',
-                    'div[class*="scroll-to-bottom"]',
-                    'div[class*="ScrollButton"]',
-                    '[aria-label="Scroll to bottom"]',
-                    'button:has(svg[class*="arrow-down"])',
-                ]
-                for sel in scroll_button_selectors:
-                    btn = page.locator(sel).first
-                    if await btn.count() > 0:
-                        await btn.click(timeout=3000)
-                        self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری آخرین پست‌ها...")
-                        await human_sleep(4, 0.4)          # ← خواب انسانی
-                        break
-                else:
-                    self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد.")
-            except Exception as e:
-                self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
-
-            scroll_attempts = 0
-
-            while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
-                try:
-                    messages = page.locator(
-                        'div.message, div[data-message-id], article[role="article"], div.bubbles-group > div'
-                    )
-                    count = await messages.count()
-                    self.logger.info(f"🔍 {count} المان پیام پیدا شد (قبلاً {last_count} تا).")
-
-                    for i in range(last_count, count):
-                        try:
-                            msg = messages.nth(i)
-                            msg_id = await msg.get_attribute('data-message-id')
-                            if not msg_id:
-                                inner = msg.locator('[data-message-id]').first
-                                if await inner.count() > 0:
-                                    msg_id = await inner.get_attribute('data-message-id')
-                            if not msg_id or msg_id in seen_ids:
-                                continue
-
-                            text = (await msg.inner_text()).strip()[:600]
-                            date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
-                            date = ""
-                            if await date_el.count() > 0:
-                                date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
-
-                            items.append({
-                                'id': msg_id,
-                                'text': text,
-                                'date': date,
-                                'url': f"https://t.me/{self.channel}/{msg_id}"
-                            })
-                            seen_ids.add(msg_id)
-                        except Exception:
+                for i in range(last_count, count):
+                    try:
+                        msg = messages.nth(i)
+                        msg_id = await msg.get_attribute('data-message-id')
+                        if not msg_id:
+                            inner = msg.locator('[data-message-id]').first
+                            if await inner.count() > 0:
+                                msg_id = await inner.get_attribute('data-message-id')
+                        if not msg_id or msg_id in seen_ids:
                             continue
 
-                    last_count = count
-                    self.logger.info(f"📊 {len(items)} پست یکتا جمع‌آوری شد.")
-                except Exception as e:
-                    self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
+                        text = (await msg.inner_text()).strip()[:600]
+                        date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
+                        date = ""
+                        if await date_el.count() > 0:
+                            date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
 
-                if len(items) >= self.limit:
-                    break
+                        items.append({
+                            'id': msg_id,
+                            'text': text,
+                            'date': date,
+                            'url': f"https://t.me/{self.channel}/{msg_id}"
+                        })
+                        seen_ids.add(msg_id)
+                    except Exception:
+                        continue
 
-                old_height = await page.evaluate("document.documentElement.scrollHeight")
-                await page.evaluate("window.scrollBy(0, -2000)")
-                await human_sleep(4, 0.5)          # ← خواب انسانی (قبلاً ۲ ثابت)
-                new_height = await page.evaluate("document.documentElement.scrollHeight")
+                last_count = count
+                self.logger.info(f"📊 {len(items)} پست یکتا جمع‌آوری شد.")
+            except Exception as e:
+                self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
 
-                if new_height == old_height:
-                    scroll_attempts += 1
-                else:
-                    scroll_attempts = 0
+            if len(items) >= self.limit:
+                break
 
-            await self._save_screenshot(page, "final")
-            await self._capture_post_screenshots(page, items)
+            old_height = await page.evaluate("document.documentElement.scrollHeight")
+            await page.evaluate("window.scrollBy(0, -2000)")
+            await human_sleep(4, 0.5)
+            new_height = await page.evaluate("document.documentElement.scrollHeight")
 
-            await context.close()
-            self._page = None
+            if new_height == old_height:
+                scroll_attempts += 1
+            else:
+                scroll_attempts = 0
 
-        self.logger.info(f"📊 {len(items)} پست یکتا استخراج شد.")
-        return items[:self.limit]
+        await self._save_screenshot(page, "final")
+        await self._capture_post_screenshots(page, items)
+
+        # 🌟 Context و page را برمی‌گردانیم، ولی نمی‌بندیم
+        return items[:self.limit], context, page
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
@@ -223,25 +230,25 @@ class TelegramChannelScraper:
 
         # ۲. جستجوی کانال
         await search_input.fill(self.channel)
-        await human_sleep(1.5, 0.3)          # ← تایپ و Enter تصادفی
+        await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
-        await human_sleep(6, 0.4)            # ← بعد از جستجو (قبلاً ۵ ثابت)
+        await human_sleep(6, 0.4)
 
         # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
                 await channels_tab.click()
-                await human_sleep(4, 0.4)    # ← انتظار بعد از کلیک تب
+                await human_sleep(4, 0.4)
                 self.logger.info("📑 تب Channels انتخاب شد.")
         except Exception:
             pass
 
         # ۴. انتظار هوشمند برای نتایج (بر اساس وجود نام کانال در متن صفحه)
         found = False
-        for _ in range(15):   # حداکثر ۳۰ ثانیه
-            await human_sleep(2, 0.3)        # ← هر گام کمی تصادفی
+        for _ in range(15):
+            await human_sleep(2, 0.3)
             try:
                 text_exists = await page.evaluate(f'''(channel) => {{
                     const bodyText = document.body.innerText || '';
@@ -261,7 +268,7 @@ class TelegramChannelScraper:
 
         self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند.")
         await self._take_screenshot(page, f"search_results_{self.channel}")
-        await human_sleep(2, 0.3)            # ← کمی صبر بعد از اسکرین‌شات
+        await human_sleep(2, 0.3)
 
         # ۵. کلیک روی اولین نتیجه
         return await self._click_search_result(page)
@@ -281,7 +288,7 @@ class TelegramChannelScraper:
                 if await loc.count() == 0:
                     continue
                 await loc.click(timeout=8000, force=True)
-                await human_sleep(5, 0.4)    # ← انتظار بعد از کلیک
+                await human_sleep(5, 0.4)
                 if await page.locator('div.message, div[data-message-id]').count() > 0:
                     self.logger.info("✅ کانال با موفقیت باز شد (سلکتور %s).", sel)
                     return True
@@ -335,7 +342,7 @@ class TelegramChannelScraper:
                     continue
 
                 await locator.scroll_into_view_if_needed()
-                await human_sleep(0.5, 0.2)    # ← کمی تصادفی قبل از اسکرین‌شات
+                await human_sleep(0.5, 0.2)
 
                 path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"
                 await page.screenshot(path=path, full_page=False)
@@ -368,8 +375,8 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
 
-    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
-    async def _download_media(self, items: List[Dict]):
+    # ═══════════════════ دانلود رسانه‌ها (با page و context مشترک) ═══════════════════
+    async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
         tasks = []
         media_map = {str(item['id']): [] for item in items}
         for item in items:
@@ -379,11 +386,12 @@ class TelegramChannelScraper:
 
         downloaded = 0
         if tasks:
+            # 🌟 دانلودر از همان page و context استفاده می‌کند (بدون راه‌اندازی مجدد)
             downloader = PlaywrightDownloader(
                 self.profile_dir, self.media_dir, self.max_media_bytes,
                 self.delay_between_posts
             )
-            await downloader.download_all(tasks)
+            await downloader.download_all(page, context, tasks)
 
             for f in self.media_dir.iterdir():
                 if f.is_file() and '_' in f.stem:
