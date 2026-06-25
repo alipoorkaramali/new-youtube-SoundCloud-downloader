@@ -5,7 +5,7 @@ import asyncio
 import logging
 import random
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 from config_loader import Config
 from playwright_downloader import PlaywrightDownloader
@@ -66,7 +66,6 @@ class TelegramChannelScraper:
     async def _run_impl(self):
         self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
 
-        # استخراج پست‌ها (context و page باز می‌مانند)
         items, context, page = await self._fetch_posts_from_telegram()
         if not items:
             self.logger.warning("هیچ پستی دریافت نشد.")
@@ -78,6 +77,7 @@ class TelegramChannelScraper:
         # دانلود رسانه‌ها با همان page و context (بدون باز کردن مرورگر جدید)
         media_map, downloaded = await self._download_media(items, page, context)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
+        self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
         gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
         gen.generate_json()
@@ -85,7 +85,6 @@ class TelegramChannelScraper:
         gen.generate_html()
         gen.create_zip()
 
-        # اکنون context را می‌بندیم
         if context:
             await context.close()
 
@@ -93,7 +92,6 @@ class TelegramChannelScraper:
 
     # ═══════════════════ استخراج پست‌ها (context باز می‌ماند) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
-        """برگرداندن (items, context, page) – context و page تا پایان دانلود باز می‌مانند."""
         from playwright.async_api import async_playwright
 
         items = []
@@ -204,12 +202,10 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
-        # context و page را بدون بستن برمی‌گردانیم
         return items[:self.limit], context, page
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
-        # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -227,14 +223,12 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
-        # ۲. جستجوی کانال
         await search_input.fill(self.channel)
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
         await human_sleep(6, 0.4)
 
-        # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
@@ -244,7 +238,6 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
-        # ۴. انتظار هوشمند برای نتایج (بر اساس وجود نام کانال در متن صفحه)
         found = False
         for _ in range(15):
             await human_sleep(2, 0.3)
@@ -269,13 +262,10 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
 
-        # ۵. کلیک روی اولین نتیجه (مکانیسم مقاوم)
         return await self._click_search_result(page)
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page) -> bool:
-        """کلیک هوشمند: ابتدا سلکتورهای رایج، سپس JavaScript با نام کانال یا اولین آیتم."""
-        # لایهٔ ۱: سلکتورهای رایج با force click
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
@@ -294,7 +284,6 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
-        # لایهٔ ۲: کلیک با JavaScript روی نام کانال
         self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
         try:
             await page.evaluate(f'''(channel) => {{
@@ -311,7 +300,6 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.debug("JavaScript name click: %s", e)
 
-        # لایهٔ ۳: کلیک روی اولین آیتم
         self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
             await page.evaluate('''() => {
@@ -355,7 +343,6 @@ class TelegramChannelScraper:
 
         self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
 
-    # ═══════════════════ اسکرین‌شات ساده ═══════════════════
     async def _save_screenshot(self, page, name: str):
         try:
             path = self.screenshots_dir / f"{name}.png"
@@ -364,7 +351,6 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
 
-    # ═══════════════════ اسکرین‌شات دیباگ ═══════════════════
     async def _take_screenshot(self, page, name: str):
         try:
             self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -374,12 +360,10 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
 
-    # ═══════════════════ دانلود رسانه‌ها (یکپارچه با page و context اسکرپر) ═══════════════════
+    # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        """دانلود مدیا با استفاده از همان page و context (بدون باز کردن مرورگر جدید)."""
-        # فقط شناسه‌های پست‌ها را به دانلودر می‌دهیم
         post_ids = [str(item['id']) for item in items]
-        media_map = {str(item['id']): [] for item in items}
+        media_map = {}   # توسط دانلودر پر می‌شود
 
         downloaded = 0
         if post_ids:
@@ -387,22 +371,9 @@ class TelegramChannelScraper:
                 self.profile_dir, self.media_dir, self.max_media_bytes,
                 self.delay_between_posts
             )
-            # دانلودر مستقیماً روی page کار می‌کند
-            await downloader.download_all(page, context, post_ids)
+            await downloader.download_all(page, context, post_ids, media_map)
 
-            # نقشهٔ مدیا را از فایل‌های دانلودشده می‌سازیم
-            for f in self.media_dir.iterdir():
-                if f.is_file():
-                    # تلاش برای استخراج post_id از نام فایل (اگر با ساختار post_id_... ذخیره شده باشد)
-                    stem = f.stem
-                    if '_' in stem:
-                        pid = stem.split('_', 1)[0]
-                        if pid in media_map:
-                            media_map[pid].append(f"media/{f.name}")
-                            downloaded += 1
-                    else:
-                        # فایل‌های با نام اصلی (از download event) را هم به اولین post_id مناسب نسبت می‌دهیم
-                        # برای سادگی از این کار صرف‌نظر می‌کنیم (در صورت نیاز می‌توان آدرس داد)
-                        pass
+            for files in media_map.values():
+                downloaded += len(files)
 
         return media_map, downloaded
