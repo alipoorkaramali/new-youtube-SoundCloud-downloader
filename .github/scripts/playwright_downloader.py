@@ -52,13 +52,13 @@ class PlaywrightDownloader:
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
-                # افزایش timeout کلی به ۶۰ ثانیه
+                # افزایش timeout کلی به ۷۵ ثانیه
                 await asyncio.wait_for(
                     self._process_post(page, post_id, media_map),
-                    timeout=60
+                    timeout=75
                 )
             except asyncio.TimeoutError:
-                logger.warning(f"⏰ پست {post_id} تایم‌اوت شد، رد می‌شود.")
+                logger.warning(f"⏰ پست {post_id} تایم‌اوت کلی شد، رد می‌شود.")
             except Exception as e:
                 logger.error(f"❌ خطا در پست {post_id}: {e}")
             if idx < len(post_ids):
@@ -66,15 +66,14 @@ class PlaywrightDownloader:
 
     async def _process_post(self, page: Page, post_id: str,
                             media_map: Dict[str, List[str]]) -> None:
-        """پردازش یک پست با تلاش مجدد برای نمایش در viewport"""
+        """پردازش یک پست با تلاش مجدد برای نمایش و فیلتر مدیاهای واقعی"""
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # 🌟 تلاش چندباره برای نمایان کردن پست (مقابله با lazy loading شدید)
+        # تلاش چندباره برای نمایان کردن پست
         success = False
         for attempt in range(4):
             try:
                 await message_locator.scroll_into_view_if_needed(timeout=15000)
-                # صبر بیشتر در اولین تلاش
                 wait = 1.5 if attempt == 0 else 1.0
                 await human_sleep(wait, 0.4)
                 await message_locator.wait_for(state="visible", timeout=18000)
@@ -84,7 +83,6 @@ class PlaywrightDownloader:
                     break
             except Exception as e:
                 if attempt < 3:
-                    # اسکرول کمکی و صبر دوباره
                     await page.evaluate("window.scrollBy(0, -800)")
                     await human_sleep(2.0, 0.5)
                 else:
@@ -95,7 +93,6 @@ class PlaywrightDownloader:
             return
 
         logger.info(f"📍 پست {post_id} به viewport آورده شد. منتظر لود مدیاها...")
-        # 🌟 زمان بیشتر برای لود اولیه عکس‌ها/ویدیوها
         await human_sleep(1.5, 0.4)
 
         # استخراج المان‌های مدیا
@@ -108,23 +105,47 @@ class PlaywrightDownloader:
             logger.debug(f"📝 پست {post_id} بدون مدیا.")
             return
 
-        logger.info(f"🎯 {media_count} المان مدیا در پست {post_id} یافت شد.")
-        # 🌟 صبر برای لود کامل همهٔ مدیاها
+        # 🌟 فیلتر واقعی: فقط المان‌های visible را بشمار
+        real_media = 0
+        visible_indices = []
+        for i in range(media_count):
+            try:
+                el = media_elements.nth(i)
+                if await el.is_visible(timeout=3000):
+                    real_media += 1
+                    visible_indices.append(i)
+            except Exception:
+                continue
+
+        if real_media == 0:
+            logger.debug(f"📝 پست {post_id} فقط متن است (بدون مدیای visible).")
+            return
+
+        logger.info(f"🎯 {real_media} مدیای واقعی در پست {post_id} یافت شد.")
         await human_sleep(2.0, 0.5)
 
-        for i in range(media_count):
-            # ساخت locator تازه برای هر المان
-            msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
-            current_element = msg_locator.locator(
-                'div.media-photo, div.media-video, div.document, a.media-photo, '
-                'video, img[src], div[class*="media"]'
-            ).nth(i)
+        # 🌟 پردازش فقط المان‌های visible با مدیریت خطا برای هرکدام
+        for i in visible_indices:
+            try:
+                # ساخت locator تازه
+                msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
+                current_element = msg_locator.locator(
+                    'div.media-photo, div.media-video, div.document, a.media-photo, '
+                    'video, img[src], div[class*="media"]'
+                ).nth(i)
 
-            media_type = await self._detect_media_type(current_element)
-            if media_type == "document":
-                await self._download_document(page, current_element, post_id, i, media_map)
-            else:
-                await self._download_media_viewer(page, current_element, post_id, i, media_map)
+                # صبر بیشتر قبل از پردازش
+                await human_sleep(1.0, 0.3)
+                await current_element.wait_for(state="visible", timeout=8000)
+
+                media_type = await self._detect_media_type(current_element)
+                if media_type == "document":
+                    await self._download_document(page, current_element, post_id, i, media_map)
+                else:
+                    await self._download_media_viewer(page, current_element, post_id, i, media_map)
+            except Exception as e:
+                logger.debug(f"المان {i} پست {post_id} رد شد: {e}")
+                continue
 
         if post_id in media_map:
             logger.info(f"📦 پست {post_id}: {len(media_map[post_id])} رسانه دانلود شد.")
@@ -186,7 +207,6 @@ class PlaywrightDownloader:
         viewer_selector = ", ".join(viewer_selectors)
         try:
             await page.wait_for_selector(viewer_selector, timeout=10000)
-            # 🌟 صبر برای لود کامل عکس در بیننده
             await human_sleep(1.8, 0.4)
         except Exception:
             logger.debug("Media Viewer باز نشد.")
@@ -272,7 +292,6 @@ class PlaywrightDownloader:
             logger.error(f"❌ ذخیره دانلود: {e}")
 
     async def _human_click(self, locator):
-        """کلیک همراه با حرکت تصادفی موس و تأخیر بیشتر"""
         try:
             await locator.scroll_into_view_if_needed()
             box = await locator.bounding_box()
@@ -280,7 +299,6 @@ class PlaywrightDownloader:
                 x = box['x'] + box['width'] / 2 + random.uniform(-5, 5)
                 y = box['y'] + box['height'] / 2 + random.uniform(-5, 5)
                 await locator.page.mouse.move(x, y)
-            # 🌟 تأخیر بیشتر قبل از کلیک
             await human_sleep(0.6, 0.3)
             await locator.click(timeout=5000, force=True)
         except Exception:
