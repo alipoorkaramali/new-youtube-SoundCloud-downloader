@@ -240,49 +240,45 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
-        # ۴. انتظار هوشمند برای نتایج (بر اساس المان نتیجه + نام کانال)
+        # ۴. انتظار هوشمند برای نتایج (بر اساس یک المان نتیجهٔ قابل مشاهده)
+        #     افزایش تایم‌اوت این مرحله به ۶۰ ثانیه (دوبرابر)
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
-        for wait_time in [8, 12, 16]:
-            await human_sleep(wait_time, 0.3)
-            text_exists = await page.evaluate(f'''(term) => {{
-                const results = document.querySelectorAll(
-                    'div.chatlist-item, div.search-result, a[data-peer-id], div[class*="ListItem"]'
-                );
-                for (const el of results) {{
-                    if (el.innerText.toLowerCase().includes(term.toLowerCase())) {{
-                        return true;
-                    }}
-                }}
-                return false;
-            }}''', search_term)
-            if text_exists:
-                self.logger.info(f"✅ نام '{search_term}' در نتایج یافت شد.")
-                found = True
-                break
+        result_locator = page.locator(
+            f'.chatlist-item:has-text("{search_term}"), '
+            f'.search-result:has-text("{search_term}"), '
+            f'a[data-peer-id]:has-text("{search_term}"), '
+            f'div[class*="ListItem"]:has-text("{search_term}")'
+        ).first
+
+        try:
+            # منتظر می‌مانیم تا یک عنصر نتیجه که حاوی نام کانال است واقعاً visible شود
+            await result_locator.wait_for(state="visible", timeout=60000)
+            self.logger.info(f"✅ المان نتیجهٔ قابل مشاهده با نام '{search_term}' پیدا شد.")
+            found = True
+        except Exception:
+            self.logger.warning(f"⚠️ المان نتیجه برای '{search_term}' پس از ۶۰ ثانیه visible نشد.")
 
         if not found:
-            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (پس از ۳۰ ثانیه).")
+            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' به‌طور کامل ظاهر نشدند (۶۰ ثانیه صبر کردیم).")
             await self._take_screenshot(page, "search_failed")
             return False
 
-        self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند.")
+        self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند (visible).")
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
 
-        # ۵. کلیک روی اولین نتیجه (نسخه بهبودیافته)
+        # ۵. کلیک روی همان نتیجهٔ یافت‌شده
         return await self._click_search_result(page, search_term)
 
-    # ═══════════════════ کلیک روی نتیجه (روش مقاوم با get_by_text) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (get_by_text + روش‌های پشتیبان) ═══════════════════
     async def _click_search_result(self, page, search_term: str) -> bool:
         """کلیک هوشمند با اولویت بالای get_by_text + روش‌های قبلی به‌عنوان پشتیبان"""
         # لایهٔ ۱: استفاده از get_by_text (بسیار مقاوم)
         self.logger.info(f"🔍 تلاش کلیک با get_by_text روی '{search_term}'...")
         try:
-            # ممکن است چندین المان با این متن وجود داشته باشد؛ اولین را برمی‌داریم
             item = page.get_by_text(search_term, exact=False).first
             if await item.count() > 0:
-                # کلیک با force (حتی اگر عنصر پوشانده شده باشد)
                 await item.click(timeout=8000, force=True)
                 await human_sleep(5, 0.4)
                 if await page.locator('div.message, div[data-message-id]').count() > 0:
