@@ -83,9 +83,10 @@ class TelegramChannelScraper:
         self._page = None
 
         async with async_playwright() as p:
+            # 🌟 تغییر کلیدی: headless=False + xvfb در workflow
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=str(self.profile_dir),
-                headless=True,
+                headless=False,
                 args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
                 viewport={"width": 1366, "height": 900},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
@@ -230,37 +231,34 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
-        # ۴. انتظار هوشمند برای نتایج (بر اساس وجود نام کانال در متن صفحه)
+        # ۴. انتظار هوشمند برای نتایج (روش اثبات‌شده با سلکتورها، مثل debug)
         found = False
-        # حداکثر ۳۰ ثانیه صبر می‌کنیم، هر ۲ ثانیه چک می‌کنیم
-        for _ in range(15):   # 15 * 2 = 30 ثانیه
-            await asyncio.sleep(2)
-            # بررسی کن که آیا در کل صفحه متنی برابر با نام کانال وجود دارد یا خیر
-            try:
-                text_exists = await page.evaluate(f'''(channel) => {{
-                    const bodyText = document.body.innerText || '';
-                    return bodyText.toLowerCase().includes(channel.toLowerCase());
-                }}''', self.channel)
-                if text_exists:
-                    self.logger.info(f"✅ نام کانال '{self.channel}' در صفحه یافت شد.")
-                    found = True
-                    break
-            except Exception:
-                continue
+        for wait_time in [6, 10, 14]:
+            await asyncio.sleep(wait_time)
+            for sel in ['div[role="button"]', 'div.search-result', 'div.chatlist-item', 'a[data-peer-id]']:
+                try:
+                    if await page.locator(sel).count() > 0:
+                        self.logger.info(f"✅ نتیجه پیدا شد با سلکتور '{sel}'")
+                        found = True
+                        break
+                except Exception:
+                    continue
+            if found:
+                break
 
         if not found:
-            self.logger.error("❌ نتایج جستجو برای این کانال پیدا نشد (حتی پس از ۳۰ ثانیه).")
+            self.logger.error("❌ نتایج پیدا نشد.")
             await self._take_screenshot(page, "search_failed")
             return False
 
-        self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند.")
+        self.logger.info("✅ نتایج جستجو ظاهر شدند.")
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await asyncio.sleep(2)
 
         # ۵. کلیک روی اولین نتیجه (مکانیسم اصلی و قدرتمند)
         return await self._click_search_result(page)
 
-    # ═══════════════════ کلیک روی نتیجه (نسخهٔ اصلی: force + JS) ═══════════════════
+    # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page) -> bool:
         """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
         # لایهٔ ۱: سلکتورهای رایج
