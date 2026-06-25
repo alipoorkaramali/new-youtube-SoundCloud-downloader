@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from playwright.async_api import Page, Download
+from playwright.async_api import Page
 
 logger = logging.getLogger("TelegramScraper")
 
@@ -20,8 +20,9 @@ async def human_sleep(base: float, jitter: float = 0.4):
 
 class PlaywrightDownloader:
     """
-    دانلود مدیا از طریق راست‌کلیک روی مدیا و انتخاب گزینهٔ «Download» از منوی سفارشی تلگرام.
-    کاملاً انسانی و بدون وابستگی به Media Viewer.
+    **نسخهٔ دیباگ راست‌کلیک**
+    فقط راست‌کلیک روی مدیاها انجام می‌دهد، اسکرین‌شات می‌گیرد و هیچ دانلودی انجام نمی‌شود.
+    هدف: بررسی ظاهر شدن منوی context و گزینه‌های آن.
     """
 
     MIME_TO_EXT = {
@@ -41,19 +42,23 @@ class PlaywrightDownloader:
         self.max_retries = max_retries
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
+        # پوشهٔ مخصوص اسکرین‌شات‌های دیباگ راست‌کلیک
+        self.debug_dir = self.media_dir.parent / "debug_rightclick"
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+
     async def download_all(self, page: Page, context, post_ids: List[str],
                            media_map: Optional[Dict[str, List[str]]] = None) -> None:
-        if media_map is None:
-            media_map = {}
+        """حلقهٔ اصلی – فقط راست‌کلیک و اسکرین‌شات، بدون دانلود"""
+        # media_map را نادیده می‌گیریم چون دانلودی در کار نیست
         if not post_ids:
-            logger.info("هیچ پستی برای دانلود وجود ندارد.")
+            logger.info("هیچ پستی برای بررسی وجود ندارد.")
             return
 
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
                 await asyncio.wait_for(
-                    self._process_post(page, post_id, media_map),
+                    self._process_post(page, post_id),
                     timeout=75
                 )
             except asyncio.TimeoutError:
@@ -63,9 +68,9 @@ class PlaywrightDownloader:
             if idx < len(post_ids):
                 await human_sleep(self.delay, 0.5)
 
-    async def _process_post(self, page: Page, post_id: str, media_map: Dict[str, List[str]]) -> None:
-        """پردازش یک پست و دانلود تمام مدیاهای visible با راست‌کلیک"""
-        logger.info(f"📍 شروع پردازش پست {post_id}")
+    async def _process_post(self, page: Page, post_id: str) -> None:
+        """نمایش پست، سپس راست‌کلیک روی هر المان مدیا و اسکرین‌شات"""
+        logger.info(f"📍 شروع بررسی پست {post_id}")
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
@@ -130,9 +135,9 @@ class PlaywrightDownloader:
         logger.info(f"🎯 {len(visible_indices)} مدیای واقعی در پست {post_id} یافت شد.")
         await human_sleep(1.8, 0.4)
 
-        # برای هر المان visible، راست‌کلیک و انتخاب Download
+        # برای هر المان visible: راست‌کلیک، اسکرین‌شات، سپس بستن منو
         for i in visible_indices:
-            logger.info(f"   ▶️ شروع دانلود با راست‌کلیک برای المان {i} از پست {post_id}")
+            logger.info(f"   ▶️ راست‌کلیک روی المان {i} از پست {post_id}")
             try:
                 msg_locator = page.locator(f'[data-message-id="{post_id}"]').first
                 current_element = msg_locator.locator(
@@ -144,144 +149,41 @@ class PlaywrightDownloader:
                 await current_element.wait_for(state="visible", timeout=12000)
                 logger.debug(f"   ✅ المان {i} visible شد")
 
-                # راست‌کلیک و دانلود
-                await self._context_menu_download(page, current_element, post_id, i, media_map)
+                # انجام راست‌کلیک
+                box = await current_element.bounding_box()
+                if box:
+                    x = box['x'] + box['width'] / 2
+                    y = box['y'] + box['height'] / 2
+                    await page.mouse.click(x, y, button='right')
+                    logger.info(f"   🖱️ راست‌کلیک انجام شد در ({x:.0f}, {y:.0f})")
+                else:
+                    await current_element.click(button='right')
+                    logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
+
+                # کمی صبر برای ظاهر شدن منو
+                await human_sleep(1.5, 0.3)
+
+                # اسکرین‌شات از کل صفحه (با منوی باز)
+                screenshot_path = self.debug_dir / f"rightclick_{post_id}_{i}.png"
+                await page.screenshot(path=screenshot_path, full_page=False)
+                logger.info(f"   📸 اسکرین‌شات ذخیره شد: {screenshot_path.name}")
+
+                # بستن منوی context (با کلید Escape)
+                await page.keyboard.press("Escape")
+                await human_sleep(0.5, 0.2)
+
             except Exception as e:
-                logger.warning(f"   ⚠️ المان {i} پست {post_id} رد شد: {e}")
+                logger.warning(f"   ⚠️ خطا در پردازش المان {i} پست {post_id}: {e}")
+                # در صورت خطا هم یک اسکرین‌شات بگیریم
+                try:
+                    path = self.debug_dir / f"error_{post_id}_{i}.png"
+                    await page.screenshot(path=path)
+                    logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
+                except:
+                    pass
                 continue
 
-        if post_id in media_map:
-            logger.info(f"📦 پست {post_id}: {len(media_map[post_id])} رسانه دانلود شد.")
+        logger.info(f"   ✅ پایان بررسی پست {post_id}")
 
-    async def _context_menu_download(self, page: Page, element, post_id: str,
-                                     idx: int, media_map: Dict[str, List[str]]):
-        """کلیک راست روی المان و انتخاب گزینهٔ Download از منوی سفارشی"""
-        download_occurred = [False]
-
-        async def on_download(download: Download):
-            download_occurred[0] = True
-            logger.info(f"   📥 رویداد دانلود فعال شد: {download.suggested_filename}")
-            await self._save_download(download, post_id, idx, media_map)
-
-        page.on("download", on_download)
-
-        try:
-            # ۱. راست‌کلیک روی المان
-            box = await element.bounding_box()
-            if box:
-                x = box['x'] + box['width'] / 2
-                y = box['y'] + box['height'] / 2
-                await page.mouse.click(x, y, button='right')
-                logger.info(f"   🖱️ راست‌کلیک انجام شد در ({x:.0f}, {y:.0f})")
-            else:
-                await element.click(button='right')
-                logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
-
-            # ۲. منتظر ظاهر شدن منوی سفارشی (معمولاً div با role="menu" یا مشابه)
-            #     چند سلکتور رایج برای منوی تلگرام
-            menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
-            await page.wait_for_selector(menu_selector, timeout=5000)
-            await human_sleep(0.5, 0.2)
-
-            # ۳. پیدا کردن گزینهٔ دانلود
-            #     ممکن است عبارت "Download" یا "Save image as…" یا "Save as…" باشد
-            download_option = page.locator(
-                '[role="menuitem"]:has-text("Download"), '
-                '[role="menuitem"]:has-text("Save"), '
-                'button:has-text("Download"), '
-                'div:has-text("Download")'
-            ).first
-
-            if await download_option.count() == 0:
-                # شاید منو ساختار دیگری داشته باشد – جستجوی کلی‌تر
-                download_option = page.get_by_text("Download", exact=False).first
-
-            if await download_option.count() > 0:
-                await download_option.click()
-                logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد")
-                # صبر برای شروع دانلود
-                await human_sleep(3, 0.5)
-            else:
-                logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
-        except Exception as e:
-            logger.warning(f"   ❌ خطا در راست‌کلیک/دانلود: {e}")
-        finally:
-            page.remove_listener("download", on_download)
-
-        # اگر دانلود از طریق راست‌کلیک موفق نشد، به روش مستقیم fallback کن
-        if not download_occurred[0]:
-            logger.info(f"   🔄 دانلود از طریق راست‌کلیک ناموفق — Fallback به دانلود مستقیم")
-            await self._direct_download_from_element(page, element, post_id, idx, media_map)
-
-    async def _direct_download_from_element(self, page: Page, element, post_id: str,
-                                            idx: int, media_map: Dict[str, List[str]]):
-        """Fallback: استخراج لینک و دانلود مستقیم (همان روش قبلی)"""
-        links = await element.evaluate('''(el) => {
-            const links = new Set();
-            const add = (url) => { if (url && url.startsWith('http')) links.add(url); };
-            el.querySelectorAll('img[src]').forEach(i => add(i.src));
-            el.querySelectorAll('video source[src]').forEach(s => add(s.src));
-            el.querySelectorAll('a[href*="/file/"]').forEach(a => add(a.href));
-            return Array.from(links);
-        }''')
-        if not links:
-            return
-        for link in links:
-            for attempt in range(self.max_retries + 1):
-                try:
-                    resp = await page.request.get(link, headers={"Referer": "https://web.telegram.org/"})
-                    if resp.ok:
-                        body = await resp.body()
-                        if len(body) > self.max_bytes:
-                            logger.info(f"⏩ رد شد (حجم {len(body)/1024/1024:.1f}MB)")
-                            break
-                        ext = self._guess_ext(resp, link)
-                        base_name = f"{post_id}_{idx}.{ext}"
-                        filepath = self.media_dir / base_name
-                        counter = 1
-                        while filepath.exists():
-                            filepath = self.media_dir / f"{post_id}_{idx}_{counter}.{ext}"
-                            counter += 1
-                        with open(filepath, 'wb') as f:
-                            f.write(body)
-                        logger.info(f"✅ مستقیم: {filepath.name} ({len(body)/1024/1024:.1f} MB)")
-                        media_map.setdefault(post_id, []).append(f"media/{filepath.name}")
-                        break
-                except Exception as e:
-                    logger.error(f"❌ خطای دانلود: {e}")
-                if attempt < self.max_retries:
-                    await human_sleep(2, 0.5)
-
-    async def _save_download(self, download: Download, post_id: str,
-                             idx: int, media_map: Dict[str, List[str]]):
-        """ذخیرهٔ فایل و ثبت در media_map"""
-        try:
-            suggested = download.suggested_filename
-            ext = suggested.rsplit('.', 1)[-1] if '.' in suggested else "bin"
-            base_name = f"{post_id}_{idx}.{ext}"
-            filepath = self.media_dir / base_name
-            counter = 1
-            while filepath.exists():
-                filepath = self.media_dir / f"{post_id}_{idx}_{counter}.{ext}"
-                counter += 1
-            await download.save_as(str(filepath))
-            size_mb = filepath.stat().st_size / 1024 / 1024 if filepath.exists() else 0
-            if size_mb > self.max_bytes / 1024 / 1024:
-                logger.info(f"⏩ {filepath.name} رد شد (حجم {size_mb:.1f}MB)")
-                filepath.unlink(missing_ok=True)
-            else:
-                logger.info(f"✅ دانلود شد: {filepath.name} ({size_mb:.1f} MB)")
-                media_map.setdefault(post_id, []).append(f"media/{filepath.name}")
-        except Exception as e:
-            logger.error(f"❌ ذخیره دانلود: {e}")
-
-    def _guess_ext(self, response, url: str) -> str:
-        ct = response.headers.get("content-type", "").split(";")[0].strip().lower()
-        if ct in self.MIME_TO_EXT:
-            return self.MIME_TO_EXT[ct]
-        path = url.split("?")[0]
-        if '.' in path:
-            ext = path.rsplit('.', 1)[-1][:5]
-            if ext.isalnum():
-                return ext
-        return "bin"
+    # تمام متدهای دانلود (save, direct, context_menu) در این نسخه کامنت شده یا حذف شده‌اند.
+    # فقط _guess_ext (اگر لازم باشد) می‌تواند باقی بماند.
