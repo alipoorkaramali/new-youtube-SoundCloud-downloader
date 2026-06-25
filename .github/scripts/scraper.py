@@ -202,6 +202,15 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
+        # 🌟 اسکرول به آخرین پست برای آماده‌سازی viewport دانلود
+        if items:
+            last_id = items[-1]['id']
+            try:
+                await page.locator(f'[data-message-id="{last_id}"]').scroll_into_view_if_needed()
+                await human_sleep(1, 0.3)
+            except Exception:
+                pass
+
         return items[:self.limit], context, page
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
@@ -362,8 +371,9 @@ class TelegramChannelScraper:
 
     # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        post_ids = [str(item['id']) for item in items]
-        media_map = {}   # توسط دانلودر پر می‌شود
+        # 🌟 ترتیب معکوس: دانلود از جدیدترین (پایین‌ترین) به قدیمی‌ترین
+        post_ids = [str(item['id']) for item in reversed(items)]
+        media_map = {}
 
         downloaded = 0
         if post_ids:
