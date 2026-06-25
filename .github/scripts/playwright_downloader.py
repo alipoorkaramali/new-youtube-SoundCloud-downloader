@@ -213,6 +213,7 @@ class PlaywrightDownloader:
                                      idx: int, media_map: Dict[str, List[str]]):
         logger.info(f"   🖼️ دانلود عکس/ویدیو با Media Viewer شروع شد")
         try:
+            # کلیک با ضربدر قرمز برای دیباگ
             await self._human_click(element, debug_name=f"media_{post_id}_{idx}", draw_cross=True)
             logger.info(f"   ✅ کلیک روی عکس/ویدیو انجام شد — منتظر Media Viewer...")
             await human_sleep(1.5, 0.4)
@@ -225,16 +226,18 @@ class PlaywrightDownloader:
             'div[class*="lightbox"]', 'div.media-viewer-content'
         ]
         viewer_selector = ", ".join(viewer_selectors)
+        viewer_opened = False
         try:
             await page.wait_for_selector(viewer_selector, timeout=12000)
+            viewer_opened = True
             logger.info(f"   ✅ Media Viewer باز شد")
             await human_sleep(2.2, 0.5)
         except Exception as e:
             logger.warning(f"   ❌ Media Viewer باز نشد: {e}")
-            # اسکرین‌شات بعد از شکست
+            # اسکرین‌شات اضافی از وضعیت صفحه بعد از شکست
             debug_path = self.debug_dir / f"debug_viewer_failed_{post_id}_{idx}.png"
             await page.screenshot(path=debug_path)
-            logger.info(f"   📸 اسکرین‌شات بعد از شکست: {debug_path.name}")
+            logger.info(f"   📸 اسکرین‌شات بعد از شکست در باز شدن Viewer: {debug_path.name}")
             await self._direct_download_from_element(page, element, post_id, idx, media_map)
             return
 
@@ -329,7 +332,7 @@ class PlaywrightDownloader:
             logger.error(f"❌ ذخیره دانلود: {e}")
 
     async def _human_click(self, locator, debug_name: str = "", draw_cross: bool = False):
-        """کلیک همراه با حرکت موس و امکان رسم ضربدر قرمز"""
+        """کلیک همراه با حرکت موس و امکان رسم ضربدر قرمز قبل از کلیک"""
         try:
             await locator.scroll_into_view_if_needed()
             box = await locator.bounding_box()
@@ -339,6 +342,7 @@ class PlaywrightDownloader:
                 await locator.page.mouse.move(x, y)
 
                 if draw_cross and debug_name:
+                    # رسم ضربدر و گرفتن اسکرین‌شات
                     await self._draw_debug_cross(locator.page, x, y, f"{debug_name}_cross")
             else:
                 x = y = None
@@ -346,6 +350,7 @@ class PlaywrightDownloader:
             await human_sleep(0.6, 0.3)
 
             if debug_name and not draw_cross:
+                # اسکرین‌شات ساده
                 path = self.debug_dir / f"debug_click_{debug_name}.png"
                 await locator.page.screenshot(path=path)
                 logger.info(f"   📸 اسکرین‌شات قبل از کلیک ذخیره شد: {path.name}")
@@ -357,8 +362,8 @@ class PlaywrightDownloader:
             await locator.click(timeout=8000, force=True)
 
     async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
-        """رسم ضربدر قرمز و ذخیره اسکرین‌شات"""
-        # افزودن عنصر ضربدر به صورت موقت
+        """رسم ضربدر قرمز در مختصات مشخص و ذخیره اسکرین‌شات"""
+        # ایجاد یک container برای ضربدر
         await page.evaluate(f"""
             () => {{
                 const container = document.createElement('div');
@@ -367,7 +372,7 @@ class PlaywrightDownloader:
                 container.style.left = '0px';
                 container.style.top = '0px';
                 container.style.zIndex = '99999';
-                container.style.pointerEvents = 'none';
+                container.style.pointerEvents = 'none';  // مانع کلیک نشود
                 document.body.appendChild(container);
 
                 const cross = document.createElement('div');
@@ -377,13 +382,15 @@ class PlaywrightDownloader:
                 cross.style.width = '24px';
                 cross.style.height = '24px';
                 cross.style.transform = 'translate(-50%, -50%)';
-                cross.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
-                    <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
-                </svg>`;
+                cross.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
+                        <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
+                    </svg>`;
                 container.appendChild(cross);
             }}
         """)
+        # گرفتن اسکرین‌شات
         path = self.debug_dir / f"debug_click_{name}.png"
         await page.screenshot(path=path)
         logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
@@ -442,4 +449,9 @@ class PlaywrightDownloader:
         ct = response.headers.get("content-type", "").split(";")[0].strip().lower()
         if ct in self.MIME_TO_EXT:
             return self.MIME_TO_EXT[ct]
-        path = url.
+        path = url.split("?")[0]
+        if '.' in path:
+            ext = path.rsplit('.', 1)[-1][:5]
+            if ext.isalnum():
+                return ext
+        return "bin"
