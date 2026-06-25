@@ -89,6 +89,11 @@ jobs:
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
+     #---------------------------
+     # ۶.۱. تست وجود head
+     #---------------------------
+      - name: 🖥️ Ensure xvfb is installed
+        run: sudo apt-get install -y xvfb
 
       # ════════════════════════════════════════════
       # ۷. استخراج پروفایل مرورگر
