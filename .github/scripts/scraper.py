@@ -29,6 +29,7 @@ class TelegramChannelScraper:
     def __init__(self, config: Config):
         self.config = config
         self.channel = config.channel.lstrip('@')
+        # 🌟 بازیابی نام نمایشی (اختیاری)
         self.channel_name = getattr(config, 'channel_name', '') or ''
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
@@ -158,12 +159,7 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # 🌟 اطمینان از visible بودن پیام برای استخراج صحیح متن
-                        await msg.scroll_into_view_if_needed()
-                        await msg.wait_for(state="visible", timeout=5000)
-
-                        # استخراج متن با طول بیشتر
-                        text = (await msg.inner_text()).strip()[:1000]
+                        text = (await msg.inner_text()).strip()[:600]
                         date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
                         date = ""
                         if await date_el.count() > 0:
@@ -215,6 +211,7 @@ class TelegramChannelScraper:
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
+        # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -232,12 +229,14 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
-        await search_input.fill(self.channel)
+        # ۲. تایپ نام کاربری (username) برای جستجو
+        await search_input.fill(self.channel)                # همیشه username
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
         await human_sleep(6, 0.4)
 
+        # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
@@ -247,6 +246,8 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
+        # ۴. انتظار هوشمند برای نتایج (با استفاده از نام نمایشی یا username)
+        #     اگر کاربر نام نمایشی وارد کرده باشد، همان را مبنا قرار می‌دهیم
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
         for _ in range(15):
@@ -272,10 +273,12 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
 
+        # ۵. کلیک روی اولین نتیجه (با استفاده از همان search_term)
         return await self._click_search_result(page, search_term)
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page, search_term: str) -> bool:
+        """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
@@ -294,6 +297,7 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
+        # لایهٔ ۲: کلیک با JavaScript روی عبارت جستجو (search_term)
         self.logger.info("🔄 تلاش کلیک با JavaScript روی عبارت جستجو...")
         try:
             await page.evaluate(f'''(term) => {{
@@ -310,6 +314,7 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.debug("JavaScript name click: %s", e)
 
+        # لایهٔ ۳: کلیک روی اولین آیتم
         self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
             await page.evaluate('''() => {
