@@ -21,6 +21,7 @@ class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
     موقعیت گزینه با جستجوی دقیق متن «Download» مانند جستجوی نام کانال پیدا می‌شود.
+    پس از کلیک، تا دریافت همهٔ فایل‌ها (با در نظر گرفتن تعداد مدیاها) صبر می‌کند.
     """
 
     MIME_TO_EXT = {
@@ -54,9 +55,10 @@ class PlaywrightDownloader:
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
+                # timeout کلی هر پست افزایش یافته تا فایل‌های حجیم هم فرصت دانلود داشته باشند
                 await asyncio.wait_for(
                     self._process_post(page, post_id, media_map),
-                    timeout=75
+                    timeout=240
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"⏰ پست {post_id} تایم‌اوت کلی شد، رد می‌شود.")
@@ -100,6 +102,23 @@ class PlaywrightDownloader:
 
         logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک و دانلود...")
         await human_sleep(1.5, 0.4)
+
+        # ──────────────────────────────────────────────
+        # 🌟 شمارش تعداد مدیای visible برای حدس تعداد فایل‌های مورد انتظار
+        # ──────────────────────────────────────────────
+        media_elements = message_locator.locator(
+            'div.media-photo, div.media-video, div.document, a.media-photo, '
+            'video, img[src], div[class*="media"]'
+        )
+        visible_count = 0
+        try:
+            all_media = await media_elements.count()
+            for i in range(all_media):
+                if await media_elements.nth(i).is_visible(timeout=3000):
+                    visible_count += 1
+        except Exception:
+            visible_count = 1  # حداقل یک فایل فرض می‌کنیم
+        logger.info(f"   🖼️ تعداد مدیای visible: {visible_count} (برای تخمین زمان انتظار)")
 
         downloaded_files = []
         file_index = 0
@@ -152,7 +171,6 @@ class PlaywrightDownloader:
 
             # ۳. یافتن گزینهٔ "Download" با جستجوی دقیق متن (شبیه جستجوی نام کانال)
             download_coords = await page.evaluate('''() => {
-                // ابتدا در گره‌های متنی بگردیم که دقیقاً "Download" باشند
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                 let node;
                 while (node = walker.nextNode()) {
@@ -164,7 +182,6 @@ class PlaywrightDownloader:
                         }
                     }
                 }
-                // اگر پیدا نشد، در تمام المان‌های محتمل (menuitem, button, div) جستجو کنیم
                 const elements = document.querySelectorAll('[role="menuitem"], button, div');
                 for (const el of elements) {
                     if (el.innerText.trim().toLowerCase() === 'download') {
@@ -176,15 +193,11 @@ class PlaywrightDownloader:
             }''')
 
             if download_coords:
-                # دیباگ: رسم ضربدر و اسکرین‌شات
                 await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}")
                 logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
-
-                # کلیک روی مختصات
                 await page.mouse.click(download_coords['x'], download_coords['y'])
                 logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
             else:
-                # Fallback: استفاده از get_by_text (روش قبلی)
                 download_option = page.get_by_text("Download", exact=False).first
                 if await download_option.count() > 0:
                     await download_option.click()
@@ -192,8 +205,27 @@ class PlaywrightDownloader:
                 else:
                     logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
-            # ۴. صبر برای دریافت همهٔ فایل‌ها (مخصوصاً آلبوم‌ها)
-            await human_sleep(15.0, 0.2)
+            # ═══════════════════════════════════════════
+            # 🌟 انتظار هوشمند برای دریافت کامل فایل‌ها
+            # ═══════════════════════════════════════════
+            # به‌جای یک sleep ثابت، هر ۲ ثانیه بررسی می‌کنیم که آیا
+            # تعداد فایل‌های دانلودشده به تعداد مدیای visible رسیده است یا نه.
+            # این روش خودبه‌خود منتظر حجم‌های بالا می‌ماند و برای فایل‌های کوچک
+            # بلافاصله پایان می‌یابد.
+            max_wait = 180          # حداکثر ۱۸۰ ثانیه انتظار
+            check_interval = 2      # هر ۲ ثانیه وضعیت بررسی شود
+            waited = 0
+            while len(downloaded_files) < visible_count and waited < max_wait:
+                await asyncio.sleep(check_interval)
+                waited += check_interval
+                logger.debug(f"   ⏳ {waited}s گذشته – {len(downloaded_files)}/{visible_count} فایل دریافت شد")
+
+            if len(downloaded_files) >= visible_count:
+                logger.info(f"   🎉 همهٔ {visible_count} فایل با موفقیت دریافت شدند.")
+            else:
+                logger.warning(f"   ⚠️ فقط {len(downloaded_files)} از {visible_count} فایل دریافت شد (تایم‌اوت).")
+            # ═══════════════════════════════════════════
+
         except Exception as e:
             logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
             try:
