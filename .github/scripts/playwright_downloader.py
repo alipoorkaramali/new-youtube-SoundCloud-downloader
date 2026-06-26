@@ -20,8 +20,8 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
-    موقعیت گزینه با جستجوی دقیق متن «Download» مانند جستجوی نام کانال پیدا می‌شود.
-    پس از کلیک، با یک روش تطبیقی منتظر می‌ماند تا همهٔ فایل‌ها دریافت شوند.
+    برای پست‌های صوتی/ویس، هدف راست‌کلیک را دقیق‌تر روی المان صوتی تنظیم می‌کند.
+    در صورت شکست، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
     """
 
     MIME_TO_EXT = {
@@ -77,10 +77,8 @@ class PlaywrightDownloader:
         for attempt in range(5):
             try:
                 logger.debug(f"   🔄 تلاش {attempt+1} برای نمایان کردن پست")
-                # ابتدا یک بار ساده اسکرول، سپس با margine اجباری
                 await message_locator.scroll_into_view_if_needed(timeout=20000)
                 if attempt == 0:
-                    # دفعه اول کمی بیشتر صبر
                     await human_sleep(2.0, 0.4)
                 else:
                     await human_sleep(1.0, 0.3)
@@ -97,7 +95,6 @@ class PlaywrightDownloader:
                     await page.evaluate("window.scrollBy(0, -1200)")
                     await human_sleep(2.5, 0.5)
                 else:
-                    # 🌟 عکس از وضعیت صفحه وقتی پست پیدا نشد
                     path = self.debug_dir / f"post_not_found_{post_id}.png"
                     await page.screenshot(path=path)
                     logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد. اسکرین‌شات: {path.name}")
@@ -106,13 +103,26 @@ class PlaywrightDownloader:
         if not success:
             return
 
-        logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک و دانلود...")
+        logger.info(f"   📍 پست {post_id} آماده شد.")
         await human_sleep(1.5, 0.4)
+
+        # ──────────────── هدف دقیق برای راست‌کلیک ────────────────
+        # ابتدا سعی می‌کنیم المان مخصوص صوت/ویس را پیدا کنیم (در صورت وجود)
+        audio_locator = message_locator.locator(
+            'div.audio-message, div[class*="Voice"], audio, '
+            'div[class*="voice"], div[class*="player"]'
+        ).first
+        if await audio_locator.count() > 0 and await audio_locator.is_visible():
+            click_target = audio_locator
+            logger.info("   🎯 هدف دقیق: المان صوتی")
+        else:
+            click_target = message_locator
+            logger.info("   🎯 هدف: کل حباب پیام")
 
         # شمارش مدیای visible (فقط برای اطلاع)
         media_elements = message_locator.locator(
             'div.media-photo, div.media-video, div.document, a.media-photo, '
-            'video, img[src], div[class*="media"]'
+            'video, img[src], div[class*="media"], audio'
         )
         visible_count = 0
         try:
@@ -124,7 +134,6 @@ class PlaywrightDownloader:
             visible_count = 1
         logger.info(f"   🖼️ تعداد مدیای visible (تقریبی): {visible_count}")
 
-        # لیست فایل‌های دانلودشده و listener
         downloaded_files = []
         file_index = 0
 
@@ -153,22 +162,25 @@ class PlaywrightDownloader:
 
         page.on("download", on_download)
 
+        menu_success = False
+
         try:
-            # ۱. راست‌کلیک (با دو تلاش در صورت نیاز)
+            # ۱. راست‌کلیک با ضربدر روی هدف
             menu_appeared = False
             for right_attempt in range(2):
-                # کلیک راست روی مرکز حباب
-                box = await message_locator.bounding_box()
+                # رسم ضربدر روی هدف و ذخیره اسکرین‌شات
+                box = await click_target.bounding_box()
                 if box:
                     x = box['x'] + box['width'] / 2
                     y = box['y'] + box['height'] / 2
+                    await self._draw_debug_cross(page, x, y, f"target_{post_id}_{right_attempt}")
+                    logger.info(f"   📸 ضربدر روی هدف کلیک (تلاش {right_attempt+1})")
                     await page.mouse.click(x, y, button='right')
-                    logger.info(f"   🖱️ راست‌کلیک روی پیام انجام شد در ({x:.0f}, {y:.0f}) (تلاش {right_attempt+1})")
+                    logger.info(f"   🖱️ راست‌کلیک روی هدف در ({x:.0f}, {y:.0f})")
                 else:
-                    await message_locator.click(button='right')
+                    await click_target.click(button='right', force=True)
                     logger.info(f"   🖱️ راست‌کلیک با force (تلاش {right_attempt+1})")
 
-                # ۲. منتظر منوی context (با timeout کوتاه)
                 menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
                 try:
                     await page.wait_for_selector(menu_selector, state="attached", timeout=5000 if right_attempt == 0 else 7000)
@@ -180,77 +192,76 @@ class PlaywrightDownloader:
                         logger.debug("   🔄 منو نیامد – صبر کوتاه و تلاش دوباره...")
                         await human_sleep(3.0, 0.5)
                     else:
-                        # 🌟 عکس از وضعیت صفحه وقتی منو اصلاً باز نشد
                         path = self.debug_dir / f"menu_failed_{post_id}.png"
                         await page.screenshot(path=path)
                         logger.warning(f"   ⚠️ منوی context بعد از ۲ تلاش ظاهر نشد. اسکرین‌شات: {path.name}")
 
-            if not menu_appeared:
-                logger.warning("   ❌ رد کردن این پست به دلیل عدم نمایش منو.")
-                return
-
-            # ۳. یافتن گزینهٔ "Download" (مانند قبل)
-            download_coords = await page.evaluate('''() => {
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                let node;
-                while (node = walker.nextNode()) {
-                    if (node.textContent.trim().toLowerCase() === 'download') {
-                        const parent = node.parentElement;
-                        if (parent && (parent.getAttribute('role') === 'menuitem' || parent.closest('[role="menu"]'))) {
-                            const rect = parent.getBoundingClientRect();
+            if menu_appeared:
+                # ۲. یافتن گزینهٔ "Download" (مانند قبل)
+                download_coords = await page.evaluate('''() => {
+                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                    let node;
+                    while (node = walker.nextNode()) {
+                        if (node.textContent.trim().toLowerCase() === 'download') {
+                            const parent = node.parentElement;
+                            if (parent && (parent.getAttribute('role') === 'menuitem' || parent.closest('[role="menu"]'))) {
+                                const rect = parent.getBoundingClientRect();
+                                return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                            }
+                        }
+                    }
+                    const elements = document.querySelectorAll('[role="menuitem"], button, div');
+                    for (const el of elements) {
+                        if (el.innerText.trim().toLowerCase() === 'download') {
+                            const rect = el.getBoundingClientRect();
                             return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
                         }
                     }
-                }
-                const elements = document.querySelectorAll('[role="menuitem"], button, div');
-                for (const el of elements) {
-                    if (el.innerText.trim().toLowerCase() === 'download') {
-                        const rect = el.getBoundingClientRect();
-                        return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
-                    }
-                }
-                return null;
-            }''')
+                    return null;
+                }''')
 
-            if download_coords:
-                await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}")
-                logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
-                await page.mouse.click(download_coords['x'], download_coords['y'])
-                logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
-            else:
-                download_option = page.get_by_text("Download", exact=False).first
-                if await download_option.count() > 0:
-                    await download_option.click()
-                    logger.info(f"   ✅ کلیک روی گزینهٔ دانلود (fallback)")
+                if download_coords:
+                    await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}")
+                    logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
+                    await page.mouse.click(download_coords['x'], download_coords['y'])
+                    logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
+                    menu_success = True
                 else:
-                    logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
+                    download_option = page.get_by_text("Download", exact=False).first
+                    if await download_option.count() > 0:
+                        await download_option.click()
+                        logger.info(f"   ✅ کلیک روی گزینهٔ دانلود (fallback)")
+                        menu_success = True
+                    else:
+                        logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
-            # 🌟 انتظار تطبیقی (همان منطق قبلی)
-            absolute_timeout = 600
-            quiet_threshold = 15
-            check_interval = 2
-            waited = 0
-            last_count = 0
-            quiet_elapsed = 0
-
-            while waited < absolute_timeout:
-                await asyncio.sleep(check_interval)
-                waited += check_interval
-                current_count = len(downloaded_files)
-                if current_count > last_count:
-                    last_count = current_count
+                if menu_success:
+                    # انتظار تطبیقی
+                    absolute_timeout = 600
+                    quiet_threshold = 15
+                    check_interval = 2
+                    waited = 0
+                    last_count = 0
                     quiet_elapsed = 0
-                    logger.debug(f"   ⏳ {waited}s – {current_count} فایل دریافت شد (فعالیت جدید)")
-                else:
-                    quiet_elapsed += check_interval
-                    logger.debug(f"   ⏳ {waited}s – {current_count} فایل، {quiet_elapsed}s سکوت")
 
-                if quiet_elapsed >= quiet_threshold:
-                    logger.info(f"   🔇 {quiet_threshold} ثانیه بدون دانلود جدید – اتمام دانلودهای این پست")
-                    break
+                    while waited < absolute_timeout:
+                        await asyncio.sleep(check_interval)
+                        waited += check_interval
+                        current_count = len(downloaded_files)
+                        if current_count > last_count:
+                            last_count = current_count
+                            quiet_elapsed = 0
+                            logger.debug(f"   ⏳ {waited}s – {current_count} فایل دریافت شد (فعالیت جدید)")
+                        else:
+                            quiet_elapsed += check_interval
+                            logger.debug(f"   ⏳ {waited}s – {current_count} فایل، {quiet_elapsed}s سکوت")
 
-            if waited >= absolute_timeout:
-                logger.warning(f"   ⚠️ زمان کلی {absolute_timeout}s به پایان رسید – {len(downloaded_files)} فایل دریافت شد.")
+                        if quiet_elapsed >= quiet_threshold:
+                            logger.info(f"   🔇 {quiet_threshold} ثانیه بدون دانلود جدید – اتمام دانلودهای این پست")
+                            break
+
+                    if waited >= absolute_timeout:
+                        logger.warning(f"   ⚠️ زمان کلی {absolute_timeout}s به پایان رسید – {len(downloaded_files)} فایل دریافت شد.")
 
         except Exception as e:
             logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
@@ -269,9 +280,70 @@ class PlaywrightDownloader:
                 pass
             page.remove_listener("download", on_download)
 
+        # Fallback مستقیم + پشتیبانی از <audio src="...">
+        if not menu_success and not downloaded_files:
+            logger.info(f"   🔄 منوی context ناموفق – استفاده از دانلود مستقیم...")
+            links = await message_locator.evaluate('''(el) => {
+                const links = new Set();
+                const add = (url) => { if (url && url.startsWith('http')) links.add(url); };
+                el.querySelectorAll('img[src]').forEach(i => add(i.src));
+                el.querySelectorAll('video source[src]').forEach(s => add(s.src));
+                el.querySelectorAll('audio[src]').forEach(a => add(a.src));
+                el.querySelectorAll('audio source[src]').forEach(s => add(s.src));
+                el.querySelectorAll('a[href*="/file/"]').forEach(a => add(a.href));
+                return Array.from(links);
+            }''')
+            logger.info(f"   🔗 {len(links)} لینک در کل پیام پیدا شد")
+            if links:
+                for idx, link in enumerate(links):
+                    await self._download_link(page, link, post_id, idx, media_map)
+            else:
+                logger.warning(f"   ⚠️ هیچ لینکی برای دانلود مستقیم یافت نشد.")
+
         if downloaded_files:
             media_map[post_id] = downloaded_files
             logger.info(f"📦 پست {post_id}: {len(downloaded_files)} رسانه دانلود شد.")
+
+    async def _download_link(self, page: Page, link: str, post_id: str, idx: int,
+                             media_map: Dict[str, List[str]]):
+        """کمکی برای دانلود یک لینک مستقیم و اضافه کردن به media_map"""
+        for attempt in range(self.max_retries + 1):
+            try:
+                resp = await page.request.get(link, headers={"Referer": "https://web.telegram.org/"})
+                if resp.ok:
+                    body = await resp.body()
+                    if len(body) > self.max_bytes:
+                        logger.info(f"⏩ رد شد (حجم {len(body)/1024/1024:.1f}MB)")
+                        return
+                    ext = self._guess_ext(resp, link)
+                    base_name = f"{post_id}_{idx}.{ext}"
+                    filepath = self.media_dir / base_name
+                    counter = 1
+                    while filepath.exists():
+                        filepath = self.media_dir / f"{post_id}_{idx}_{counter}.{ext}"
+                        counter += 1
+                    with open(filepath, 'wb') as f:
+                        f.write(body)
+                    logger.info(f"✅ مستقیم: {filepath.name} ({len(body)/1024/1024:.1f} MB)")
+                    media_map.setdefault(post_id, []).append(f"media/{filepath.name}")
+                    return
+                else:
+                    logger.warning(f"⚠️ HTTP {resp.status} برای {link}")
+            except Exception as e:
+                logger.error(f"❌ خطای دانلود {link}: {e}")
+            if attempt < self.max_retries:
+                await human_sleep(2, 0.5)
+
+    def _guess_ext(self, response, url: str) -> str:
+        ct = response.headers.get("content-type", "").split(";")[0].strip().lower()
+        if ct in self.MIME_TO_EXT:
+            return self.MIME_TO_EXT[ct]
+        path = url.split("?")[0]
+        if '.' in path:
+            ext = path.rsplit('.', 1)[-1][:5]
+            if ext.isalnum():
+                return ext
+        return "bin"
 
     async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
         """رسم ضربدر قرمز و ذخیره اسکرین‌شات"""
