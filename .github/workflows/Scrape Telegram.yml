@@ -177,7 +177,6 @@ jobs:
         run: |
           git lfs install
           git lfs track "Download/telegram_downloads/**/media/*"
-          git lfs track "Download/telegram_downloads/**/*.zip*"
           git add .gitattributes
 
       # ════════════════════════════════════════════
