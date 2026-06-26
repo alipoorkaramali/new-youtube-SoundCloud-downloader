@@ -21,7 +21,9 @@ class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
     برای پست‌های صوتی/ویس، هدف راست‌کلیک را دقیق‌تر روی المان صوتی تنظیم می‌کند.
-    در صورت شکست، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
+    در صورت شکست اولیه، صفحه را کمی به بالا اسکرول می‌کند (برای خارج شدن از زیر
+    پست‌های پین‌شده) و دوباره تلاش می‌کند.
+    اگر همچنان ناموفق بود، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
     """
 
     MIME_TO_EXT = {
@@ -107,7 +109,6 @@ class PlaywrightDownloader:
         await human_sleep(1.5, 0.4)
 
         # ──────────────── هدف دقیق برای راست‌کلیک ────────────────
-        # ابتدا سعی می‌کنیم المان مخصوص صوت/ویس را پیدا کنیم (در صورت وجود)
         audio_locator = message_locator.locator(
             'div.audio-message, div[class*="Voice"], audio, '
             'div[class*="voice"], div[class*="player"]'
@@ -164,40 +165,52 @@ class PlaywrightDownloader:
 
         menu_success = False
 
-        try:
-            # ۱. راست‌کلیک با ضربدر روی هدف
-            menu_appeared = False
-            for right_attempt in range(2):
-                # رسم ضربدر روی هدف و ذخیره اسکرین‌شات
-                box = await click_target.bounding_box()
-                if box:
-                    x = box['x'] + box['width'] / 2
-                    y = box['y'] + box['height'] / 2
-                    await self._draw_debug_cross(page, x, y, f"target_{post_id}_{right_attempt}")
-                    logger.info(f"   📸 ضربدر روی هدف کلیک (تلاش {right_attempt+1})")
-                    await page.mouse.click(x, y, button='right')
-                    logger.info(f"   🖱️ راست‌کلیک روی هدف در ({x:.0f}, {y:.0f})")
-                else:
-                    await click_target.click(button='right', force=True)
-                    logger.info(f"   🖱️ راست‌کلیک با force (تلاش {right_attempt+1})")
+        # ──────────────── تلاش برای راست‌کلیک و منوی context (با اسکرول کمکی در صورت شکست) ────────────────
+        # حداکثر ۳ بار کل پروسه (هر بار ۲ تلاش راست‌کلیک) انجام می‌شود
+        # اگر منو ظاهر نشد، قبل از تلاش بعدی ۳۰۰px به بالا اسکرول می‌کنیم
+        for scroll_attempt in range(3):
+            if menu_success:
+                break
+            if scroll_attempt > 0:
+                logger.info(f"   📜 اسکرول کمکی ۳۰۰px به بالا (تلاش کلی {scroll_attempt+1})")
+                await page.evaluate("window.scrollBy(0, -300)")
+                await human_sleep(1.5, 0.3)
 
-                menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
-                try:
-                    await page.wait_for_selector(menu_selector, state="attached", timeout=5000 if right_attempt == 0 else 7000)
-                    menu_appeared = True
-                    await human_sleep(0.8, 0.3)
-                    break
-                except Exception:
-                    if right_attempt == 0:
-                        logger.debug("   🔄 منو نیامد – صبر کوتاه و تلاش دوباره...")
-                        await human_sleep(3.0, 0.5)
+            try:
+                menu_appeared = False
+                for right_attempt in range(2):
+                    # رسم ضربدر روی هدف و ذخیره اسکرین‌شات
+                    box = await click_target.bounding_box()
+                    if box:
+                        x = box['x'] + box['width'] / 2
+                        y = box['y'] + box['height'] / 2
+                        await self._draw_debug_cross(page, x, y, f"target_{post_id}_{scroll_attempt}_{right_attempt}")
+                        logger.info(f"   📸 ضربدر روی هدف کلیک (تلاش {scroll_attempt+1}-{right_attempt+1})")
+                        await page.mouse.click(x, y, button='right')
+                        logger.info(f"   🖱️ راست‌کلیک روی هدف در ({x:.0f}, {y:.0f})")
                     else:
-                        path = self.debug_dir / f"menu_failed_{post_id}.png"
-                        await page.screenshot(path=path)
-                        logger.warning(f"   ⚠️ منوی context بعد از ۲ تلاش ظاهر نشد. اسکرین‌شات: {path.name}")
+                        await click_target.click(button='right', force=True)
+                        logger.info(f"   🖱️ راست‌کلیک با force (تلاش {scroll_attempt+1}-{right_attempt+1})")
 
-            if menu_appeared:
-                # ۲. یافتن گزینهٔ "Download" (مانند قبل)
+                    menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
+                    try:
+                        await page.wait_for_selector(menu_selector, state="attached", timeout=5000 if right_attempt == 0 else 7000)
+                        menu_appeared = True
+                        await human_sleep(0.8, 0.3)
+                        break
+                    except Exception:
+                        if right_attempt == 0:
+                            logger.debug("   🔄 منو نیامد – صبر کوتاه و تلاش دوباره...")
+                            await human_sleep(3.0, 0.5)
+                        else:
+                            path = self.debug_dir / f"menu_failed_{post_id}_{scroll_attempt}.png"
+                            await page.screenshot(path=path)
+                            logger.warning(f"   ⚠️ منوی context در تلاش {scroll_attempt+1} ظاهر نشد. اسکرین‌شات: {path.name}")
+
+                if not menu_appeared:
+                    continue  # برو به اسکرول بعدی
+
+                # ۲. یافتن گزینهٔ "Download"
                 download_coords = await page.evaluate('''() => {
                     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                     let node;
@@ -221,7 +234,7 @@ class PlaywrightDownloader:
                 }''')
 
                 if download_coords:
-                    await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}")
+                    await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}_{scroll_attempt}")
                     logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
                     await page.mouse.click(download_coords['x'], download_coords['y'])
                     logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
@@ -263,22 +276,22 @@ class PlaywrightDownloader:
                     if waited >= absolute_timeout:
                         logger.warning(f"   ⚠️ زمان کلی {absolute_timeout}s به پایان رسید – {len(downloaded_files)} فایل دریافت شد.")
 
-        except Exception as e:
-            logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
-            try:
-                path = self.debug_dir / f"error_{post_id}.png"
-                await page.screenshot(path=path)
-                logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
-            except:
-                pass
-        finally:
-            # بستن منو و حذف listener
-            try:
-                await page.mouse.click(10, 10)
-                await human_sleep(0.3, 0.2)
-            except:
-                pass
-            page.remove_listener("download", on_download)
+            except Exception as e:
+                logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود (تلاش {scroll_attempt+1}): {e}")
+                try:
+                    path = self.debug_dir / f"error_{post_id}_{scroll_attempt}.png"
+                    await page.screenshot(path=path)
+                    logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
+                except:
+                    pass
+
+        # بستن منو و حذف listener (اگر هنوز باز باشد)
+        try:
+            await page.mouse.click(10, 10)
+            await human_sleep(0.3, 0.2)
+        except:
+            pass
+        page.remove_listener("download", on_download)
 
         # Fallback مستقیم + پشتیبانی از <audio src="...">
         if not menu_success and not downloaded_files:
