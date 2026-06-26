@@ -20,8 +20,7 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
-    نسخهٔ دیباگ: قبل از کلیک روی گزینهٔ Download، یک ضربدر قرمز روی آن کشیده
-    و اسکرین‌شات گرفته می‌شود.
+    موقعیت گزینه با جستجوی دقیق متن «Download» مانند جستجوی نام کانال پیدا می‌شود.
     """
 
     MIME_TO_EXT = {
@@ -72,6 +71,7 @@ class PlaywrightDownloader:
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
+        # نمایش پست
         success = False
         for attempt in range(5):
             try:
@@ -141,7 +141,7 @@ class PlaywrightDownloader:
                 await message_locator.click(button='right')
                 logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
 
-            # ۲. منتظر منوی context (با state="attached" برای مقاومت در برابر opacity)
+            # ۲. منتظر منوی context
             menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
             try:
                 await page.wait_for_selector(menu_selector, state="attached", timeout=6000)
@@ -150,39 +150,50 @@ class PlaywrightDownloader:
                 logger.warning("   ⚠️ منوی context ظاهر نشد. رد کردن این پست.")
                 return
 
-            # ۳. پیدا کردن گزینهٔ «Download»
-            download_option = page.locator(
-                '[role="menuitem"]:has-text("Download"), '
-                '[role="menuitem"]:has-text("Save"), '
-                'button:has-text("Download"), '
-                'div:has-text("Download")'
-            ).first
-            if await download_option.count() == 0:
-                download_option = page.get_by_text("Download", exact=False).first
+            # ۳. یافتن گزینهٔ "Download" با جستجوی دقیق متن (شبیه جستجوی نام کانال)
+            download_coords = await page.evaluate('''() => {
+                // ابتدا در گره‌های متنی بگردیم که دقیقاً "Download" باشند
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                let node;
+                while (node = walker.nextNode()) {
+                    if (node.textContent.trim().toLowerCase() === 'download') {
+                        const parent = node.parentElement;
+                        if (parent && (parent.getAttribute('role') === 'menuitem' || parent.closest('[role="menu"]'))) {
+                            const rect = parent.getBoundingClientRect();
+                            return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                        }
+                    }
+                }
+                // اگر پیدا نشد، در تمام المان‌های محتمل (menuitem, button, div) جستجو کنیم
+                const elements = document.querySelectorAll('[role="menuitem"], button, div');
+                for (const el of elements) {
+                    if (el.innerText.trim().toLowerCase() === 'download') {
+                        const rect = el.getBoundingClientRect();
+                        return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                    }
+                }
+                return null;
+            }''')
 
-            if await download_option.count() > 0:
-                # 🌟 دیباگ: رسم ضربدر روی گزینهٔ دانلود و اسکرین‌شات
-                opt_box = await download_option.bounding_box()
-                if opt_box:
-                    cx = opt_box['x'] + opt_box['width'] / 2
-                    cy = opt_box['y'] + opt_box['height'] / 2
-                    # رسم ضربدر و ذخیره اسکرین‌شات
-                    await self._draw_debug_cross(page, cx, cy, f"download_option_{post_id}")
-                    logger.info(f"   📸 اسکرین‌شات از گزینهٔ دانلود با ضربدر ذخیره شد")
-                else:
-                    # اگر bounding box در دسترس نبود، یک اسکرین‌شات ساده
-                    path = self.debug_dir / f"download_option_nobox_{post_id}.png"
-                    await page.screenshot(path=path)
-                    logger.info(f"   📸 اسکرین‌شات (بدون ضربدر) ذخیره شد: {path.name}")
+            if download_coords:
+                # دیباگ: رسم ضربدر و اسکرین‌شات
+                await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}")
+                logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
 
-                # اکنون کلیک روی گزینه
-                await download_option.click()
-                logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد")
-
-                # ۴. صبر برای دریافت همهٔ فایل‌ها (مخصوصاً آلبوم‌ها)
-                await human_sleep(15.0, 0.2)
+                # کلیک روی مختصات
+                await page.mouse.click(download_coords['x'], download_coords['y'])
+                logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
             else:
-                logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
+                # Fallback: استفاده از get_by_text (روش قبلی)
+                download_option = page.get_by_text("Download", exact=False).first
+                if await download_option.count() > 0:
+                    await download_option.click()
+                    logger.info(f"   ✅ کلیک روی گزینهٔ دانلود (fallback)")
+                else:
+                    logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
+
+            # ۴. صبر برای دریافت همهٔ فایل‌ها (مخصوصاً آلبوم‌ها)
+            await human_sleep(15.0, 0.2)
         except Exception as e:
             logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
             try:
@@ -206,7 +217,6 @@ class PlaywrightDownloader:
     # ═══════════════════ متد کمکی برای رسم ضربدر قرمز ═══════════════════
     async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
         """رسم ضربدر قرمز در مختصات، گرفتن اسکرین‌شات و سپس حذف ضربدر"""
-        # ایجاد container و ضربدر
         await page.evaluate(f"""
             () => {{
                 const container = document.createElement('div');
@@ -215,7 +225,7 @@ class PlaywrightDownloader:
                 container.style.left = '0px';
                 container.style.top = '0px';
                 container.style.zIndex = '99999';
-                container.style.pointerEvents = 'none';  // مانع کلیک نمی‌شود
+                container.style.pointerEvents = 'none';
                 document.body.appendChild(container);
 
                 const cross = document.createElement('div');
@@ -233,11 +243,9 @@ class PlaywrightDownloader:
                 container.appendChild(cross);
             }}
         """)
-        # گرفتن اسکرین‌شات
         path = self.debug_dir / f"debug_click_{name}.png"
         await page.screenshot(path=path)
         logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
-        # حذف ضربدر
         await page.evaluate("""
             () => {
                 const container = document.getElementById('debug-cross-container');
