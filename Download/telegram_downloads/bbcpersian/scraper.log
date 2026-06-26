@@ -1,51 +1,71 @@
-2026-06-25 18:14:48,171 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-25 18:14:48,171 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
-2026-06-25 18:14:58,868 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-25 18:15:00,435 [INFO] ⏳ منتظر نتایج...
-2026-06-25 18:15:09,595 [INFO] ✅ عبارت 'bbcpersian' در صفحه یافت شد.
-2026-06-25 18:15:09,595 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
-2026-06-25 18:15:09,735 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
-2026-06-25 18:15:15,298 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-06-25 18:15:15,521 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
-2026-06-25 18:15:20,546 [INFO]    ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.
-2026-06-25 18:15:46,060 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
-2026-06-25 18:15:46,257 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
-2026-06-25 18:15:49,972 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
-2026-06-25 18:15:50,014 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
-2026-06-25 18:15:50,014 [INFO] 📥 [1/5] پست 285034
-2026-06-25 18:15:50,015 [INFO] 📍 شروع بررسی پست 285034
-2026-06-25 18:15:52,975 [INFO]    📍 پست 285034 آماده شد. راست‌کلیک روی پیام...
-2026-06-25 18:15:53,979 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-25 18:15:55,493 [INFO]    📸 اسکرین‌شات ذخیره شد: rightclick_285034.png
-2026-06-25 18:15:55,808 [INFO]    ✅ پایان بررسی پست 285034
-2026-06-25 18:15:56,602 [INFO] 📥 [2/5] پست 285033
-2026-06-25 18:15:56,602 [INFO] 📍 شروع بررسی پست 285033
-2026-06-25 18:16:00,262 [INFO]    📍 پست 285033 آماده شد. راست‌کلیک روی پیام...
-2026-06-25 18:16:02,288 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-25 18:16:04,169 [INFO]    📸 اسکرین‌شات ذخیره شد: rightclick_285033.png
-2026-06-25 18:16:04,453 [INFO]    ✅ پایان بررسی پست 285033
-2026-06-25 18:16:05,896 [INFO] 📥 [3/5] پست 285032
-2026-06-25 18:16:05,897 [INFO] 📍 شروع بررسی پست 285032
-2026-06-25 18:16:09,381 [INFO]    📍 پست 285032 آماده شد. راست‌کلیک روی پیام...
-2026-06-25 18:16:11,249 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 399)
-2026-06-25 18:16:12,871 [INFO]    📸 اسکرین‌شات ذخیره شد: rightclick_285032.png
-2026-06-25 18:16:13,211 [INFO]    ✅ پایان بررسی پست 285032
-2026-06-25 18:16:14,062 [INFO] 📥 [4/5] پست 285031
-2026-06-25 18:16:14,063 [INFO] 📍 شروع بررسی پست 285031
-2026-06-25 18:16:17,383 [INFO]    📍 پست 285031 آماده شد. راست‌کلیک روی پیام...
-2026-06-25 18:16:18,327 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-25 18:16:19,961 [INFO]    📸 اسکرین‌شات ذخیره شد: rightclick_285031.png
-2026-06-25 18:16:20,277 [INFO]    ✅ پایان بررسی پست 285031
-2026-06-25 18:16:21,943 [INFO] 📥 [5/5] پست 285030
-2026-06-25 18:16:21,943 [INFO] 📍 شروع بررسی پست 285030
-2026-06-25 18:16:25,193 [INFO]    📍 پست 285030 آماده شد. راست‌کلیک روی پیام...
-2026-06-25 18:16:27,143 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 374)
-2026-06-25 18:16:29,117 [INFO]    📸 اسکرین‌شات ذخیره شد: rightclick_285030.png
-2026-06-25 18:16:29,390 [INFO]    ✅ پایان بررسی پست 285030
-2026-06-25 18:16:29,390 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
-2026-06-25 18:16:29,390 [INFO] 📊 media_map برای 0 پست پر شد.
-2026-06-25 18:16:29,391 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
-2026-06-25 18:16:29,391 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
-2026-06-25 18:16:29,405 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
-2026-06-25 18:16:29,651 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
-2026-06-25 18:16:29,843 [INFO] ✅ پایان موفقیت‌آمیز.
+2026-06-26 05:26:32,078 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-26 05:26:32,078 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
+2026-06-26 05:26:50,278 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-26 05:26:51,919 [INFO] ⏳ منتظر نتایج...
+2026-06-26 05:27:00,018 [INFO] ✅ عبارت 'bbcpersian' در صفحه یافت شد.
+2026-06-26 05:27:00,018 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-26 05:27:00,194 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
+2026-06-26 05:27:05,297 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-26 05:27:05,455 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
+2026-06-26 05:27:05,512 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
+2026-06-26 05:27:34,698 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
+2026-06-26 05:27:34,880 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
+2026-06-26 05:27:38,606 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
+2026-06-26 05:27:38,668 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
+2026-06-26 05:27:38,668 [INFO] 📥 [1/5] پست 285066
+2026-06-26 05:27:38,668 [INFO] 📍 شروع دانلود پست 285066
+2026-06-26 05:27:42,090 [INFO]    📍 پست 285066 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 05:27:44,188 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 05:27:49,190 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-26 05:27:49,372 [INFO]    📸 اسکرین‌شات خطا: error_285066.png
+2026-06-26 05:27:50,695 [INFO] 📥 [2/5] پست 285057
+2026-06-26 05:27:50,695 [INFO] 📍 شروع دانلود پست 285057
+2026-06-26 05:27:53,812 [INFO]    📍 پست 285057 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 05:27:55,055 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 05:28:00,056 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-26 05:28:00,250 [INFO]    📸 اسکرین‌شات خطا: error_285057.png
+2026-06-26 05:28:01,401 [INFO] 📥 [3/5] پست 285055
+2026-06-26 05:28:01,402 [INFO] 📍 شروع دانلود پست 285055
+2026-06-26 05:28:04,510 [INFO]    📍 پست 285055 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 05:28:05,980 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 05:28:10,981 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-26 05:28:11,159 [INFO]    📸 اسکرین‌شات خطا: error_285055.png
+2026-06-26 05:28:13,207 [INFO] 📥 [4/5] پست 285054
+2026-06-26 05:28:13,208 [INFO] 📍 شروع دانلود پست 285054
+2026-06-26 05:28:16,014 [INFO]    📍 پست 285054 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 05:28:17,300 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 05:28:22,301 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-26 05:28:22,479 [INFO]    📸 اسکرین‌شات خطا: error_285054.png
+2026-06-26 05:28:24,495 [INFO] 📥 [5/5] پست 285053
+2026-06-26 05:28:24,495 [INFO] 📍 شروع دانلود پست 285053
+2026-06-26 05:28:26,794 [INFO]    📍 پست 285053 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 05:28:28,004 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 05:28:33,004 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
+    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+
+2026-06-26 05:28:33,213 [INFO]    📸 اسکرین‌شات خطا: error_285053.png
+2026-06-26 05:28:33,510 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
+2026-06-26 05:28:33,511 [INFO] 📊 media_map برای 0 پست پر شد.
+2026-06-26 05:28:33,511 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-26 05:28:33,512 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-26 05:28:33,537 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
+2026-06-26 05:28:33,797 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
+2026-06-26 05:28:34,418 [INFO] ✅ پایان موفقیت‌آمیز.
