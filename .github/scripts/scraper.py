@@ -5,430 +5,282 @@ import asyncio
 import logging
 import random
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
-from config_loader import Config
-from playwright_downloader import PlaywrightDownloader
-from output_generator import OutputGenerator
+from playwright.async_api import Page, Download
 
-# ═══════════════════ Constants ═══════════════════
-MAX_SCROLL_ATTEMPTS = 8
-SCROLL_UP = -1200
-HOME_URL = "https://web.telegram.org/a/"
-OVERALL_TIMEOUT = 35 * 60
+logger = logging.getLogger("TelegramScraper")
 
-# ═══════════════════ Human-like sleep ═══════════════════
+
 async def human_sleep(base: float, jitter: float = 0.4):
-    """خواب با زمان تصادفی حول مقدار base (base ± jitter) برای شبیه‌سازی رفتار انسانی"""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
 
-class TelegramChannelScraper:
+class PlaywrightDownloader:
+    """
+    دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
+    موقعیت گزینه با جستجوی دقیق متن «Download» مانند جستجوی نام کانال پیدا می‌شود.
+    پس از کلیک، تا دریافت همهٔ فایل‌ها (با در نظر گرفتن تعداد مدیاها) صبر می‌کند.
+    """
 
-    def __init__(self, config: Config):
-        self.config = config
-        self.channel = config.channel.lstrip('@')
-        self.channel_name = getattr(config, 'channel_name', '') or ''
-        self.limit = config.limit
-        self.max_media_bytes = config.max_media_mb * 1024 * 1024
-        self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
-        self.media_dir = self.base_dir / "media"
+    MIME_TO_EXT = {
+        "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",
+        "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm",
+        "audio/mpeg": "mp3", "audio/ogg": "ogg", "application/pdf": "pdf",
+        "application/zip": "zip", "application/x-rar-compressed": "rar",
+        "application/octet-stream": "bin",
+    }
+
+    def __init__(self, profile_dir: Path, media_dir: Path, max_bytes: int,
+                 delay: float = 5.0, max_retries: int = 2):
+        self.profile_dir = profile_dir
+        self.media_dir = media_dir
+        self.max_bytes = max_bytes
+        self.delay = delay
+        self.max_retries = max_retries
         self.media_dir.mkdir(parents=True, exist_ok=True)
-        self.profile_dir = Path(config.profile_dir)
-        self.delay_between_posts = config.delay_between_posts
 
-        self.screenshots_dir = self.base_dir / "post_screenshots"
-        self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+        self.debug_dir = self.media_dir.parent / "debug_rightclick"
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
 
-        self.logger = logging.getLogger("TelegramScraper")
-        self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-        fh = logging.FileHandler(self.base_dir / "scraper.log", encoding='utf-8')
-        fh.setFormatter(formatter)
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        if not self.logger.handlers:
-            self.logger.addHandler(fh)
-            self.logger.addHandler(ch)
-
-        self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
-
-    # ═══════════════════ متد اصلی ═══════════════════
-    async def run(self):
-        try:
-            await asyncio.wait_for(self._run_impl(), timeout=OVERALL_TIMEOUT)
-        except asyncio.TimeoutError:
-            self.logger.error("⏰ اسکریپت به دلیل محدودیت زمانی کلی متوقف شد.")
-        except Exception as e:
-            self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
-
-    async def _run_impl(self):
-        self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
-
-        items, context, page = await self._fetch_posts_from_telegram()
-        if not items:
-            self.logger.warning("هیچ پستی دریافت نشد.")
-            if context:
-                await context.close()
+    async def download_all(self, page: Page, context, post_ids: List[str],
+                           media_map: Optional[Dict[str, List[str]]] = None) -> None:
+        if media_map is None:
+            media_map = {}
+        if not post_ids:
+            logger.info("هیچ پستی برای دانلود وجود ندارد.")
             return
-        self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
 
-        media_map, downloaded = await self._download_media(items, page, context)
-        self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
-        self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
+        for idx, post_id in enumerate(post_ids, start=1):
+            logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
+            try:
+                # timeout کلی هر پست افزایش یافته تا فایل‌های حجیم هم فرصت دانلود داشته باشند
+                await asyncio.wait_for(
+                    self._process_post(page, post_id, media_map),
+                    timeout=240
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"⏰ پست {post_id} تایم‌اوت کلی شد، رد می‌شود.")
+            except Exception as e:
+                logger.error(f"❌ خطا در پست {post_id}: {e}")
+            if idx < len(post_ids):
+                await human_sleep(self.delay, 0.5)
 
-        gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
-        gen.generate_json()
-        gen.generate_csv()
-        gen.generate_html()
-        gen.create_zip()
+    async def _process_post(self, page: Page, post_id: str,
+                            media_map: Dict[str, List[str]]) -> None:
+        logger.info(f"📍 شروع دانلود پست {post_id}")
 
-        if context:
-            await context.close()
+        message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        self.logger.info("✅ پایان موفقیت‌آمیز.")
+        # نمایش پست
+        success = False
+        for attempt in range(5):
+            try:
+                logger.debug(f"   🔄 تلاش {attempt+1} برای نمایان کردن پست")
+                await message_locator.scroll_into_view_if_needed(timeout=20000)
+                wait = 1.8 if attempt == 0 else 1.2
+                await human_sleep(wait, 0.4)
+                await message_locator.wait_for(state="visible", timeout=20000)
+                await human_sleep(1.0, 0.3)
 
-    # ═══════════════════ استخراج پست‌ها (منطق جدید) ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
-        from playwright.async_api import async_playwright
+                if await message_locator.count() > 0:
+                    success = True
+                    logger.debug(f"   ✅ پست بعد از {attempt+1} تلاش نمایان شد")
+                    break
+            except Exception:
+                if attempt < 4:
+                    logger.debug(f"   🔄 تلاش ناموفق — اسکرول کمکی و صبر دوباره")
+                    await page.evaluate("window.scrollBy(0, -1200)")
+                    await human_sleep(2.5, 0.5)
+                else:
+                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد.")
+                    return
 
-        p = await async_playwright().start()
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=str(self.profile_dir),
-            headless=False,
-            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-            viewport={"width": 1366, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+        if not success:
+            return
+
+        logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک و دانلود...")
+        await human_sleep(1.5, 0.4)
+
+        # ──────────────────────────────────────────────
+        # 🌟 شمارش تعداد مدیای visible برای حدس تعداد فایل‌های مورد انتظار
+        # ──────────────────────────────────────────────
+        media_elements = message_locator.locator(
+            'div.media-photo, div.media-video, div.document, a.media-photo, '
+            'video, img[src], div[class*="media"]'
         )
-        page = await context.new_page()
-
+        visible_count = 0
         try:
-            await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
-        except Exception as e:
-            self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
-            await context.close()
-            return [], None, None
-
-        entered = await self._search_and_enter_channel(page)
-        if not entered:
-            await context.close()
-            return [], None, None
-
-        await self._save_screenshot(page, "initial")
-
-        # پرش به آخرین (جدیدترین) پست‌ها (بدون اخطارهای بیهوده)
-        self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
-        clicked = False
-
-        scroll_button_selectors = [
-            'button[title="Go to bottom"]',
-            'div[class*="scroll-to-bottom"]',
-            'div[class*="ScrollButton"]',
-            '[aria-label="Scroll to bottom"]',
-            'button:has(svg[class*="arrow-down"])',
-        ]
-
-        for sel in scroll_button_selectors:
-            try:
-                btn = page.locator(sel).first
-                if await btn.count() > 0:
-                    await btn.click(timeout=5000)
-                    self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                    clicked = True
-                    await human_sleep(3.5, 0.4)
-                    break
-            except Exception:
-                continue
-
-        if not clicked:
-            self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
-
-        # جمع‌آوری جدیدترین پست‌ها
-        items = []
-        seen_ids = set()
-        scroll_attempts = 0
-
-        while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
-            try:
-                messages = await page.locator('div[data-message-id]').all()
-                for msg in reversed(messages):
-                    try:
-                        msg_id = await msg.get_attribute('data-message-id')
-                        if not msg_id or msg_id in seen_ids:
-                            continue
-
-                        # 🌟 تضمین visible بودن قبل از استخراج متن
-                        await msg.scroll_into_view_if_needed()
-                        await msg.wait_for(state="visible", timeout=5000)
-
-                        text = (await msg.inner_text()).strip()[:1000]
-                        date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
-                        date = ""
-                        if await date_el.count() > 0:
-                            date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
-
-                        items.append({
-                            'id': msg_id,
-                            'text': text,
-                            'date': date,
-                            'url': f"https://t.me/{self.channel}/{msg_id}"
-                        })
-                        seen_ids.add(msg_id)
-
-                        if len(items) >= self.limit:
-                            break
-                    except Exception:
-                        continue
-            except Exception as e:
-                self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
-
-            if len(items) >= self.limit:
-                break
-
-            old_height = await page.evaluate("document.documentElement.scrollHeight")
-            await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
-            await human_sleep(2.5, 0.5)
-            new_height = await page.evaluate("document.documentElement.scrollHeight")
-
-            if new_height == old_height:
-                scroll_attempts += 1
-            else:
-                scroll_attempts = 0
-
-        items = items[:self.limit]
-        self.logger.info(f"📊 {len(items)} پست جدیدترین جمع‌آوری شد.")
-
-        await self._save_screenshot(page, "final")
-        await self._capture_post_screenshots(page, items)
-
-        if items:
-            first_id = items[0]['id']
-            try:
-                await page.locator(f'[data-message-id="{first_id}"]').scroll_into_view_if_needed()
-                await human_sleep(1, 0.3)
-            except Exception:
-                pass
-
-        return items, context, page
-
-    # ═══════════════════ جستجو و ورود به کانال (چندمرحله‌ای + تایپ مقاوم) ═══════════════════
-    async def _search_and_enter_channel(self, page) -> bool:
-        # ۱. پیدا کردن نوار جستجو
-        search_input = None
-        for sel in [
-            'input[placeholder*="Search"]',
-            'input[role="textbox"]',
-            '[data-testid="search-input"]'
-        ]:
-            try:
-                search_input = await page.wait_for_selector(sel, timeout=10000)
-                if search_input:
-                    self.logger.info("🔍 نوار جستجو پیدا شد.")
-                    break
-            except Exception:
-                continue
-        if not search_input:
-            self.logger.error("❌ نوار جستجو پیدا نشد.")
-            return False
-
-        # ۲. تایپ مقاوم نام کاربری (username) در نوار جستجو
-        #     ابتدا کلیک، پاک‌سازی، سپس تایپ انسانی
-        await search_input.click()
-        await human_sleep(0.3, 0.2)
-        await search_input.fill('')                     # پاک‌سازی کامل
-        await human_sleep(0.2, 0.1)
-        await search_input.type(self.channel, delay=random.randint(80, 150))   # تایپ انسانی
-        self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
-        # 🌟 اسکرین‌شات بلافاصله بعد از تایپ
-        await self._take_screenshot(page, "search_input_filled")
-        await human_sleep(1.5, 0.3)
-        await search_input.press("Enter")
-        self.logger.info("⏳ منتظر نتایج...")
-
-        # ۳. انتظار چندمرحله‌ای برای ظاهر شدن نتایج
-        search_term = self.channel_name if self.channel_name else self.channel
-        found = False
-
-        # مرحلهٔ ۱: ۱۰ ثانیه
-        self.logger.info("   🕐 مرحلهٔ اول انتظار (۱۰ ثانیه)...")
-        await human_sleep(10, 0.5)
-        if await self._check_text_on_page(page, search_term):
-            found = True
-            self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ اول یافت شد.")
-
-        # مرحلهٔ ۲: ۱۵ ثانیه
-        if not found:
-            self.logger.info("   🕑 مرحلهٔ دوم انتظار (۱۵ ثانیه)...")
-            await human_sleep(15, 0.5)
-            if await self._check_text_on_page(page, search_term):
-                found = True
-                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ دوم یافت شد.")
-
-        # مرحلهٔ ۳: ۲۰ ثانیه
-        if not found:
-            self.logger.info("   🕒 مرحلهٔ سوم انتظار (۲۰ ثانیه)...")
-            await human_sleep(20, 0.5)
-            if await self._check_text_on_page(page, search_term):
-                found = True
-                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ سوم یافت شد.")
-
-        # اگر پس از ۳ مرحله (۴۵ ثانیه) هم پیدا نشد، کلیک روی تب Channels را امتحان کن
-        if not found:
-            self.logger.info("   📑 کلیک روی تب Channels (در صورت وجود)...")
-            try:
-                channels_tab = page.get_by_role("tab", name="Channels").first
-                if await channels_tab.count() > 0:
-                    await channels_tab.click()
-                    await human_sleep(4, 0.4)
-                    self.logger.info("   📑 تب Channels انتخاب شد.")
-            except Exception:
-                pass
-
-            # حالا دوباره با حلقهٔ ۱۵ مرحله‌ای (هر ۲ ثانیه) بررسی کن
-            for attempt in range(15):
-                await human_sleep(2, 0.3)
-                if await self._check_text_on_page(page, search_term):
-                    found = True
-                    self.logger.info(f"   ✅ عبارت '{search_term}' بعد از کلیک Channels یافت شد (تلاش {attempt+1}).")
-                    break
-
-        if not found:
-            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۴۵+ ثانیه).")
-            await self._take_screenshot(page, "search_failed")
-            return False
-
-        self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند.")
-        await self._take_screenshot(page, f"search_results_{self.channel}")
-        await human_sleep(2, 0.3)
-
-        # ۵. کلیک روی اولین نتیجه (با استفاده از همان search_term)
-        return await self._click_search_result(page, search_term)
-
-    # ═══════════════════ متد کمکی: بررسی وجود عبارت در صفحه ═══════════════════
-    async def _check_text_on_page(self, page, term: str) -> bool:
-        """با JavaScript بررسی می‌کند که آیا عبارت term در innerText کل صفحه وجود دارد"""
-        try:
-            return await page.evaluate(f'''(t) => {{
-                const bodyText = document.body.innerText || '';
-                return bodyText.toLowerCase().includes(t.toLowerCase());
-            }}''', term)
+            all_media = await media_elements.count()
+            for i in range(all_media):
+                if await media_elements.nth(i).is_visible(timeout=3000):
+                    visible_count += 1
         except Exception:
-            return False
+            visible_count = 1  # حداقل یک فایل فرض می‌کنیم
+        logger.info(f"   🖼️ تعداد مدیای visible: {visible_count} (برای تخمین زمان انتظار)")
 
-    # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
-    async def _click_search_result(self, page, search_term: str) -> bool:
-        """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
-        click_selectors = [
-            'div.chatlist-item', 'div[role="button"]', 'div.search-result',
-            'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
-            'div[class*="ListItem"]', 'div[class*="search-result"]'
-        ]
-        for sel in click_selectors:
+        downloaded_files = []
+        file_index = 0
+
+        async def on_download(download: Download):
+            nonlocal file_index
             try:
-                loc = page.locator(sel).first
-                if await loc.count() == 0:
-                    continue
-                await loc.click(timeout=8000, force=True)
-                await human_sleep(5, 0.4)
-                if await page.locator('div.message, div[data-message-id]').count() > 0:
-                    self.logger.info("✅ کانال با موفقیت باز شد (سلکتور %s).", sel)
-                    return True
+                suggested = download.suggested_filename
+                ext = suggested.rsplit('.', 1)[-1] if '.' in suggested else "bin"
+                base_name = f"{post_id}_{file_index}.{ext}"
+                filepath = self.media_dir / base_name
+                counter = 1
+                while filepath.exists():
+                    filepath = self.media_dir / f"{post_id}_{file_index}_{counter}.{ext}"
+                    counter += 1
+                await download.save_as(str(filepath))
+                size_mb = filepath.stat().st_size / 1024 / 1024 if filepath.exists() else 0
+                if size_mb > self.max_bytes / 1024 / 1024:
+                    logger.info(f"⏩ {filepath.name} رد شد (حجم {size_mb:.1f}MB)")
+                    filepath.unlink(missing_ok=True)
+                else:
+                    logger.info(f"✅ دانلود شد: {filepath.name} ({size_mb:.1f} MB)")
+                    downloaded_files.append(f"media/{filepath.name}")
+                    file_index += 1
             except Exception as e:
-                self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
+                logger.error(f"❌ خطا در ذخیرهٔ دانلود: {e}")
 
-        # لایهٔ ۲: کلیک با JavaScript روی عبارت جستجو (search_term)
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی عبارت جستجو...")
-        try:
-            await page.evaluate(f'''(term) => {{
-                const els = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"], div[class*="name"], span[class*="peer-title"]'));
-                const target = els.find(el => el.textContent.trim().toLowerCase() === term.toLowerCase());
-                if (target) {{
-                    target.closest('div[role="button"], div.chatlist-item, a')?.click();
-                }}
-            }}''', search_term)
-            await human_sleep(5, 0.4)
-            if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با JavaScript (عبارت جستجو) وارد شدیم.")
-                return True
-        except Exception as e:
-            self.logger.debug("JavaScript name click: %s", e)
+        page.on("download", on_download)
 
-        # لایهٔ ۳: کلیک روی اولین آیتم
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
-            await page.evaluate('''() => {
-                const item = document.querySelector('div.chatlist-item, div[role="button"], div.search-result, a[data-peer-id]');
-                if (item) item.click();
+            # ۱. راست‌کلیک روی پیام
+            box = await message_locator.bounding_box()
+            if box:
+                x = box['x'] + box['width'] / 2
+                y = box['y'] + box['height'] / 2
+                await page.mouse.click(x, y, button='right')
+                logger.info(f"   🖱️ راست‌کلیک روی پیام انجام شد در ({x:.0f}, {y:.0f})")
+            else:
+                await message_locator.click(button='right')
+                logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
+
+            # ۲. منتظر منوی context
+            menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
+            try:
+                await page.wait_for_selector(menu_selector, state="attached", timeout=6000)
+                await human_sleep(0.8, 0.3)
+            except Exception:
+                logger.warning("   ⚠️ منوی context ظاهر نشد. رد کردن این پست.")
+                return
+
+            # ۳. یافتن گزینهٔ "Download" با جستجوی دقیق متن (شبیه جستجوی نام کانال)
+            download_coords = await page.evaluate('''() => {
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                let node;
+                while (node = walker.nextNode()) {
+                    if (node.textContent.trim().toLowerCase() === 'download') {
+                        const parent = node.parentElement;
+                        if (parent && (parent.getAttribute('role') === 'menuitem' || parent.closest('[role="menu"]'))) {
+                            const rect = parent.getBoundingClientRect();
+                            return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                        }
+                    }
+                }
+                const elements = document.querySelectorAll('[role="menuitem"], button, div');
+                for (const el of elements) {
+                    if (el.innerText.trim().toLowerCase() === 'download') {
+                        const rect = el.getBoundingClientRect();
+                        return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                    }
+                }
+                return null;
             }''')
-            await human_sleep(5, 0.4)
-            if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با JavaScript (اولین نتیجه) وارد شدیم.")
-                return True
+
+            if download_coords:
+                await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}")
+                logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
+                await page.mouse.click(download_coords['x'], download_coords['y'])
+                logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
+            else:
+                download_option = page.get_by_text("Download", exact=False).first
+                if await download_option.count() > 0:
+                    await download_option.click()
+                    logger.info(f"   ✅ کلیک روی گزینهٔ دانلود (fallback)")
+                else:
+                    logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
+
+            # ═══════════════════════════════════════════
+            # 🌟 انتظار هوشمند برای دریافت کامل فایل‌ها
+            # ═══════════════════════════════════════════
+            # به‌جای یک sleep ثابت، هر ۲ ثانیه بررسی می‌کنیم که آیا
+            # تعداد فایل‌های دانلودشده به تعداد مدیای visible رسیده است یا نه.
+            # این روش خودبه‌خود منتظر حجم‌های بالا می‌ماند و برای فایل‌های کوچک
+            # بلافاصله پایان می‌یابد.
+            max_wait = 180          # حداکثر ۱۸۰ ثانیه انتظار
+            check_interval = 2      # هر ۲ ثانیه وضعیت بررسی شود
+            waited = 0
+            while len(downloaded_files) < visible_count and waited < max_wait:
+                await asyncio.sleep(check_interval)
+                waited += check_interval
+                logger.debug(f"   ⏳ {waited}s گذشته – {len(downloaded_files)}/{visible_count} فایل دریافت شد")
+
+            if len(downloaded_files) >= visible_count:
+                logger.info(f"   🎉 همهٔ {visible_count} فایل با موفقیت دریافت شدند.")
+            else:
+                logger.warning(f"   ⚠️ فقط {len(downloaded_files)} از {visible_count} فایل دریافت شد (تایم‌اوت).")
+            # ═══════════════════════════════════════════
+
         except Exception as e:
-            self.logger.debug("JavaScript generic click: %s", e)
-
-        self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
-        await self._take_screenshot(page, "click_failed")
-        return False
-
-    # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
-    async def _capture_post_screenshots(self, page, items: List[Dict]):
-        self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
-        for idx, item in enumerate(items):
-            msg_id = item['id']
+            logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
             try:
-                locator = page.locator(f'[data-message-id="{msg_id}"]').first
-                if await locator.count() == 0:
-                    self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
-                    continue
+                path = self.debug_dir / f"error_{post_id}.png"
+                await page.screenshot(path=path)
+                logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
+            except:
+                pass
+        finally:
+            try:
+                await page.mouse.click(10, 10)
+                await human_sleep(0.3, 0.2)
+            except:
+                pass
+            page.remove_listener("download", on_download)
 
-                await locator.scroll_into_view_if_needed()
-                await human_sleep(0.5, 0.2)
+        if downloaded_files:
+            media_map[post_id] = downloaded_files
+            logger.info(f"📦 پست {post_id}: {len(downloaded_files)} رسانه دانلود شد.")
 
-                path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"
-                await page.screenshot(path=path, full_page=False)
-                self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+    # ═══════════════════ متد کمکی برای رسم ضربدر قرمز ═══════════════════
+    async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
+        """رسم ضربدر قرمز در مختصات، گرفتن اسکرین‌شات و سپس حذف ضربدر"""
+        await page.evaluate(f"""
+            () => {{
+                const container = document.createElement('div');
+                container.id = 'debug-cross-container';
+                container.style.position = 'fixed';
+                container.style.left = '0px';
+                container.style.top = '0px';
+                container.style.zIndex = '99999';
+                container.style.pointerEvents = 'none';
+                document.body.appendChild(container);
 
-                if (idx + 1) % 10 == 0:
-                    self.logger.info(f"   {idx+1}/{len(items)} اسکرین‌شات گرفته شد.")
-            except Exception as e:
-                self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {e}")
-                continue
-
-        self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
-
-    async def _save_screenshot(self, page, name: str):
-        try:
-            path = self.screenshots_dir / f"{name}.png"
-            await page.screenshot(path=path, full_page=True)
-            self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
-
-    async def _take_screenshot(self, page, name: str):
-        try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-            path = self.base_dir / f"debug_{self.channel}_{name}.png"
-            await page.screenshot(path=path, full_page=True)
-            self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
-
-    # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
-    async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        post_ids = [str(item['id']) for item in items]
-        media_map = {}
-
-        downloaded = 0
-        if post_ids:
-            downloader = PlaywrightDownloader(
-                self.profile_dir, self.media_dir, self.max_media_bytes,
-                self.delay_between_posts
-            )
-            await downloader.download_all(page, context, post_ids, media_map)
-
-            for files in media_map.values():
-                downloaded += len(files)
-
-        return media_map, downloaded
+                const cross = document.createElement('div');
+                cross.style.position = 'absolute';
+                cross.style.left = '{x}px';
+                cross.style.top = '{y}px';
+                cross.style.width = '24px';
+                cross.style.height = '24px';
+                cross.style.transform = 'translate(-50%, -50%)';
+                cross.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
+                        <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
+                    </svg>`;
+                container.appendChild(cross);
+            }}
+        """)
+        path = self.debug_dir / f"debug_click_{name}.png"
+        await page.screenshot(path=path)
+        logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
+        await page.evaluate("""
+            () => {
+                const container = document.getElementById('debug-cross-container');
+                if (container) container.remove();
+            }
+        """)
