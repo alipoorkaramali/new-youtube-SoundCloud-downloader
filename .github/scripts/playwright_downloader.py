@@ -133,31 +133,46 @@ class PlaywrightDownloader:
                     visible_count += 1
         except Exception:
             visible_count = 1
-        logger.info(f"   🖼️ تعداد مدیای visible (تقریبی): {visible_count}")
+        logger.info(f"   🖼️ تعداد تقریبی مدیا: {visible_count} | شروع دانلود...")
 
         downloaded_files = []
         file_index = 0
+        seen_suggested = set()          # ← جلوگیری از دانلود تکراری
 
         async def on_download(download: Download):
-            nonlocal file_index
+            nonlocal file_index, seen_suggested   # ← هر دو را معرفی کن
             try:
-                suggested = download.suggested_filename
-                ext = suggested.rsplit('.', 1)[-1] if '.' in suggested else "bin"
-                base_name = f"{post_id}_{file_index}.{ext}"
+                suggested = download.suggested_filename or f"unknown_{file_index}.bin"
+
+                # رد رویدادهای تکراری (مخصوصاً برای آلبوم)
+                if suggested in seen_suggested:
+                    logger.debug(f"   ⏭ رد رویداد تکراری: {suggested}")
+                    return
+                seen_suggested.add(suggested)
+
+                ext = suggested.rsplit('.', 1)[-1].lower() if '.' in suggested else "bin"
+                # استفاده از نام پیشنهادی اصلی (بدون شمارنده دستی)
+                base_name = f"{post_id}_{suggested}"
                 filepath = self.media_dir / base_name
+
+                # جلوگیری از overwrite
                 counter = 1
+                original = filepath
                 while filepath.exists():
-                    filepath = self.media_dir / f"{post_id}_{file_index}_{counter}.{ext}"
+                    filepath = original.with_name(f"{original.stem}_{counter}{original.suffix}")
                     counter += 1
+
                 await download.save_as(str(filepath))
-                size_mb = filepath.stat().st_size / 1024 / 1024 if filepath.exists() else 0
-                if size_mb > self.max_bytes / 1024 / 1024:
-                    logger.info(f"⏩ {filepath.name} رد شد (حجم {size_mb:.1f}MB)")
+                size_mb = filepath.stat().st_size / (1024 * 1024)
+
+                if size_mb > self.max_bytes / (1024 * 1024):
+                    logger.info(f"⏩ رد شد (حجم زیاد): {filepath.name}")
                     filepath.unlink(missing_ok=True)
                 else:
                     logger.info(f"✅ دانلود شد: {filepath.name} ({size_mb:.1f} MB)")
                     downloaded_files.append(f"media/{filepath.name}")
                     file_index += 1
+
             except Exception as e:
                 logger.error(f"❌ خطا در ذخیرهٔ دانلود: {e}")
 
@@ -165,9 +180,7 @@ class PlaywrightDownloader:
 
         menu_success = False
 
-        # ──────────────── تلاش برای راست‌کلیک و منوی context (با اسکرول کمکی در صورت شکست) ────────────────
-        # حداکثر ۳ بار کل پروسه (هر بار ۲ تلاش راست‌کلیک) انجام می‌شود
-        # اگر منو ظاهر نشد، قبل از تلاش بعدی ۳۰۰px به بالا اسکرول می‌کنیم
+        # ──────────────── تلاش برای راست‌کلیک و منوی context ────────────────
         for scroll_attempt in range(3):
             if menu_success:
                 break
@@ -179,7 +192,6 @@ class PlaywrightDownloader:
             try:
                 menu_appeared = False
                 for right_attempt in range(2):
-                    # رسم ضربدر روی هدف و ذخیره اسکرین‌شات
                     box = await click_target.bounding_box()
                     if box:
                         x = box['x'] + box['width'] / 2
@@ -208,7 +220,7 @@ class PlaywrightDownloader:
                             logger.warning(f"   ⚠️ منوی context در تلاش {scroll_attempt+1} ظاهر نشد. اسکرین‌شات: {path.name}")
 
                 if not menu_appeared:
-                    continue  # برو به اسکرول بعدی
+                    continue
 
                 # ۲. یافتن گزینهٔ "Download"
                 download_coords = await page.evaluate('''() => {
@@ -249,9 +261,14 @@ class PlaywrightDownloader:
                         logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
                 if menu_success:
-                    # انتظار تطبیقی
+                    # ← صبر اولیه پس از کلیک دانلود
+                    await human_sleep(2.5 if visible_count > 4 else 1.2)
+
+                    # ← آستانه سکوت پویا برای آلبوم‌ها
+                    quiet_threshold = 20 + (visible_count * 3)
+                    logger.info(f"   ⏳ آستانه سکوت برای این پست: {quiet_threshold} ثانیه")
+
                     absolute_timeout = 600
-                    quiet_threshold = 15
                     check_interval = 2
                     waited = 0
                     last_count = 0
@@ -285,7 +302,7 @@ class PlaywrightDownloader:
                 except:
                     pass
 
-        # بستن منو و حذف listener (اگر هنوز باز باشد)
+        # بستن منو و حذف listener
         try:
             await page.mouse.click(10, 10)
             await human_sleep(0.3, 0.2)
