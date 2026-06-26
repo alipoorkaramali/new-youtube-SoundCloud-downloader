@@ -170,13 +170,14 @@ jobs:
           echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
-      # ۱۱.۵ تنظیم Git LFS برای فایل‌های رسانه
+      # ۱۱.۵ تنظیم Git LFS برای فایل‌های رسانه و ZIP
       # ════════════════════════════════════════════
-      - name: 🐘 Setup Git LFS track for media
+      - name: 🐘 Setup Git LFS track for media & zip
         if: ${{ !inputs.debug_mode }}
         run: |
           git lfs install
           git lfs track "Download/telegram_downloads/**/media/*"
+          git lfs track "Download/telegram_downloads/**/*.zip*"
           git add .gitattributes
 
       # ════════════════════════════════════════════
