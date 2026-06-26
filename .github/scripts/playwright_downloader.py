@@ -432,4 +432,15 @@ class PlaywrightDownloader:
                         <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
                         <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
                     </svg>`;
-                                
+                container.appendChild(cross);
+            }}
+        """)
+        path = self.debug_dir / f"debug_click_{name}.png"
+        await page.screenshot(path=path)
+        logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
+        await page.evaluate("""
+            () => {
+                const container = document.getElementById('debug-cross-container');
+                if (container) container.remove();
+            }
+        """)
