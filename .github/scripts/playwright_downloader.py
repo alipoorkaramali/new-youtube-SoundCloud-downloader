@@ -20,6 +20,8 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
+    نسخهٔ دیباگ: قبل از کلیک روی گزینهٔ Download، یک ضربدر قرمز روی آن کشیده
+    و اسکرین‌شات گرفته می‌شود.
     """
 
     MIME_TO_EXT = {
@@ -148,7 +150,7 @@ class PlaywrightDownloader:
                 logger.warning("   ⚠️ منوی context ظاهر نشد. رد کردن این پست.")
                 return
 
-            # ۳. پیدا کردن و کلیک روی گزینهٔ «Download»
+            # ۳. پیدا کردن گزینهٔ «Download»
             download_option = page.locator(
                 '[role="menuitem"]:has-text("Download"), '
                 '[role="menuitem"]:has-text("Save"), '
@@ -159,6 +161,21 @@ class PlaywrightDownloader:
                 download_option = page.get_by_text("Download", exact=False).first
 
             if await download_option.count() > 0:
+                # 🌟 دیباگ: رسم ضربدر روی گزینهٔ دانلود و اسکرین‌شات
+                opt_box = await download_option.bounding_box()
+                if opt_box:
+                    cx = opt_box['x'] + opt_box['width'] / 2
+                    cy = opt_box['y'] + opt_box['height'] / 2
+                    # رسم ضربدر و ذخیره اسکرین‌شات
+                    await self._draw_debug_cross(page, cx, cy, f"download_option_{post_id}")
+                    logger.info(f"   📸 اسکرین‌شات از گزینهٔ دانلود با ضربدر ذخیره شد")
+                else:
+                    # اگر bounding box در دسترس نبود، یک اسکرین‌شات ساده
+                    path = self.debug_dir / f"download_option_nobox_{post_id}.png"
+                    await page.screenshot(path=path)
+                    logger.info(f"   📸 اسکرین‌شات (بدون ضربدر) ذخیره شد: {path.name}")
+
+                # اکنون کلیک روی گزینه
                 await download_option.click()
                 logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد")
 
@@ -185,3 +202,45 @@ class PlaywrightDownloader:
         if downloaded_files:
             media_map[post_id] = downloaded_files
             logger.info(f"📦 پست {post_id}: {len(downloaded_files)} رسانه دانلود شد.")
+
+    # ═══════════════════ متد کمکی برای رسم ضربدر قرمز ═══════════════════
+    async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
+        """رسم ضربدر قرمز در مختصات، گرفتن اسکرین‌شات و سپس حذف ضربدر"""
+        # ایجاد container و ضربدر
+        await page.evaluate(f"""
+            () => {{
+                const container = document.createElement('div');
+                container.id = 'debug-cross-container';
+                container.style.position = 'fixed';
+                container.style.left = '0px';
+                container.style.top = '0px';
+                container.style.zIndex = '99999';
+                container.style.pointerEvents = 'none';  // مانع کلیک نمی‌شود
+                document.body.appendChild(container);
+
+                const cross = document.createElement('div');
+                cross.style.position = 'absolute';
+                cross.style.left = '{x}px';
+                cross.style.top = '{y}px';
+                cross.style.width = '24px';
+                cross.style.height = '24px';
+                cross.style.transform = 'translate(-50%, -50%)';
+                cross.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
+                        <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
+                    </svg>`;
+                container.appendChild(cross);
+            }}
+        """)
+        # گرفتن اسکرین‌شات
+        path = self.debug_dir / f"debug_click_{name}.png"
+        await page.screenshot(path=path)
+        logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
+        # حذف ضربدر
+        await page.evaluate("""
+            () => {
+                const container = document.getElementById('debug-cross-container');
+                if (container) container.remove();
+            }
+        """)
