@@ -4,468 +4,130 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@bbcpersian - آرشیو تلگرام</title>
-
-    <!-- فونت وزیرمتن -->
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
-
-    <!-- Font Awesome 6 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        :root {
-            --bg: #f0f2f5;
-            --card-bg: #ffffff;
-            --text: #1c1e21;
-            --text-secondary: #65676b;
-            --primary: #2a6df4;
-            --primary-dark: #1e4fcf;
-            --border: #e4e6eb;
-            --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-            --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.12);
-            --glass: rgba(255, 255, 255, 0.75);
-            --tag-bg: #e7f0ff;
-            --tag-text: #1e4fcf;
-            --footer-bg: #ffffff;
-            --lightbox-bg: rgba(0, 0, 0, 0.9);
-        }
-
-        .dark {
-            --bg: #18191a;
-            --card-bg: #242526;
-            --text: #e4e6eb;
-            --text-secondary: #b0b3b8;
-            --primary: #4d8bf7;
-            --primary-dark: #2a6df4;
-            --border: #3e4042;
-            --shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-            --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.5);
-            --glass: rgba(36, 37, 38, 0.8);
-            --tag-bg: #1e3a5f;
-            --tag-text: #8ab4f8;
-            --footer-bg: #242526;
-            --lightbox-bg: rgba(0, 0, 0, 0.95);
-        }
-
-        body {
-            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            direction: rtl;
-            line-height: 1.8;
-            transition: background 0.3s, color 0.3s;
-            min-height: 100vh;
-            padding-bottom: 60px;
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
-
-        /* Header */
-        .header {
-            position: sticky;
-            top: 20px;
-            z-index: 100;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            background: var(--glass);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 25px 30px;
-            margin: 20px auto;
-            max-width: 880px;
-            box-shadow: var(--shadow);
-            text-align: center;
-            transition: all 0.3s;
-        }
-
-        .header:hover {
-            box-shadow: var(--shadow-hover);
-            transform: translateY(-2px);
-        }
-
-        .header h1 {
-            font-size: 28px;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--primary), #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 5px;
-        }
-
-        .header .stats {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 25px;
-            flex-wrap: wrap;
-            margin: 12px 0 0;
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-
-        .header .stats i {
-            margin-left: 5px;
-            color: var(--primary);
-        }
-
-        .theme-toggle {
-            position: absolute;
-            left: 25px;
-            top: 28px;
-            cursor: pointer;
-            font-size: 20px;
-            color: var(--text-secondary);
-            transition: color 0.3s, transform 0.3s;
-            background: none;
-            border: none;
-        }
-
-        .theme-toggle:hover {
-            color: var(--primary);
-            transform: rotate(30deg) scale(1.1);
-        }
-
-        /* Posts */
-        .container {
-            max-width: 880px;
-            margin: 0 auto;
-            padding: 0 15px;
-        }
-
-        .post {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 22px;
-            box-shadow: var(--shadow);
-            border-right: 4px solid var(--primary);
-            transition: all 0.3s ease;
-            animation: fadeInUp 0.5s ease forwards;
-            opacity: 0;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .post:hover {
-            box-shadow: var(--shadow-hover);
-            transform: translateY(-3px);
-        }
-
-        .post::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 4px;
-            height: 100%;
-            background: linear-gradient(180deg, var(--primary), #8b5cf6);
-            border-radius: 0 16px 16px 0;
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .post-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border);
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .post-number {
-            background: var(--primary);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        .post-date {
-            color: var(--text-secondary);
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .post-body {
-            font-size: 16px;
-            line-height: 2.2;
-            white-space: pre-wrap;
-            word-break: break-word;
-            margin-bottom: 16px;
-        }
-
-        .hashtag {
-            display: inline-block;
-            color: var(--tag-text);
-            background: var(--tag-bg);
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 13px;
-            margin: 2px 4px;
-            transition: all 0.2s;
-        }
-
-        .hashtag:hover {
-            background: var(--primary);
-            color: white;
-            cursor: pointer;
-        }
-
-        /* Media */
-        .media-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 14px;
-            justify-content: center;
-            margin: 18px 0;
-        }
-
-        .media-item {
-            background: var(--bg);
-            border-radius: 12px;
-            padding: 6px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-            max-width: 100%;
-            text-align: center;
-            transition: transform 0.3s, box-shadow 0.3s;
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .media-item:hover {
-            transform: scale(1.03);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .media-item img,
-        .media-item video {
-            max-width: 100%;
-            max-height: 400px;
-            border-radius: 8px;
-            display: block;
-            transition: transform 0.3s;
-        }
-
-        .media-item:hover img {
-            transform: scale(1.02);
-        }
-
-        .media-item audio {
-            width: 100%;
-            max-width: 320px;
-        }
-
-        .media-item .file-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--primary);
-            color: white !important;
-            padding: 10px 18px;
-            border-radius: 10px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: background 0.3s, transform 0.3s;
-        }
-
-        .media-item .file-link:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        .no-media {
-            color: var(--text-secondary);
-            font-size: 14px;
-            padding: 14px;
-            background: var(--bg);
-            border-radius: 10px;
-            text-align: center;
-            width: 100%;
-        }
-
-        .post-url {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 16px;
-            background: var(--primary);
-            color: white !important;
-            padding: 8px 16px;
-            border-radius: 10px;
-            font-size: 13px;
-            text-decoration: none;
-            transition: all 0.3s;
-            font-weight: 500;
-        }
-
-        .post-url:hover {
-            background: var(--primary-dark);
-            transform: translateX(-4px);
-            box-shadow: 0 4px 15px rgba(42, 109, 244, 0.3);
-        }
-
-        /* Lightbox */
-        .lightbox {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: var(--lightbox-bg);
-            z-index: 9999;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            cursor: pointer;
-        }
-
-        .lightbox.active {
-            display: flex;
-        }
-
-        .lightbox img {
-            max-width: 90vw;
-            max-height: 80vh;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            animation: zoomIn 0.3s ease;
-        }
-
-        @keyframes zoomIn {
-            from { transform: scale(0.8); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .lightbox-close {
-            position: absolute;
-            top: 20px;
-            left: 30px;
-            color: white;
-            font-size: 36px;
-            cursor: pointer;
-            transition: transform 0.3s;
-            z-index: 10000;
-        }
-
-        .lightbox-close:hover {
-            transform: rotate(90deg);
-        }
-
-        /* Back to Top */
-        .back-to-top {
-            position: fixed;
-            bottom: 25px;
-            left: 25px;
-            background: var(--primary);
-            color: white;
-            width: 45px;
-            height: 45px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(42, 109, 244, 0.4);
-            transition: all 0.3s;
-            opacity: 0;
-            visibility: hidden;
-            z-index: 999;
-            border: none;
-        }
-
-        .back-to-top.visible {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .back-to-top:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(42, 109, 244, 0.5);
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            margin-top: 40px;
-            padding: 20px;
-            color: var(--text-secondary);
-            font-size: 13px;
-            border-top: 1px solid var(--border);
-            background: var(--footer-bg);
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                margin: 10px;
-                padding: 18px 15px;
-                border-radius: 14px;
-            }
-            .header h1 { font-size: 22px; }
-            .post {
-                padding: 16px;
-                margin-bottom: 16px;
-                border-radius: 12px;
-            }
-            .media-item img,
-            .media-item video {
-                max-height: 280px;
-            }
-            .theme-toggle {
-                left: 15px;
-                top: 20px;
-                font-size: 18px;
-            }
-        }
+        body { font-family: Tahoma, sans-serif; background: #f5f5f5; direction: rtl; padding: 20px; }
+        .post { background: white; margin: 15px; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .date { color: #666; font-size: 14px; }
+        .text { margin: 10px 0; font-size: 16px; line-height: 2; }
+        .media { display: flex; flex-wrap: wrap; gap: 10px; }
+        .media img, .media video { max-width: 100%; max-height: 300px; border-radius: 5px; }
+        h1 { text-align: center; color: #2a6df4; }
     </style>
 </head>
 <body>
-
-<!-- Header -->
-<div class="header">
-    <button class="theme-toggle" onclick="toggleTheme()" title="تغییر حالت تاریک/روشن">
-        <i id="theme-icon" class="fas fa-moon"></i>
-    </button>
     <h1>@bbcpersian</h1>
-    <div class="stats">
-        <span><i class="fas fa-file-alt"></i> 6 پست</span>
-        <span><i class="fas fa-clock"></i> بروزرسانی: 2026/06/26 - 15:54</span>
-    </div>
-</div>
+    <p style="text-align:center;">45 پست | آخرین بروزرسانی: 2026/06/26 - 18:36</p>
 
-<div class="container">
+    <div class="post">
+        <div class="date">#1 | </div>
+        <div class="text">در پی کاهش تنش‌ها در منطقه خلیج فارس،‌ از حدود یک هفته پیش‌،‌ عبور و مرور قایق‌های کوچک و لنج‌های مسافربری میان بنادر جنوب ایران و کشورهای حاشیه خلیج فارس به ویژه مسیر بندر لنگه به دوبی و شارجه که بسیار کوتاه بود از سر گرفته شد.
 
-    
-    <div class="post" style="animation-delay: 0.0s;">
-        <div class="post-header">
-            <span class="post-number">#1</span>
-            <span class="post-date">
-                <i class="far fa-calendar-alt"></i>
-                نامشخص
-            </span>
-        </div>
+تصاویری از نقل و انتقال شهروندان و کالاها با این قایق‌های کوچک منتشر شده که مربوط به روز پنجشنبه چهارم تیر ماه است.
 
-        <div class="post-body">
-            یک مقام ارشد اطلاعاتی سابق در سرویس امنیتی اوکراین برای انتقال اطلاعات به روسیه، به جرم «خیانت» به حبس ابد محکوم شد.
+پس از برقراری آتش‌بس و امضای یک تفاهم‌نامه میان ایران و آمریکا که به کاهش تنش‌ها در منطقه انجامید، تجارت و تردد دریایی میان ایران و کشورهایی از جمله امارات در سواحل جنوبی خلیج فارس از سر گرفته شده است.
+
+https://bbc.in/3SvwGW6|
+@BBCPersian
+6.9K
+edited 02:23 PM</div>
+        <div class="media">
+<img src="media/285095_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285095" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#2 | </div>
+        <div class="text">واکنش تند ولایتی به بیانیه شورای همکاری خلیج فارس: در بازآرایی معادلات بزرگ، کوچک‌های حاشیه‌نشین جایی پای میز ندارند
+
+علی اکبر ولایتی، مشاور امور بین‌المللی رهبر جمهوری اسلامی ایران در پستی در شبکه اجتماعی ایکس با هشتگ شورای همکاری، از اعضای آن به تندی انتقاد کرده است.
+
+آقای ولایتی نوشته است «​حاشیه‌نشینان و اطفال سیاسی منطقه به بیانیه‌های سفارشی دلخوش ندارند و بدانند حیات شما ریزه‌خواری از این سفره است. در بازآرایی معادلات بزرگ، کوچک‌های حاشیه‌نشین جایی پای میز ندارند؛ حذف می‌شوند و حیات استراتژیکشان وامدار سقف تحمل تهران است.»
+
+بحرین، عربستان سعودی، قطر، عمان، امارات متحده عربی و کویت اعضای شورای همکاری خلیج‌فارس هستند.
+
+نشست اخیر این شورا به میزبانی بحرین و با حضور مارکو روبیو، وزیر خارجه آمریکا برگزار شد.
+https://bbc.in/3SvwGW6|
+@BBCPersian
+10.1K
+02:15 PM</div>
+        <div class="media">
+<img src="media/285094_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285094" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#3 | </div>
+        <div class="text">...
+در حالی که امدادگران در ونزوئلا همچنان در جستجوی بازماندگان زلزله‌های ویرانگر شامگاه چهارشنبه در میان ساختمان‌های فروریخته هستند، تازه‌ترین گزارش‌ها، حاکی از کشته شدن بیش از ۵۸۰ نفر و زخمی شدن حدود سه هزار نفر بر اثر این حادثه است.
+
+بیم آن می‌رود که شمار قربانیان بسیار بیشتر باشد. بسیاری بی‌خانمان شده‌اند یا به دلیل آسیب‌دیدگی و ناامن بودن ساختمان‌ها، از بازگشت به خانه‌های خود هراس دارند.
+
+در کاراکاس، پایتخت ونزوئلا، و شهر ساحلی نزدیک آن، صدای افرادی که از زیر آوار ساختمان‌های فروریخته درخواست کمک می‌کردند، شنیده می‌شد.
+
+پیش از این مقامات ونزوئلا گفته بودند که حدود ۳۰ پس‌لرزه هم پس از دو زلزله شدید روز چهارشنبه ثبت شده است.
+
+در پی وقوع این زلزله سازمان زمین‌شناسی آمریکا هشدار داده بود که تعداد قربانیان این حادثه ممکن است به هزاران نفر برسد.
+@BBCPersian
+16K
+01:47 PM</div>
+        <div class="media">
+<video controls><source src="media/285093_0.mp4"></video></div><a href="https://t.me/bbcpersian/285093" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#4 | </div>
+        <div class="text">0:56
+سرخط خبرها، جمعه ۵ تیر ۱۴۰۵
+@BBCPersian
+15.1K
+01:45 PM</div>
+        <div class="media">
+<video controls><source src="media/285092_0.mp4"></video></div><a href="https://t.me/bbcpersian/285092" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#5 | </div>
+        <div class="text">عضو کمیسیون امنیت ملی مجلس ایران: حمایت از حزب‌الله و محور مقاومت یک اولویت بنیادین است
+
+علاءالدین بروجردی، عضو کمیسیون امنیت ملی مجلس ایران، گفته است: برخلاف تصور برخی کشورها، ایران امروز «در اوج قدرت است.»
+
+به گزارش «خانه ملت»، خبرگزاری مجلس ایران، آقای بروجردی گفته است: «حمایت از لبنان و محور مقاومت (از جمله حزب‌الله، حشد الشعبی و گروه‌های مقاومت در فلسطین و یمن) یک اولویت بنیادین است.»
+
+او تاکید کرده است کهه در صورت «تعرض» به لبنان، ایران پاسخ اسرائيل را با «زبانی اثرگذار» خواهد داد.
+
+علیرغم تاکید ایران بر آتش‌بس لبنان در تفاهم با آمریکا، در روزهای اخیر میان ارتش اسرائيل و حزب‌الله لبنان بارها تبادل آتش صورت گرفته است.
+
+برای خواندن تازه‌ترین خبرها،‌ از لینک   به وب‌سایت بی‌بی‌سی فارسی مراجعه کنید.
+
+https://bbc.in/4v06Ffb
+@BBCPersian
+BBC News فارسی
+
+گروسی می‌گوید تفاهم موقت ایران و آمریکا «دسترسی بازرسان آژانس به مراکز اتمی ایران را فراهم می‌کند» - BBC News فارسی
+
+مدیرکل آژانس بین‌المللی انرژی اتمی گفته است که تفاهم موقت صلح آمریکا و ایران، امکان دسترسی بازرسان آژانس به مراکز اتمی ا</div>
+        <div class="media">
+<img src="media/285091_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285091" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#6 | </div>
+        <div class="text">نعیم قاسم، رهبر حزب‌الله لبنان، گفته است که اسرائیل «هیچ گزینه‌ای» جز خروج بدون قید و شرط از لبنان ندارد.
+
+رهبر حزب‌الله لبنان هم‌زمان هرگونه عادی‌سازی روابط میان دو کشور را رد کرد.
+
+او در سخنرانی تلویزیونی خود خطاب به ده‌ها هزار نفر از هوادارانش در مراسم عاشورا گفت: «اسرائیل هیچ گزینه‌ای جز عقب‌نشینی کامل از هر وجب از خاک لبنان ما ندارد... اسرائیل باید بدون هیچ شرطی خارج شود.»
+
+در حالی که مقام‌های لبنانی و اسرائیلی در واشنگتن مذاکرات مستقیم برگزار می‌کنند، آقای قاسم گفت گروه او «هیچ عادی‌سازی روابط، هیچ پایان دادن به وضعیت خصومت، هیچ دستاوردی برای اسرائیل و هیچ حضور جزئی در خاک لبنان را نمی‌پذیرد... اسرائیل باید با خواری و شکست خارج شود و این اتفاق خواهد افتاد.»
+
+حزب‌الله لبنان مورد حمایت جمهوری اسلامی ایران است و تهران می گوید در تفاهم اخیر با آمریکا و مذاکرات جاری با این کشور، منافع این گروه را در نظر می‌گیرد.
+
+به مناسبت عاشورا تجمعی در شهر بیروت برگزار شد و عکس‌هایی از رهبران جمهوری اسلامی هم در این مراسم حمل شد.
+
+ Houssam Shbaro/Anadolu via Getty 
+Images
+
+https://bbc.in/4v06Ffb
+@B</div>
+        <div class="media">
+<img src="media/285088_0.jpg" loading="lazy" alt="media"><img src="media/285088_0.jpg" loading="lazy" alt="media"><img src="media/285088_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285088" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#7 | </div>
+        <div class="text">یک مقام ارشد اطلاعاتی سابق در سرویس امنیتی اوکراین برای انتقال اطلاعات به روسیه، به جرم «خیانت» به حبس ابد محکوم شد.
 
 به گفته دادستان کل اوکراین، کلنل دمیترو کوزیورا که مسئول فعالیت‌های ضدجاسوسی بود، در ازای انتقال اطلاعات محرمانه دولتی از مسکو پول دریافت کرده بود.
 
@@ -475,42 +137,13 @@
 
 روسیه یک ماه پیش حمله‌ای بزرگ به کی‌یف انجام داده بود. پس از این حمله، وزارت دفاع روسیه گفت که «موج جدیدی از حملات سازمان‌یافته آغاز خواهد شد» که «مراکز تصمیم‌گیری و پست‌های فرماندهی» و نیز «تاسیسات تولید پهپاد در پایتخت را هدف قرار خواهد داد». مسکو گفته بود که این حمله پاسخی است به حمله اوکراین به یک خوابگاه دانشجویی در شهر استاروبیلسک؛ حمله‌ای که مقامات روسی گفتند در آن ۲۱ نفر کشته شده‌ بودند.
 
- Global Images Ukraine via Getty Im
-        </div>
+ Global Images Ukraine via Getty Im</div>
+        <div class="media">
+<img src="media/285087_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285087" target="_blank">مشاهده در تلگرام</a></div>
 
-        
-        <div class="media-container">
-            
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285087_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285087_0.jpg')">
-                        
-                    </div>
-                
-            
-        </div>
-
-        
-        <a href="https://t.me/bbcpersian/285087" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        
-    </div>
-    
-    <div class="post" style="animation-delay: 0.05s;">
-        <div class="post-header">
-            <span class="post-number">#2</span>
-            <span class="post-date">
-                <i class="far fa-calendar-alt"></i>
-                نامشخص
-            </span>
-        </div>
-
-        <div class="post-body">
-            غریب‌آبادی: عبور ایمن از تنگه هرمز بدون هماهنگی با ایران  قابل تضمین نیست
+    <div class="post">
+        <div class="date">#8 | </div>
+        <div class="text">غریب‌آبادی: عبور ایمن از تنگه هرمز بدون هماهنگی با ایران  قابل تضمین نیست
 
 کاظم غریب‌آبادی، معاون وزیر امور خارجه ایران، گفته است که عبور ایمن از تنگه هرمز بدون هماهنگی با ایران قابل تضمین نیست و هشدار داد که در صورت عدم هماهنگی، هر مسیر تعیین‌شده ممکن است به حالت تعلیق درآید.
 
@@ -524,38 +157,14 @@
 
 https://bbc.in/4v06Ffb
 @BBCPersian
-19.2K
-11:00 AM
-        </div>
+35K
+11:00 AM</div>
+        <div class="media">
+<img src="media/285086_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285086" target="_blank">مشاهده در تلگرام</a></div>
 
-        
-        <div class="media-container">
-            
-                <div class="no-media">
-                    <i class="far fa-image"></i> بدون رسانه
-                </div>
-            
-        </div>
-
-        
-        <a href="https://t.me/bbcpersian/285086" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        
-    </div>
-    
-    <div class="post" style="animation-delay: 0.1s;">
-        <div class="post-header">
-            <span class="post-number">#3</span>
-            <span class="post-date">
-                <i class="far fa-calendar-alt"></i>
-                نامشخص
-            </span>
-        </div>
-
-        <div class="post-body">
-            ‌ایران اعلام کرده است که بیانیه مشترک آمریکا و شورای همکاری خلیج فارس شامل «مواضعی مداخله‌جویانه، غیرمسئولانه و تحریک‌آمیز» بوده است و گفته است که حضور نظامی آمریکا در خلیج‌فارس منبع ناامنی و اختلاف در منطقه است.
+    <div class="post">
+        <div class="date">#9 | </div>
+        <div class="text">‌ایران اعلام کرده است که بیانیه مشترک آمریکا و شورای همکاری خلیج فارس شامل «مواضعی مداخله‌جویانه، غیرمسئولانه و تحریک‌آمیز» بوده است و گفته است که حضور نظامی آمریکا در خلیج‌فارس منبع ناامنی و اختلاف در منطقه است.
 
 وزارت امور خارجه ایران در بیانیه‌ای همچنین بار دیگر بر موضع خود تأکید کرد که تنگه هرمز باید با همکاری عمان و مطابق با مفاد یادداشت تفاهم با ایالات متحده مدیریت شود.
 
@@ -571,43 +180,14 @@ Eric Lee / POOL / AFP via Getty Images
 
 https://bbc.in/4v06Ffb
 @BBCPersian
-33.1K
-09:43 AM
-        </div>
+44.9K
+09:43 AM</div>
+        <div class="media">
+<img src="media/285085_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285085" target="_blank">مشاهده در تلگرام</a></div>
 
-        
-        <div class="media-container">
-            
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285085_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285085_0.jpg')">
-                        
-                    </div>
-                
-            
-        </div>
-
-        
-        <a href="https://t.me/bbcpersian/285085" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        
-    </div>
-    
-    <div class="post" style="animation-delay: 0.15000000000000002s;">
-        <div class="post-header">
-            <span class="post-number">#4</span>
-            <span class="post-date">
-                <i class="far fa-calendar-alt"></i>
-                نامشخص
-            </span>
-        </div>
-
-        <div class="post-body">
-            ‌
+    <div class="post">
+        <div class="date">#10 | </div>
+        <div class="text">‌
 رسانه‌های اسرائیلی که پیش‌تر دونالد ترامپ را «بزرگ‌ترین دوست» این کشور می‌خواندند، پس از امضای یادداشت تفاهم آمریکا و ایران ناگهان لحن خود را تغییر دادند.
 
 از آن زمان، این رسانه‌ها درباره «خیانت بزرگ» آقای ترامپ به اسرائیل سخن می‌گویند.
@@ -622,85 +202,14 @@ GettyImages/ AFP via Getty Images
 
 https://bbc.in/4xWVJBN
 @BBCPersian
-39.7K
-edited 07:02 AM
-        </div>
+46.2K
+edited 07:02 AM</div>
+        <div class="media">
+<img src="media/285078_0.jpg" loading="lazy" alt="media"><img src="media/285078_0.jpg" loading="lazy" alt="media"><img src="media/285078_0.jpg" loading="lazy" alt="media"><img src="media/285078_0.jpg" loading="lazy" alt="media"><img src="media/285078_0.jpg" loading="lazy" alt="media"><img src="media/285078_0.jpg" loading="lazy" alt="media"><img src="media/285078_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285078" target="_blank">مشاهده در تلگرام</a></div>
 
-        
-        <div class="media-container">
-            
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285078_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285078_0.jpg')">
-                        
-                    </div>
-                
-            
-        </div>
-
-        
-        <a href="https://t.me/bbcpersian/285078" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        
-    </div>
-    
-    <div class="post" style="animation-delay: 0.2s;">
-        <div class="post-header">
-            <span class="post-number">#5</span>
-            <span class="post-date">
-                <i class="far fa-calendar-alt"></i>
-                نامشخص
-            </span>
-        </div>
-
-        <div class="post-body">
-            گروسی می‌گوید تفاهم موقت بین ایران و آمریکا «دسترسی بازرسان آژانس به مراکز اتمی در ایران را فراهم می‌کند»
+    <div class="post">
+        <div class="date">#11 | </div>
+        <div class="text">گروسی می‌گوید تفاهم موقت بین ایران و آمریکا «دسترسی بازرسان آژانس به مراکز اتمی در ایران را فراهم می‌کند»
 
 رافائل گروسی، مدیرکل آژانس بین‌المللی انرژی اتمی که در یک کنفرانس خبری در توکیو گفت که تفاهم موقت صلح میان آمریکا و ایران، دسترسی بازرسان آژانس به مراکز اتمی در ایران را فراهم می‌کند.
 
@@ -713,42 +222,13 @@ edited 07:02 AM
 برای خواندن تازه‌ترین خبرها،‌ از لینک  به وب‌سایت بی‌بی‌سی فارسی مراجعه کنید.
 https://bbc.in/4anPSv1
 @BBCPersian
-BBC News فا
-        </div>
+BBC News فا</div>
+        <div class="media">
+<img src="media/285077_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285077" target="_blank">مشاهده در تلگرام</a></div>
 
-        
-        <div class="media-container">
-            
-                
-                    
-                    <div class="media-item">
-                        
-                            <img src="media/285077_0.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285077_0.jpg')">
-                        
-                    </div>
-                
-            
-        </div>
-
-        
-        <a href="https://t.me/bbcpersian/285077" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        
-    </div>
-    
-    <div class="post" style="animation-delay: 0.25s;">
-        <div class="post-header">
-            <span class="post-number">#6</span>
-            <span class="post-date">
-                <i class="far fa-calendar-alt"></i>
-                نامشخص
-            </span>
-        </div>
-
-        <div class="post-body">
-            0:30
+    <div class="post">
+        <div class="date">#12 | </div>
+        <div class="text">0:30
 این هفته در پرگار: نوستالژی چیست؟
 
 نوستالژی چیست؟ نوستالژی یک حالت روانی از سر درماندگی‌ست یا نیرویی‌ست بسیج‌کننده و هویت‌ساز؟ نوستالژی چگونه در سال‌های اخیر در ایران رشد کرد و چه کارکردی یافت؟ 
@@ -758,101 +238,567 @@ BBC News فا
 اسفندیار طبری، مدرس فلسفه سیاسی
 
 @BBCPersian
-36.7K
-06:18 AM
-        </div>
+42.2K
+06:18 AM</div>
+        <div class="media">
+<a href="media/285076_0.mov">📎 285076_0.mov</a></div><a href="https://t.me/bbcpersian/285076" target="_blank">مشاهده در تلگرام</a></div>
 
-        
-        <div class="media-container">
-            
-                
-                    
-                    <div class="media-item">
-                        
-                            <video controls preload="metadata">
-                                <source src="media/285076_0.mov">
-                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
-                            </video>
-                        
-                    </div>
-                
-            
-        </div>
+    <div class="post">
+        <div class="date">#13 | </div>
+        <div class="text">‌
+رافائل گروسی، مدیرکل آژانس بین‌المللی انرژی اتمی، گفته است که پس از جنگ خاورمیانه، برای اطمینان از اینکه ایران به سلاح هسته‌ای دست پیدا نکند، به یک نظام راستی‌آزمایی «بسیار قوی» نیاز است.
 
-        
-        <a href="https://t.me/bbcpersian/285076" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        
-    </div>
-    
+آقای گروسی در جمع خبرنگاران در ژاپن گفت: «فکر می‌کنم هدف این تفاهم اخیر [بین میان آمریکا و ایران] این است که اطمینان حاصل شود ایران به سمت توسعه سلاح هسته‌ای نخواهد رفت. دولت ایران هم به‌صراحت اعلام کرده که چنین قصدی ندارد.»
 
-</div>
+مدیرکل آژانس گفت «اما البته صرفِ اعلام نیت کافی نیست. ما باید هرچه زودتر که از نظر عملی امکان‌پذیر باشد، یک نظام راستی‌آزمایی بسیار قوی برقرار کنیم.»
 
-<!-- Lightbox -->
-<div id="lightbox" class="lightbox" onclick="closeLightbox()">
-    <span class="lightbox-close">&times;</span>
-    <img id="lightbox-img" src="" alt="پیش‌نمایش">
-</div>
+ایران گفته است که توافق درباره نحوه بازرسی‌ها و حضور مجدد بازرسان آژانس در تاسیساتی که مورد حمله نظامی قرار گرفتند بخشی از مذاکرات جاری و توافق احتمالی نهایی با آمریکا خواهد بود.
 
-<!-- Back to Top -->
-<button id="backToTop" class="back-to-top" onclick="scrollToTop()" title="بازگشت به بالا">
-    <i class="fas fa-chevron-up"></i>
-</button>
+Rodrigo Reyes Marin / POOL / AFP via Getty Images
 
-<!-- Footer -->
-<div class="footer">
-    تولید شده توسط <strong>Telegram Channel Scraper</strong> &copy; 2026/06/26 - 15:54
-</div>
+برای خواندن تازه‌ترین خبرها،‌ از لینک  به وب‌سایت بی‌بی‌سی فارسی مراجعه کنید.
+https://bbc.in/4anPSv1
+@BBCPersian
+41.6K
+06:13 AM</div>
+        <div class="media">
+<img src="media/285075_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285075" target="_blank">مشاهده در تلگرام</a></div>
 
-<script>
-    // ========== Lightbox ==========
-    function openLightbox(src) {
-        document.getElementById('lightbox-img').src = src;
-        document.getElementById('lightbox').classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
+    <div class="post">
+        <div class="date">#14 | </div>
+        <div class="text">‌
+آژانس فضایی اروپا بزرگ‌ترین و دقیق‌ترین تصویری را منتشر کرده که تاکنون در نور مرئی از مرکز کهکشان راه شیری گرفته شده است.
 
-    function closeLightbox() {
-        document.getElementById('lightbox').classList.remove('active');
-        document.body.style.overflow = '';
-    }
+در این عکس تلسکوپ فضایی اقلیدس تصویر بیش از ۶۰ میلیون ستاره را همراه با سحابی‌ها و خوشه‌های ستاره‌ای ثبت کرده است.
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeLightbox();
-    });
+اما این تصویری بود که در اصل قرار نبود هرگز ثبت شود.
 
-    // ========== Dark / Light Theme ==========
-    function toggleTheme() {
-        const body = document.body;
-        const icon = document.getElementById('theme-icon');
-        body.classList.toggle('dark');
-        const isDark = body.classList.contains('dark');
-        icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    }
+تلسکوپ فضایی اقلیدس که برای مطالعه جهان تاریک و نامرئی طراحی شده، تنها برای یک روز و به درخواست پژوهشگران به سوی بخش مرکزی کهکشان راه شیری، موسوم به برآمدگی کهکشانی، نشانه رفت.
 
-    // Load saved theme
-    (function () {
-        const saved = localStorage.getItem('theme');
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (saved === 'dark' || (!saved && prefersDark)) {
-            document.body.classList.add('dark');
-            document.getElementById('theme-icon').className = 'fas fa-sun';
-        }
-    })();
+دقت و حساسیت بالای اقلیدس به آن امکان داد جزئیات خیره‌کننده‌ای ثبت کند و حتی در این ناحیه متراکم نیز ستاره‌های منفرد، از جمله ستاره‌های کم‌نور، را از یکدیگر تشخیص دهد.
 
-    // ========== Back to Top ==========
-    const backBtn = document.getElementById('backToTop');
-    window.addEventListener('scroll', () => {
-        backBtn.classList.toggle('visible', window.scrollY > 400);
-    });
+GettyImages/ ESA/Euclid Consortium/NASA/ ESA/Euclid/Euclid Consortium/NASA, CFHT, image processing by J.-C. Cuillandre and E. Bertin (CEA Paris-Saclay)/ ESA
 
-    function scrollToTop() {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-</script>
+برای خواندن مطلب کامل، از لینک به وب‌سایت بی‌بی‌سی مراجعه کنید.
+https://bbc.in/3R3J2nV
+@BBCPersian
+40.8K
+edited 05:41 AM</div>
+        <div class="media">
+<img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"><img src="media/285067_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285067" target="_blank">مشاهده در تلگرام</a></div>
 
-</body>
-</html>
+    <div class="post">
+        <div class="date">#15 | </div>
+        <div class="text">مسابقات آخر گروه دی که آمریکا - میزبان - در آن سرگروه بود پنجشنبه شب برگزار شد و طی آن آمریکا با ترکیه و استرالیا با پاراگوئه دیدار کردند.
+
+آمریکا که با دو پیروزی و ۶ امتیاز پیش از این دیدار صعود خود را قطعی کرده بود، پنجشنبه شب خیلی زود و در همان دقیقه نخست مسابقه به گل دست یافت، اما ترکیه که با دو شکست و بدون امتیاز، برای حفظ آبرو و امیدواری به کسب ۳ امتیاز، به دیدار میزبان امده بود در همان نیمه اول با دو گل کامبک زد.
+
+در نیمه دوم این آمریکا بود که مجددا گل اول را زد و مسابقه ۲-۲ شد و تا ثانیه پایانی وقت‌های تلف شده پابرجا ماند اما در همان یک ثانیه آخر ترکیه گل سوم را زد تا همچون بدرقه باشکوهش در استانبول، وداعی آبرومندانه با لس‌آنجلس داشته باشد.
+
+در دیگر مسابقه این گروه استرالیا و پاراگوئه که هر دو به آمریکا باخته و ترکیه را شکست داده بودند، به تساوی رضایت دادند تا هر دو با ۴ امتیاز به کار خود در مرحله گروهی پایان دهند؛ استرالیا به علت تفاضل گل بهتر دوم شد و به همراه امریکا صعود کرد و پاراگوئه به عنوان تیم سوم در جدول هشت تیم سوم برتر قرار گرفت.
+
+Getty
+@BBCPersian
+45.3K
+edited 04:18</div>
+        <div class="media">
+<img src="media/285066_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285066" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#16 | </div>
+        <div class="text">58.6K
+08:57 AM</div>
+        <div class="media">
+<span style="color:gray;">بدون رسانه</span></div><a href="https://t.me/bbcpersian/285003" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#17 | </div>
+        <div class="text">آنتونی زورکر, خبرنگار آمریکای شمالی بی‌بی‌سی
+
+در حوزه‌های رای‌گیری در سراسر شهر نیویورک در روز سه‌شنبه، طوفانی انتخاباتی در حال شکل‌گیری بود.
+
+کمتر از هفت ماه پس از آنکه زهران ممدانی با یک کارزار خیره‌کننده اندرو کومو، فرماندار پیشین، را شکست داد و به جوان‌ترین شهردار شهر نیویورک در یک قرن گذشته تبدیل شد، سه نامزد چپ‌گرای کنگره که مورد حمایت زهران ممدانی بودند نیز به دستاوردهای مشابهی رسیدند.
+
+دو تن از نامزدهایی که زهران ممدانی از آن‌ها حمایت کرده بود، برد لندر، حسابرس شهر نیویورک، و داریالیزا اویلا شوالیه، فعال اجتماعی، نمایندگان دموکرات مستقر در کنگره را شکست دادند.
+
+یکی از شکست‌خوردگان، آدریانو اسپایات ۷۹ ساله، پنج دوره در مجلس نمایندگان خدمت کرده بود و رهبری فراکسیون اسپانیایی‌تبارهای کنگره را بر عهده داشت. دیگری، دن گلدمن، به عنوان وکیل اصلی در نخستین محاکمه استیضاح دونالد ترامپ شناخته شد و از حمایت مالی آیپک، گروه لابی حامی اسرائیل با منابع مالی گسترده، برخوردار بود.
+
+
+برای خواندن مطلب کامل، به لینک زیر مراجعه کنید.
+
+https://bbc.in/3QL2LbP
+GettyImages/ Reuters/ Bloomberg via Gett</div>
+        <div class="media">
+<img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"><img src="media/285057_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285057" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#18 | </div>
+        <div class="text">در میانه جشن هواداران تیم مکزیک پس از پیروزی این تیم برابر جمهوری چک و صعود مقتدرانه، یک خودرو در شهر توریستی کابو سان لوکاس به میان جمعیت رفت و دست‌کم ۱۷ نفر را زخمی کرد.
+
+به گفته پلیس راننده بازداشت شده و تحقیقات درباره علت سانحه آغاز شده است.
+به گفته مقام‌های شهر لوس کابوس، همه مجروحان، از جمله راننده، به مراکز درمانی منتقل شده‌اند.
+
+ویدیوهای تأییدشده از محل حادثه نشان می‌دهد یک خودروی مشکی پس از محاصره شدن توسط حاضران، ناگهان شتاب می‌گیرد، وارد جمعیت می‌شود و پس از زیرگرفتن چند نفر به موانع کنار خیابان خورده و متوقف می‌شود.
+
+Reuters
+@BBCPersian
+43.6K
+03:14 AM</div>
+        <div class="media">
+<img src="media/285055_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285055" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#19 | </div>
+        <div class="text">مارک کارنی، نخست‌وزیر کانادا، گفت کانادا در کشورهایی مانند ایران که حضور دیپلماتیک ندارد، «در موقعیت نامناسبی» قرار می‌گیرد.
+
+آقای کارنی در نشست خبری پایان دوره کاری پارلمان کانادا گفت: «تعامل به معنای تایید نیست. داشتن سفارت یا ارائه خدمات کنسولی در یک کشور به این معنا نیست که ما از سیاست‌های آن کشور حمایت می‌کنیم.»
+
+او در ادامه و در اشاره به زمین‌لرزه‌های مرگبار ونزوئلا گفت نبود دیپلمات‌های کانادایی در کاراکاس، توان اتاوا برای کمک به شهروندان کانادایی را با دشواری روبه‌رو کرده است.
+
+نخست‌وزیر کانادا افزود: «کشورهایی هستند که اگر بخواهم با ملایمت بگویم، با آنها هم‌نظر نیستیم و در آنها نمایندگی دیپلماتیک نداریم. ایران و ونزوئلا دو نمونه از این کشورها هستند و موارد دیگری هم وجود دارد.»
+
+او گفت: «این موضوع پیش از هر چیز، توان ما را برای کمک به کانادایی‌هایی که در این کشورها حضور دارند، محدود می‌کند.»
+
+نخست‌وزیر کانادا همچنین افزود که در برخی پرونده‌های کنسولی، دولت کانادا ناچار شده است برای کمک به خروج شهروندانش از ایران، از کشورهایی که «متحدان طبیعی» اتاوا محسوب نمی‌شوند، کمک بگیرد.
+
+Re</div>
+        <div class="media">
+<img src="media/285054_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285054" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#20 | </div>
+        <div class="text">مسابقات پایانی گروه اف میان ژاپن و سوئد و هلند و تونس به طور همزمان برگزار شد و در پایان هلند ۳-۱ تونس را شکست داد و با هفت امتیاز به عنوان صدرنشین صعود کرد و ژاپن با تساوی ۱-۱ برابر سوئد ۵ امتیازی شد و به عنوان تیم دوم به مرحله حذفی راه یافت.
+
+سوئد که ۴ امتیازی است و در رتبه سوم قرار دارد هم تقریبا صعود خود را قطعی کرده است.
+
+ژاپن نخستین تیم آسیایی است که مستقیم به مرحله حذفی این جام راه پیدا می‌کند.
+
+کره‌جنوبی هم با ۳ امتیاز در گروهی که مکزیک - میزبان - مقتدرانه و با ۹ امتیاز صعود کرده سوم شده و امیدوارم به صعود با توجه به نتایج دیگر تیم‌هاست.
+
+ایران دیگر تیم آسیایی است که تاکنون با دو تساوی و بدون شکست در جدول باقی مانده و فردا در صورت شکست مصر مستقیم به مرحله بعد صعود خواهد کرد.
+
+Reuters
+@BBCPersian
+47.3K
+edited 01:43 AM</div>
+        <div class="media">
+<img src="media/285053_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285053" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#21 | </div>
+        <div class="text">...
+امیر قلعه‌نویی، سرمربی تیم ملی ایران، در کنفرانس خبری پیش از مسابقه آخر مرحله گروهی با مصر در کنفرانس خبری این مسابقه حاضر شد و در پاسخ به سوالی درباره همزمانی برنامه‌های حمایت از جامعه ال‌جی‌بی تی در شهر سیاتل با این مسابقه گفت: «تمرکز ما فقط روی فوتبال است و درباره موضوعاتی که در دین ما ممنوع است، صحبت نمی‌کنیم. تنها می‌خواهیم درباره زیبایی‌های فوتبال حرف بزنیم.»
+
+سومین مسابقه ایران در مرحله گروهی روز جمعه در سیاتل - شمال‌غربی آمریکا - برگزار خواهد شد. این مسابقه همزمان با برگزای جشن‌های افتخار جامعه ال‌جی‌بی‌تی در این شهر است که معمولا با برافراشتن پرچم‌های رنگین‌کمانی و رژه و جشن‌های خیابانی همراه است. 
+به همین علت، مسابقه دو تیم ایران و مصر که در هر دو کشور محدودیت‌های فراوان مذهبی،‌قانونی و اجتماعی برای زندگی و حضور آزاد جامعه ال‌جی‌بی‌تی وجود دارد، مورد توجه قرار گرفته است.
+
+ایران برای صعود مستقیم از گروه خود به هر سه امتیاز دیدار با مصر نیاز دارد اما مصر با کسب یک امتیاز و حتی شکست برابر ایران هم به احتمال زیاد صعود خواهد کرد.
+
+BBC PERSIAN
+@BBCPersian
+45.1K
+edited 00:56 AM</div>
+        <div class="media">
+<video controls><source src="media/285052_0.mp4"></video></div><a href="https://t.me/bbcpersian/285052" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#22 | </div>
+        <div class="text">مقام‌های آمریکایی که نام آنها منتشر نشده به رسانه‌های آمریکایی گفته‌اند حمله روز پنجشنبه به یک نفتکش در حوالی تنگه هرمز، از سوی نیروی دریایی سپاه پاسداران بوده است.
+
+ایران واکنشی به این ادعا نشان نداده است اما نیروی دریایی سپاه چهارشنبه شب هشدار داده بود که هرگونه ترددی از تنگه هرمز تنها از طریق مسیرهای اعلام شده صورت پذیر است و کشتی‌ها باید با هماهنگی نیروهای ایران از این تنگه عبور کنند.
+
+امروز - پنجشنبه ۴ تیر - هم نهاد تازه تاسیس مدیریت تنگه هرمز هشدار داده است که: «تبعات عبور از مسیرهای غیرمجاز» بر عهده کشتی‌ها است.
+
+خبرگزاری‌های داخل ایران پنجشنبه شب نوشتند: «نهاد مدیریت آب‌راه خلیج فارس در پاسخ به استعلام‌های مکرر اعلام کرده است که هرگونه تردد از مسیرهای خارج از چارچوب تعیین‌شده این نهاد، مشمول تضمین عبور ایمن نبوده و از پوشش بیمه و مسئولیت‌های مرتبط برخوردار نخواهد بود.»
+
+در اطلاعیه این نهاد همچنین تاکید شده است که: «تبعات ناشی از تردد از مسیرهای غیرمجاز، برعهده مالک، بهره‌بردار و فرمانده شناور خواهد بود.»
+
+
+Reuters
+https://bbc.in/4alzQBS
+@BBCPersian
+48.9K
+edited 11:05 PM</div>
+        <div class="media">
+<img src="media/285051_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285051" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#23 | </div>
+        <div class="text">تیم ملی آلمان در دیداری پرهیجان و در حالی که گل اول مسابقه را در همان دقایق ابتدایی زد با نتیجه دو بر یک مغلوب اکوادور شد.
+
+مسابقات آخر گروه یی روز پنجشنبه به طور همزمان میان آلمان و اکوادور و ساحل عاج و کوراسائو برگزار شد.
+
+در دیگر دیدار این گروه ساحل عاج با دو گل کوراسائو را شکست داد و با ۶ امتیاز بعد از آلمان صعود کرد.
+
+اکوادور با شکست آلمان ۴ امتیازی شد و به عنوان یکی از تیم‌های سوم برتر به مرحله حذفی خواهد رفت.
+
+از نکات جالب توجه دیدار آلمان و اکوادور این بود که تیم داوری متشکل از سه داور زن بود.
+
+همچنین تعداد تماشاگران این مسابقه که در نیوجرسی - کرانه شرقی آمریکا - برگزار شد به بیش از ۸۰ هزار نفر رسید.
+
+مسابقات آخر مرحله گروه د که آمریکا هم در آن حضور دارد، ساعتی دیگر آغاز خواهد شد. با ما بمانید تا نتایج همه مسابقات را برایتان اینجا گزارش کنیم.
+
+Reuters
+@BBCPersian
+50.4K
+10:18 PM</div>
+        <div class="media">
+<img src="media/285050_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285050" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#24 | </div>
+        <div class="text">سخنگوی کارگروه جام جهانی در کاخ‌سفید روز پنجشنبه در واکنش به شکایت تیم ملی فوتبال ایران، که مقام‌های آمریکایی را به «آزار و اذیت» متهم کرده بود، گفت تاخیر ایجادشده برای این تیم «کوتاه» بوده است.
+
+او افزود هواپیمای حامل تیم ایران «طبق برنامه یا نزدیک به زمان تعیین‌شده» در شهر سیاتل به زمین نشسته است.
+
+این سخنگو جزئیات بیشتری درباره این موضوع ارائه نکرد و گفت نکته دیگری برای افزودن ندارد.
+
+روز گذشته گزارش شد که در زمان ورود بازیکنان تیم ملی ایران به خاک آمریکا یک بار دیگر در زمان انجام امور مرزبانی مهدی طارمی و سعید الهویی - از دستیاران امیر قلعه‌نویی - با معطلی همراه بوده و کاروان ایران ناچار به توقف شده است.
+
+EPA
+@BBCPersian
+50.7K
+09:44 PM</div>
+        <div class="media">
+<img src="media/285049_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285049" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#25 | </div>
+        <div class="text">جی دی ونس، معاون رئیس‌جمهور آمریکا، می‌گوید واشنگتن و تهران توافق کرده‌اند برای کاهش خطر درگیری‌های بیشتر، یک کانال ارتباطی مستقیم با سپاه پاسداران انقلاب اسلامی ایجاد کنند.
+
+آقای ونس در گفت‌وگو با وب‌سایت خبری محافظه‌کار بریتانیایی انهرد - UnHerd - گفت این سازوکار شامل دیدار مقام‌های نظامی ایران و آمریکا در دوحه - قطر - خواهد بود تا اختلافات و تنش‌های احتمالی را مدیریت کنند.
+
+او در توصیف گفت‌وگوهای انجام‌شده با مقام‌های ایرانی گفت: «آنها گفتند: "بسیار خوب، ما فردی از سپاه پاسداران را به دوحه می‌فرستیم تا با فردی از فرماندهی مرکزی آمریکا (سنتکام) در آنجا مستقر شود" و به این ترتیب قرار است بسیاری از این اختلافات را حل‌وفصل کنیم.»
+
+معاون دونالد ترامپ همچنین به انهرد گفت امارات متحده عربی کانال‌های ارتباطی جدیدی با ایران ایجاد کرده که پیش از این وجود نداشت؛ از جمله ارتباطاتی با سپاه پاسداران.
+
+«امارات در حال انجام گفت‌وگوهایی با ایرانی‌هاست که پیش از این هرگز انجام نشده بود؛ از جمله با سپاه پاسداران، درباره انواع مختلفی از مشوق‌های اقتصادی.»
+
+Getty Images
+@BBCPersian
+53.9K
+09:05 PM</div>
+        <div class="media">
+<img src="media/285048_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285048" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#26 | </div>
+        <div class="text">دیوان عالی آمریکا به ترامپ اجازه داد تا وضعیت «حمایت موقت» هزاران مهاجر از هائیتی و سوریه را لغو کند
+
+دیوان عالی آمریکا حکم داده است که دولت دونالد ترامپ می‌تواند وضعیت « حمایت موقت» صدها هزار مهاجر اهل هائیتی و سوریه را لغو کند.
+
+این وضعیت به ۳۵۰ هزار نفر مهاجر از هائیتی و ۶۱۰۰ نفر از سوریه اجازه می‌داد که سال‌ها در آمریکا بمانند.
+
+تصمیم روز پنجشنبه دیوان عالی آمریکا احتمالاً پیامدهایی برای دارندگان این وضعیت از کشورهای دیگر هم خواهد داشت.
+
+در حکمی جداگانه، دیوان عالی آمریکا رای داد که مهاجرانی که به مرز آمریکا و مکزیک می‌رسند، تا زمانی که پا به خاک این کشور نگذارند، حق درخواست پناهندگی ندارند و این یک پیروزی دیگر برای دولت دونالد ترامپ محسوب می‌شود.
+
+وضعیت «حمایت موقت» توسط دولت آمریکا به افراد متولد خارج از این کشور اعطا می‌شود که کشورهای مبدا آنها به دلیل جنگ، بلایای طبیعی یا سایر فجایع قادر به پذیرش آنها نیستند. دریافت‌کنندگان این وضعیت می‌توانند به طور قانونی تا ۱۸ ماه در آمریکا زندگی و کار کنند، و امکان تمدید آن هم وجود دارد.
+
+در این مدت، مقامات نمی‌توانند آنها را بر اساس وضعیت </div>
+        <div class="media">
+<img src="media/285047_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285047" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#27 | </div>
+        <div class="text">رسانه‌های منطقه‌ای و داخلی جهان عرب اظهارات متناقض ایران و آمریکا درباره وضعیت تنگه هرمز را به‌طور گسترده پوشش دادند.
+
+شبکه‌های تلویزیونی مهم پان‌عربی مستقر در کشورهای حوزه خلیج فارس، بولتن‌های خبری خود را با تحولات مربوط به تنگه هرمز آغاز کردند و برخی از آنها به «نبرد بر سر نفوذ» در این گذرگاه راهبردی اشاره کردند.
+برخی دیگر نیز بر اعلام اخیر عمان مبنی بر ایجاد یک کریدور دریایی موقت برای کشتی‌هایی که قصد عبور از تنگه هرمز را دارند، و همچنین ادامه هماهنگی میان عمان و ایران درباره مدیریت این آبراه، تمرکز داشتند.
+
+آلبوم را ورق بزنید و برای خواندن مطلب کامل به لینک زیر مراجعه کنید:
+
+https://bbc.in/4vvdaHI
+GettyImages/ Anadolu via Getty Images/ maps4media via Getty Images/ ISNA/WANA/Reuters
+@BBCPersian
+50.2K
+edited 08:34 PM</div>
+        <div class="media">
+<img src="media/285041_0.jpg" loading="lazy" alt="media"><img src="media/285041_0.jpg" loading="lazy" alt="media"><img src="media/285041_0.jpg" loading="lazy" alt="media"><img src="media/285041_0.jpg" loading="lazy" alt="media"><img src="media/285041_0.jpg" loading="lazy" alt="media"><img src="media/285041_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285041" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#28 | </div>
+        <div class="text">0:45
+آخرین خبرهای پنج‌شنبه ۴ تیر ۱۴۰۵
+@BBCPersian
+53K
+edited 07:35 PM</div>
+        <div class="media">
+<video controls><source src="media/285040_0.mp4"></video></div><a href="https://t.me/bbcpersian/285040" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#29 | </div>
+        <div class="text">جورجا ملونی، نخست‌وزیر ایتالیا، می‌گوید که کشورش هرگز درجنگ ایران شرکت نکرده است.
+
+او گفت که مارک روته، دبیر کل ناتو، نوع پروازهای مجاز را اشتباه متوجه شد، اشتباه خود را اصلاح کرد و سپس موضوع را روشن کرد.
+
+خانم ملونی در پایان سی و ششمین اجلاس بین دولتی ایتالیا و فرانسه که در آنتیب در حال برگزاری است، صحبت کرد.
+
+او گفت که رم به تعهدات و توافقات خود در مورد استفاده از پایگاه‌ها پایبند بوده است، اما فراتر از آن نرفته است.
+
+مارک روته روز چهارشنبه در پاسخ به اظهارات دونالد ترامپ، رئیس جمهور آمریکا، مبنی بر اینکه متحدان ناتو از آمریکا حمایت کافی نکردند، به فاکس نیوز گفت که اروپا در واقع «سکوی نمایش و اعمال قدرت» آمریکا بوده است.
+
+او گفت: «پانصد هواپیمای آمریکایی از پایگاه‌های آمریکا در ایتالیا برای پشتیبانی از عملیات "خشم حماسی" به پرواز درآمدند. بنابراین این حمایت ما بسیار گسترده بود.»
+
+پیش از اظهارات خانم ملونی، گوئیدو کروستو، وزیر دفاع ایتالیا، نیز گفت که گفته‌های دبیر کل ناتو به دلیل «هیجان‌زدگی» بوده و منجر به سوء تفاهم شده است.
+
+Getty
+@BBCPersian
+53.7K
+edited 07:28 PM</div>
+        <div class="media">
+<img src="media/285039_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285039" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#30 | </div>
+        <div class="text">پس از حمله به یک کشتی در نزدیکی تنگه هرمز، سازمان کشتیرانی سازمان‌ملل‌متحد روز پنجشنبه اعلام کرد که کار تخلیه صدها کشتی سرگردان و هزاران دریانورد از طریق تنگه هرمز را به طور موقت متوقف می‌کند.
+
+به گزارش رویترز، آرسنیو دومینگز، دبیرکل سازمان بین‌المللی دریانوردی (آی‌ام‌او) در بیانیه‌ای گفت: «من از حمله‌ امروز به یک کشتی که از تنگه هرمز عبور می‌کرد، مطلع شدم. این کشتی تحت چارچوب عملیات تخلیه "آی‌ام‌او" عبور نکرده بود. اما من تصمیم گرفته‌ام این عملیات را به طور موقت متوقف کنم تا زمانی که دوباره تأیید کنم که ضمانت‌های ایمنی لازم برقرار است.»
+
+سازمان بین‌المللی دریانوردی سازمان ملل در حال کمک به خروج صدها کشتی از خلیج فارس است که از آغاز جنگ در اواخر فوریه در این منطقه گرفتار شده‌اند.
+
+صبح امروز مرکز عملیات تجارت دریایی بریتانیا، یوکی‌ام‌تی‌او، اعلام کرد که یک کشتی کانتینری هنگام عبور از تنگه هرمز، در حدود ۱۴ کیلومتری جنوب‌شرقی بندر داهیت عمان، از سمت راست با یک پرتابه هدف قرار گرفته است.
+
+GettyImages
+https://bbc.in/4vxgceA
+@BBCPersian
+48.5K
+edited 07:19 PM</div>
+        <div class="media">
+<img src="media/285038_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285038" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#31 | </div>
+        <div class="text">تعلیق پروازهای خاورمیانه در بسیاری از شرکت‌های هواپیمایی ادامه دارد
+
+با وجود افزایش تلاش‌های دیپلماتیک برای پایان‌دادن به درگیری‌های پس از حملات آمریکا و اسرائیل به ایران، بسیاری از شرکت‌های هواپیمایی همچنان پروازهای خود را به بخش‌هایی از خاورمیانه، متوقف نگه داشته‌اند.
+
+ایرفرانس، پروازهای تل‌آویو را تا ۳۰ ژوئن و پروازهای دبی و بیروت را تا ۵ ژوئیه تعلیق کرده است. کی‌ال‌ام نیز پروازهایش به ریاض، دمام و دبی را تا ۹ اوت انجام نخواهد داد.
+
+بریتیش ایرویز ازسرگیری پروازها به دوحه و ریاض را به ماه اوت موکول کرده و پروازهای دبی، تل‌آویو، بحرین و امان را تا ۲۵ اکتبر متوقف کرده است.
+
+گروه لوفت‌هانزا نیز بخش بزرگی از پروازهای خود به شهرهای منطقه، از جمله تهران، ابوظبی، بیروت، ریاض، اربیل و مسقط را تا ۲۴ اکتبر تعلیق کرده است.
+
+دلتا پروازهای آتلانتا به تل‌آویو را تا ۱۸ دسامبر متوقف کرده و ایرکانادا نیز پروازهای خود به تل‌آویو و دبی را تا ۲۴ اکتبر لغو کرده است.
+
+در مقابل، برخی شرکت‌ها ازسرگیری محدود پروازها را آغاز کرده‌اند؛ از جمله مالزی ایرلاینز که قصد دارد از دوم ژوئیه پروازهای محدودی به دوحه برق</div>
+        <div class="media">
+<img src="media/285037_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285037" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#32 | </div>
+        <div class="text">اسرائیل و لبنان، عقب‌نشینی نیروهای اسرائیلی از جنوب لبنان را تکذیب کردند
+
+مقام‌های ارشد اسرائیل و لبنان روز پنجشنبه ۴ تیر، گزارش‌ها درباره عقب‌نشینی نیروهای اسرائیلی از جنوب لبنان را تکذیب کردند.
+
+این تکذیب در حالی است که پیش‌تر یک مقام وزارت خارجه آمریکا گفته بود که اسرائیل برای نشان دادن حسن نیت، بخشی از نیروهایش را از منطقه حائل در جنوب لبنان خارج کرده است.
+
+اسرائیل و لبنان در حال بررسی پیشنهاد آمریکا درباره واگذاری بخش‌هایی از مناطق اشغال‌شده در جنگ با حزب‌الله و بازگرداندن کنترل آن‌ها به دولت لبنان هستند.
+
+یک مقام ارشد ارتش اسرائیل اما گفت که این کشور از منطقه حائل عقب‌نشینی نخواهد کرد. یک مقام نظامی لبنان نیز گفت که تحولات میدانی روزهای اخیر «خلاف عقب‌نشینی را نشان می‌دهد.»
+
+ارتش اسرائیل هم در بیانیه‌ای اعلام کرد که تغییری در محل استقرار نیروهایش در جنوب لبنان ایجاد نشده است.
+
+https://bbc.in/4vxgceA
+@BBCPersian
+47.8K
+edited 07:15 PM</div>
+        <div class="media">
+<img src="media/285036_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285036" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#33 | </div>
+        <div class="text">جزئیات تازه از حمله احتمالی به یک کشتی باری در نزدیکی تنگه هرمز
+
+در پی گزارش پیشین درباره هدف قرار گرفتن یک کشتی باری در آب‌های نزدیک تنگه هرمز، جزئیات تازه حاکی است که کشتی آسیب‌دیده «اور لاولی»، یک کشتی کانتینری با پرچم سنگاپور، بوده است.
+
+مرکز عملیات تجارت دریایی بریتانیا، یوکی‌ام‌تی‌او، اعلام کرد این کشتی هنگام عبور از تنگه هرمز، در حدود ۱۴ کیلومتری جنوب‌شرقی بندر داهیت عمان، از سمت راست با یک پرتابه هدف قرار گرفته است.
+
+بر اساس ارزیابی‌های اولیه شرکت امنیت دریایی امبری، این حادثه حمله تلقی شده است که به پل فرماندهی کشتی آسیب رسانده، اما تلفات جانی یا پیامد زیست‌محیطی نداشته است.
+
+مقام‌ها در حال بررسی حادثه‌اند و به کشتی‌ها توصیه شده با احتیاط از منطقه عبور کنند.
+
+سپاه پاسداران نیز روز پنجشنبه اعلام کرد عبور ایمن از تنگه هرمز تنها از مسیرهای تعیین‌شده از سوی ایران امکان‌پذیر است و با کشتی‌هایی که این مقررات را رعایت نکنند برخورد خواهد شد.
+
+مارکو روبیو، وزیر خارجه آمریکا، پیش از وقوع این حادثه گفته بود که اگر ایران کشتی‌ها را در تنگه هرمز تهدید یا متوقف کند، «با مشکل روبه‌رو خواهیم </div>
+        <div class="media">
+<img src="media/285035_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285035" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#34 | </div>
+        <div class="text">1:07
+‏‌تیم ملی فوتبال ایران با خاطراتی خوب از مهمان‌نوازی مکزیکی‌ها، کمپش در تیخوانا را ترک کرد و برای بازی شنبه برابر مصر به سیاتل آمریکا رفت. اعضای تیم ملی ایران از امیر قلعه‌نویی، سرمربی تا علیرضا جهان‌بخش، بازیکن بارها از میزبانی گرم مکزیک قدردانی کردند.
+
+‏در مراسمی پیش از ترک تیخوانا، تیم ملی ایران و باشگاه شولوس که زمین تمرینش را در اختیار این تیم گذاشته بود با هم یادگاری‌هایی ردوبدل کردند.
+
+‏حضور تماشاگران مکزیکی که ایران را در دو بازی نخستینش در ورزشگاه لس‌انجلس تشویق می‌کردند، چشمگیر بود. آنها پلاکاردهایی در دست داشتند که رویش نوشته بود: «ایران، داداش، تو هم دیگه مکزیکی شدی».
+@bbcpersian
+58.8K
+06:04 PM</div>
+        <div class="media">
+<a href="media/285034_0.MOV">📎 285034_0.MOV</a></div><a href="https://t.me/bbcpersian/285034" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#35 | </div>
+        <div class="text">‎⁨_برنامه_جام_جهان_نما_پنجشنبه_۴_تیر_۱۴۰۵⁩.mp3
+
+25:58
+54.8K
+05:51 PM</div>
+        <div class="media">
+<audio controls><source src="media/285033_0.mp3"></audio></div><a href="https://t.me/bbcpersian/285033" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#36 | </div>
+        <div class="text">2:14
+کمیته برگزاری مسابقات جام جهانی فوتبال در شهر سیاتل آمریکا، از گروه راک ایرانی «بی-بند» دعوت کرده تا پیش از مسابقه تیم‌های ملی ایران و مصر برای تماشاگرانی که به ورزشگاه می‌روند، برنامه اجرا کند. سام فرزانه در آخرین شب تمرین اعضای این گروه در سیاتل حاضر بود.
+
+https://bbc.in/4eqtJPa
+@BBCPersian
+60.9K
+04:27 PM</div>
+        <div class="media">
+<video controls><source src="media/285032_0.mp4"></video></div><a href="https://t.me/bbcpersian/285032" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#37 | </div>
+        <div class="text">وقایع شش ماه گذشته، از سرکوب خونین هزاران معترض در دی ۱۴۰۴ تا جنگ با آمریکا و اسرائیل و کشته شدن بسیاری، از غیرنظامیان تا رهبر وقت ایران، در مراسم عزاداری محرم ۱۴۰۵ بازتاب یافته است. در روزهای اخی...
+
+BBCPersian
+جنگ اخیر آمریکا و اسرائیل علیه ایران همچنین باعث شده مضامین میهن‌پرستانه هم به متن مداحی‌ها راه پیدا کند. همچنین دسته‌‌های عزاداری در میناب و لامرد به یاد کشته‌شدگان جنگ آمریکا و اسرائیل با ایران در محله‌های این شهرها به راه افتاد. 
+
+حمله موشکی به یک مدرسه ابتدایی میناب، ۱۶۸ کشته و سه هدف در بافت مسکونی و یک سالن ورزشی در لامرد ۲۱ کشته برجا گذاشت که بیشتر آنها در این دو حمله کودک بودند.
+ 
+شماری از این مراسم عزاداری که در شبکه‌های اجتماعی به طور گسترده بازنشر شده را ببینید.  
+
+https://bbc.in/4f2SuB9
+@BBCPersian
+57.1K
+edited 03:55 PM</div>
+        <div class="media">
+<img src="media/285031_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285031" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#38 | </div>
+        <div class="text">2:05
+وقایع شش ماه گذشته، از سرکوب خونین هزاران معترض در دی ۱۴۰۴ تا جنگ با آمریکا و اسرائیل و کشته شدن بسیاری، از غیرنظامیان تا رهبر وقت ایران، در مراسم عزاداری محرم ۱۴۰۵ بازتاب یافته است.
+ 
+در روزهای اخیر ویدیوهایی از نوحه‌خوانی و سینه‌زنی‌های محرم در شبکه‌های اجتماعی پربازدید شده است که کاربران آن‌ها را اشاره‌ای به کشته‌شدگان اعتراضات دی ماه تفسیر کرده‌اند.
+ 
+از جمله این ویدیوها، بازخوانی‌‌ها و بازنوازی‌ موسیقی ترانه اعتراضی «از خون جوانان وطن» عزاداری در ده‌ها دسته‌ عزاداری در شهرهای مختلف ایران است. یکی دیگر از ویدیوهای پربازدید، تصویری از عزاداری شب تاسوعا از «تکیه مشایی آمل» است که استفاده از آهنگ و قسمت‌هایی از متن ترانه‌ای که بر مزار کشته‌شدگان دی ماه پخش می‌شد با ترجیع‌بند «خرابم کردی» چند میلیون بیننده پیدا کرده است.
+ 
+انتشار گسترده این ویدیو واکنش تکیه مشایی آمل را به دنبال داشته که با انتشار متنی در صفحه اینستاگرام خود، آن را «موج‌سواری و تفسیر به رای خوانده» و نوشته هر ترانه می‌تواند «جنبه‌های مختلف سیاسی و اجتماعی و اعتراضی داشته باشد.»
+53.4K
+03:55 PM</div>
+        <div class="media">
+<video controls><source src="media/285030_0.mp4"></video></div><a href="https://t.me/bbcpersian/285030" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#39 | </div>
+        <div class="text">...
+مسلمانان شیعه با فرارسیدن ماه محرم و روزهای سوگواری تاسوعا و عاشورا، مراسم گسترده‌ای را در بزرگداشت امام سوم شیعیان برگزار کردند. عاشورا یکی از مهم‌ترین مناسبت‌های مذهبی در مذهب شیعه است. این مراسم به جز ایران در پاکستان، هند، ترکیه،‌عراق و لبنان هم برگزار شد.
+ 
+در استانبول، هزاران نفر در مرکز هنرهای نمایشی یحیی کمال بایاتلی مراسم عاشورا را برگزار کردند.
+ 
+شیعیان لبنان در شهر نبطیه، دسته‌های عزاداری را در خیابان‌هایی راه انداختند که ویرانی‌های حملات اسرائیل در آنها مشهود بود.
+ 
+در کشمیر تحت اداره هند هم شیعیان در خیابان‌های سرینگر راهپیمایی کردند. تصاویر این مراسم نشان می‌دهد در مسیر برگزاری، بنرهای بزرگ متعددی با تصاویر علی خامنه‌ای و بعضی از مقام‌های کشته‌شده در جنگ اخیر نصب شده بود.
+ 
+https://bbc.in/4f1uONA
+@BBCPersian
+50.2K
+03:53 PM</div>
+        <div class="media">
+<video controls><source src="media/285029_0.mp4"></video></div><a href="https://t.me/bbcpersian/285029" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#40 | </div>
+        <div class="text">3:08
+دلسی رودریگز، رئیس جمهوری موقت ونزوئلا اعلام کرد که تعداد کشته‌‌ها زلزله‌های ویرانگر شامگاه چهارشنبه در این کشور تا کنون به حداقل ۱۶۴ نفر و تعداد زخمی‌ها به حدود هزار نفر رسیده است.
+
+این زمین‌لرزه‌ها مناطق غرب کاراکاس، پایتخت ونزوئلا، را لرزاندند و تکانه‌های آن‌ها به سراسر کشور و حتی به کلمبیا در همسایگی این کشور رسیدند.
+
+بر اساس برآوردها، احتمال دارد شمار نهایی کشته‌های این حادثه حتی به بیش از 100 هزار نفر هم برسد
+@BBCPersian
+50.5K
+edited 03:17 PM</div>
+        <div class="media">
+<video controls><source src="media/285028_0.mp4"></video></div><a href="https://t.me/bbcpersian/285028" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#41 | </div>
+        <div class="text">...
+ بداهه‌نوازی در اجرای کیهان کلهر و اردال ارزنجان هسته اصلی شکل‌گیری موسیقی‌ست؛ جایی که الگوهای ملودیک کهن پیوسته بازتفسیر و در لحظه دگرگون می‌شوند. ریشه‌های ایرانی، کردی و ترکی، در گفت‌وگویی زنده میان کمانچه و باغلاما به هم می‌رسند و جریانی سیال از صدا را شکل می‌دهند.
+
+جریان سیالی که در حرکت میان اوج‌های پرشور و لحظات تأمل‌برانگیز، به حال‌وهوایی نزدیک به خلسه و مراقبه صوتی می‌انجامد؛ فضایی که در آن هم پژواک نغمه‌های صوفیانه کهن شنیده می‌شود و هم الگوهای ملودیک نو شکل می‌گیرند.
+
+دو نوازنده در تعادلی ظریف، گاه یکی و گاه دیگری را در جایگاه تکنواز قرار می‌دهند و با درهم‌تنیدن صدای دو ساز، گستره‌ای از رنگ و احساس می‌آفرینند که گویی ارکستری کامل در حال نواختن است.
+
+بخش دوم اجرای کیهان کلهر و اردال ارزنجان در سالن کوئینز هال ادینبورگ، اسکاتلند را این هفته در تلویزیون و یوتیوب بی‌بی‌سی فارسی ببینید.
+
+@BBCPersian
+54.1K
+edited 02:33 PM</div>
+        <div class="media">
+<video controls><source src="media/285027_0.mp4"></video></div><a href="https://t.me/bbcpersian/285027" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#42 | </div>
+        <div class="text">‎⁨_تازه_ترین_خبرهای_جهان_پنجشنبه_۴_تیر⁩.mp3
+
+4:22
+51.8K
+01:58 PM</div>
+        <div class="media">
+<audio controls><source src="media/285026_0.mp3"></audio></div><a href="https://t.me/bbcpersian/285026" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#43 | </div>
+        <div class="text">1:06
+سرخط خبرها، پنجشنبه ۴ تیر ۱۴۰۵
+@BBCPersian
+54.6K
+01:42 PM</div>
+        <div class="media">
+<video controls><source src="media/285025_0.mp4"></video></div><a href="https://t.me/bbcpersian/285025" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#44 | </div>
+        <div class="text">چه پاسخ‌ دادن به ای‌میل‌ها باشد، چه شرکت در جلسات اداری به هر حال بیشتر زمان کاری افراد در حالت نشسته و بر روی صندلی می‌گذرد.
+
+عادت به نشستن مداوم به سلامتی ما آسیب می‌زند. کارشناسان می‌گویند نشستن طولانی باعث افزایش وزن و احتمال بروز بیماری‌های قلبی و دیابت نوع ۲ می‌شود.
+
+اما روشن نیست که هر چند وقت یک بار بهتر است حرکت کنیم طوری که کارایی خود را در محل کار از دست ندهیم. بهترین تعادل چگونه برقرار می‌شود؟
+
+بنا بر پژوهش دانشگاه کلمبیا که این هفته در مجله پزشکی ورزشی بریتانیا منتشر شد، بهترین روش پنج دقیقه وقفه یا «میان‌وعده حرکتی» در هر ساعت است که عملی‌ترین روش برای بهبود تندرستی بدون از دست رفتن کارایی در کار است.
+GettyImages
+
+برای خواندن مطلب کامل، از لینک   به وب‌سایت بی‌بی‌سی مراجعه کنید.
+
+https://bbc.in/4eQmNKi
+@BBCPersian
+49.7K
+edited 01:16 PM</div>
+        <div class="media">
+<img src="media/285019_0.jpg" loading="lazy" alt="media"><img src="media/285019_0.jpg" loading="lazy" alt="media"><img src="media/285019_0.jpg" loading="lazy" alt="media"><img src="media/285019_0.jpg" loading="lazy" alt="media"><img src="media/285019_0.jpg" loading="lazy" alt="media"><img src="media/285019_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285019" target="_blank">مشاهده در تلگرام</a></div>
+
+    <div class="post">
+        <div class="date">#45 | </div>
+        <div class="text">‌
+مارکو روبیو، وزیر امور خارجه آمریکا، به متحدان آمریکا در خلیج فارس اطمینان داده است که تنگه هرمز همچنان بدون عوارض باقی خواهد ماند و افزود که واشنگتن خواهان توافق با ایران است، اما نه به هر قیمتی.
+
+آقای روبیو در نشست شورای همکاری خلیج فارس در بحرین هشدار داد که احتمال وضع عوارض از سوی ایران برای کشتی‌هایی که از تنگه هرمز عبور می‌کنند، به دیگر آبراه‌های جهان نیز گسترش خواهد یافت.
+
+وزیر خارجه آمریکا می‌گوید: «آبراه‌های بین‌المللی به هیچ کشور خاصی تعلق ندارند. این یک اصل بنیادین در جهان امروز است؛ اصلی که بدون آن، دنیا با هرج‌ومرج کامل مواجه خواهد شد.»
+
+آقای روبیو افزود: «اگر بپذیریم که می‌توان برای استفاده از یک آبراه بین‌المللی، صرفا به این دلیل که در نزدیکی قلمرو یک کشور قرار دارد، پول دریافت کرد، آن وقت این موضوع مانند یک بیماری واگیردار در سراسر جهان گسترش خواهد یافت.»
+
+Reuters
+
+https://bbc.in/4eQipuO
+@BBCPersian
+52.3K
+01:00 PM</div>
+        <div class="media">
+<img src="media/285018_0.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285018" target="_blank">مشاهده در تلگرام</a></div>
+</body></html>

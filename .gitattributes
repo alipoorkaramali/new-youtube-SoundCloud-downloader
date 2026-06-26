@@ -1,1 +1,2 @@
 Download/telegram_downloads/**/media/* filter=lfs diff=lfs merge=lfs -text
+Download/telegram_downloads/**/*.zip* filter=lfs diff=lfs merge=lfs -text
