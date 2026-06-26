@@ -29,6 +29,7 @@ class TelegramChannelScraper:
     def __init__(self, config: Config):
         self.config = config
         self.channel = config.channel.lstrip('@')
+        # 🌟 بازیابی نام نمایشی (اختیاری)
         self.channel_name = getattr(config, 'channel_name', '') or ''
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
@@ -117,38 +118,41 @@ class TelegramChannelScraper:
 
         await self._save_screenshot(page, "initial")
 
-        # پرش به آخرین (جدیدترین) پست‌ها
-        self.logger.info("⬇️ پرش به جدیدترین پست‌ها...")
-        try:
-            scroll_button_selectors = [
-                'button[title="Go to bottom"]',
-                'div[class*="scroll-to-bottom"]',
-                'div[class*="ScrollButton"]',
-                '[aria-label="Scroll to bottom"]',
-                'button:has(svg[class*="arrow-down"])',
-            ]
-            for sel in scroll_button_selectors:
+        # پرش به آخرین (جدیدترین) پست‌ها (بدون اخطارهای بیهوده)
+        self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+        clicked = False
+
+        scroll_button_selectors = [
+            'button[title="Go to bottom"]',
+            'div[class*="scroll-to-bottom"]',
+            'div[class*="ScrollButton"]',
+            '[aria-label="Scroll to bottom"]',
+            'button:has(svg[class*="arrow-down"])',
+        ]
+
+        for sel in scroll_button_selectors:
+            try:
                 btn = page.locator(sel).first
                 if await btn.count() > 0:
-                    await btn.click(timeout=3000)
+                    await btn.click(timeout=5000)
                     self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                    await human_sleep(4, 0.4)
+                    clicked = True
+                    await human_sleep(3.5, 0.4)
                     break
-            else:
-                self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد.")
-        except Exception as e:
-            self.logger.warning(f"   ⚠️ خطا در کلیک دکمه پرش: {e}")
+            except Exception:
+                continue
 
-        # 🌟 جمع‌آوری جدیدترین پست‌ها (با locator قوی‌تر)
+        if not clicked:
+            self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
+
+        # جمع‌آوری جدیدترین پست‌ها
         items = []
         seen_ids = set()
         scroll_attempts = 0
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
-                # 🔥 اصلاح بحرانی: await فراموش نشود
                 messages = await page.locator('div[data-message-id]').all()
-                # از پایین به بالا (جدیدترین اول) پیمایش می‌کنیم
                 for msg in reversed(messages):
                     try:
                         msg_id = await msg.get_attribute('data-message-id')
@@ -179,7 +183,6 @@ class TelegramChannelScraper:
             if len(items) >= self.limit:
                 break
 
-            # اسکرول محدود به بالا فقط در صورت نیاز
             old_height = await page.evaluate("document.documentElement.scrollHeight")
             await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
             await human_sleep(2.5, 0.5)
@@ -190,17 +193,14 @@ class TelegramChannelScraper:
             else:
                 scroll_attempts = 0
 
-        # برش نهایی به تعداد limit
         items = items[:self.limit]
         self.logger.info(f"📊 {len(items)} پست جدیدترین جمع‌آوری شد.")
 
-        # اسکرین‌شات فقط از پست‌های نهایی (limit تایی)
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
-        # 🌟 اسکرول به جدیدترین پست (اولین آیتم در لیست) برای آماده‌سازی دانلود
         if items:
-            first_id = items[0]['id']   # جدیدترین
+            first_id = items[0]['id']
             try:
                 await page.locator(f'[data-message-id="{first_id}"]').scroll_into_view_if_needed()
                 await human_sleep(1, 0.3)
@@ -211,6 +211,7 @@ class TelegramChannelScraper:
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
+        # ۱. پیدا کردن نوار جستجو
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -228,12 +229,17 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
-        await search_input.fill(self.channel)
+        # ۲. تایپ نام کاربری (username) برای جستجو
+        await search_input.fill(self.channel)                # همیشه username
+        self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
+        # 🌟 اسکرین‌شات از نوار جستجو پس از تایپ (قبل از Enter)
+        await self._take_screenshot(page, "search_input_filled")
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
         await human_sleep(6, 0.4)
 
+        # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
             channels_tab = page.get_by_role("tab", name="Channels").first
             if await channels_tab.count() > 0:
@@ -243,23 +249,26 @@ class TelegramChannelScraper:
         except Exception:
             pass
 
+        # ۴. انتظار هوشمند برای نتایج (با استفاده از نام نمایشی یا username)
+        #     اگر کاربر نام نمایشی وارد کرده باشد، همان را مبنا قرار می‌دهیم
+        search_term = self.channel_name if self.channel_name else self.channel
         found = False
         for _ in range(15):
             await human_sleep(2, 0.3)
             try:
-                text_exists = await page.evaluate(f'''(channel) => {{
+                text_exists = await page.evaluate(f'''(term) => {{
                     const bodyText = document.body.innerText || '';
-                    return bodyText.toLowerCase().includes(channel.toLowerCase());
-                }}''', self.channel)
+                    return bodyText.toLowerCase().includes(term.toLowerCase());
+                }}''', search_term)
                 if text_exists:
-                    self.logger.info(f"✅ نام کانال '{self.channel}' در صفحه یافت شد.")
+                    self.logger.info(f"✅ عبارت '{search_term}' در صفحه یافت شد.")
                     found = True
                     break
             except Exception:
                 continue
 
         if not found:
-            self.logger.error("❌ نتایج جستجو برای این کانال پیدا نشد (حتی پس از ۳۰ ثانیه).")
+            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۳۰ ثانیه).")
             await self._take_screenshot(page, "search_failed")
             return False
 
@@ -267,10 +276,12 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
 
-        return await self._click_search_result(page)
+        # ۵. کلیک روی اولین نتیجه (با استفاده از همان search_term)
+        return await self._click_search_result(page, search_term)
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
-    async def _click_search_result(self, page) -> bool:
+    async def _click_search_result(self, page, search_term: str) -> bool:
+        """کلیک هوشمند: ابتدا تلاش با سلکتورهای رایج، سپس کلیک روی متنی که نام کانال باشد."""
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
@@ -289,22 +300,24 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
 
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی نام کانال...")
+        # لایهٔ ۲: کلیک با JavaScript روی عبارت جستجو (search_term)
+        self.logger.info("🔄 تلاش کلیک با JavaScript روی عبارت جستجو...")
         try:
-            await page.evaluate(f'''(channel) => {{
+            await page.evaluate(f'''(term) => {{
                 const els = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"], div[class*="name"], span[class*="peer-title"]'));
-                const target = els.find(el => el.textContent.trim().toLowerCase() === channel.toLowerCase());
+                const target = els.find(el => el.textContent.trim().toLowerCase() === term.toLowerCase());
                 if (target) {{
                     target.closest('div[role="button"], div.chatlist-item, a')?.click();
                 }}
-            }}''', self.channel)
+            }}''', search_term)
             await human_sleep(5, 0.4)
             if await page.locator('div.message, div[data-message-id]').count() > 0:
-                self.logger.info("✅ با JavaScript (نام کانال) وارد شدیم.")
+                self.logger.info("✅ با JavaScript (عبارت جستجو) وارد شدیم.")
                 return True
         except Exception as e:
             self.logger.debug("JavaScript name click: %s", e)
 
+        # لایهٔ ۳: کلیک روی اولین آیتم
         self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
         try:
             await page.evaluate('''() => {
@@ -367,7 +380,6 @@ class TelegramChannelScraper:
 
     # ═══════════════════ دانلود رسانه‌ها (یکپارچه) ═══════════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
-        # 🌟 ترتیب natural: جدیدترین پست‌ها اول هستند
         post_ids = [str(item['id']) for item in items]
         media_map = {}
 
