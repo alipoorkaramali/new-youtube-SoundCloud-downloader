@@ -20,11 +20,8 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
-    برای پست‌های صوتی/ویس، هدف راست‌کلیک را دقیق‌تر روی المان صوتی تنظیم می‌کند.
-    در صورت شکست اولیه، صفحه را کمی به بالا اسکرول می‌کند (برای خارج شدن از زیر
-    پست‌های پین‌شده) و دوباره تلاش می‌کند.
-    اگر همچنان ناموفق بود، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
-    **برای آلبوم‌ها، فایل‌ها را تک‌تک با expect_download دریافت می‌کند** (بدون تکرار).
+    پس از کلیک، با یک listener دائمی منتظر می‌ماند تا همهٔ فایل‌ها (از جمله آلبوم‌ها)
+    دریافت شوند. سپس با ۱۵ ثانیه سکوت، کار را تمام می‌کند.
     """
 
     MIME_TO_EXT = {
@@ -136,10 +133,41 @@ class PlaywrightDownloader:
             visible_count = 1
         logger.info(f"   🖼️ تعداد مدیای visible (تقریبی): {visible_count}")
 
-        # لیست فایل‌های دانلودشده
+        # لیست فایل‌های دانلودشده و listener دائمی
         downloaded_files = []
+        # پرچم پایان دانلودها (با سکوت)
+        all_downloads_finished = False
 
-        # ──────────────── تلاش برای راست‌کلیک و منوی context (با اسکرول کمکی در صورت شکست) ────────────────
+        async def on_download(download: Download):
+            nonlocal all_downloads_finished
+            # تا زمانی که فایل جدید می‌آید، سکوت را صفر می‌کنیم
+            # این کار با ریست کردن یک تایمر در حلقهٔ اصلی انجام می‌شود
+            try:
+                suggested = download.suggested_filename
+                # اگر نام فایل تکراری بود، یک شمارنده به انتهای آن اضافه کن
+                base_name = suggested
+                filepath = self.media_dir / base_name
+                counter = 1
+                while filepath.exists():
+                    # شمارنده را قبل از پسوند اضافه کن
+                    stem = filepath.stem
+                    ext = filepath.suffix
+                    filepath = self.media_dir / f"{stem}_{counter}{ext}"
+                    counter += 1
+                await download.save_as(str(filepath))
+                size_mb = filepath.stat().st_size / 1024 / 1024 if filepath.exists() else 0
+                if size_mb > self.max_bytes / 1024 / 1024:
+                    logger.info(f"⏩ {filepath.name} رد شد (حجم {size_mb:.1f}MB)")
+                    filepath.unlink(missing_ok=True)
+                else:
+                    logger.info(f"✅ دانلود شد: {filepath.name} ({size_mb:.1f} MB)")
+                    downloaded_files.append(f"media/{filepath.name}")
+            except Exception as e:
+                logger.error(f"❌ خطا در ذخیرهٔ دانلود: {e}")
+
+        page.on("download", on_download)
+
+        # ──────────────── تلاش برای راست‌کلیک و منوی context (با اسکرول کمکی) ────────────────
         menu_success = False
         for scroll_attempt in range(3):
             if menu_success:
@@ -152,7 +180,6 @@ class PlaywrightDownloader:
             try:
                 menu_appeared = False
                 for right_attempt in range(2):
-                    # رسم ضربدر روی هدف و ذخیره اسکرین‌شات
                     box = await click_target.bounding_box()
                     if box:
                         x = box['x'] + box['width'] / 2
@@ -181,9 +208,9 @@ class PlaywrightDownloader:
                             logger.warning(f"   ⚠️ منوی context در تلاش {scroll_attempt+1} ظاهر نشد. اسکرین‌شات: {path.name}")
 
                 if not menu_appeared:
-                    continue  # برو به اسکرول بعدی
+                    continue
 
-                # ۲. یافتن گزینهٔ "Download"
+                # یافتن گزینهٔ "Download"
                 download_coords = await page.evaluate('''() => {
                     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                     let node;
@@ -222,42 +249,34 @@ class PlaywrightDownloader:
                         logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
                 if menu_success:
-                    # 🌟🌟🌟 دانلود تک‌تک فایل‌ها با expect_download (حل مشکل آلبوم) 🌟🌟🌟
-                    logger.info(f"   📥 شروع دریافت فایل‌ها با expect_download...")
-                    file_index = 0
-                    while True:
-                        try:
-                            # با timeout ۱۰ ثانیه منتظر دانلود بعدی می‌مانیم
-                            async with page.expect_download(timeout=10000) as download_info:
-                                # هیچ کلیکی لازم نیست – صرفاً منتظر رویداد هستیم
-                                pass
-                            download = await download_info.value
-                            # ذخیرهٔ فایل
-                            suggested = download.suggested_filename
-                            ext = suggested.rsplit('.', 1)[-1] if '.' in suggested else "bin"
-                            base_name = f"{post_id}_{file_index}.{ext}"
-                            filepath = self.media_dir / base_name
-                            # جلوگیری از بازنویسی
-                            counter = 1
-                            while filepath.exists():
-                                filepath = self.media_dir / f"{post_id}_{file_index}_{counter}.{ext}"
-                                counter += 1
-                            await download.save_as(str(filepath))
-                            size_mb = filepath.stat().st_size / 1024 / 1024 if filepath.exists() else 0
-                            if size_mb > self.max_bytes / 1024 / 1024:
-                                logger.info(f"⏩ {filepath.name} رد شد (حجم {size_mb:.1f}MB)")
-                                filepath.unlink(missing_ok=True)
-                            else:
-                                logger.info(f"✅ دانلود شد: {filepath.name} ({size_mb:.1f} MB)")
-                                downloaded_files.append(f"media/{filepath.name}")
-                                file_index += 1
-                        except TimeoutError:
-                            # دیگر فایلی برای دانلود وجود ندارد
-                            logger.info(f"   🏁 دریافت فایل‌ها به پایان رسید ({len(downloaded_files)} فایل)")
+                    # 🌟🌟🌟 انتظار تطبیقی: تا ۱۵ ثانیه سکوت صبر کن، listener هنوز فعال است
+                    logger.info(f"   📥 منتظر دریافت فایل‌ها (با listener دائمی)...")
+                    quiet_threshold = 15
+                    check_interval = 2
+                    last_count = 0
+                    quiet_elapsed = 0
+                    absolute_timeout = 600  # حداکثر ۱۰ دقیقه
+                    waited = 0
+
+                    while waited < absolute_timeout:
+                        await asyncio.sleep(check_interval)
+                        waited += check_interval
+                        current_count = len(downloaded_files)
+                        if current_count > last_count:
+                            last_count = current_count
+                            quiet_elapsed = 0
+                            logger.debug(f"   ⏳ {waited}s – {current_count} فایل دریافت شد (فعالیت جدید)")
+                        else:
+                            quiet_elapsed += check_interval
+                            logger.debug(f"   ⏳ {waited}s – {current_count} فایل، {quiet_elapsed}s سکوت")
+
+                        if quiet_elapsed >= quiet_threshold:
+                            logger.info(f"   🔇 {quiet_threshold} ثانیه بدون دانلود جدید – اتمام دانلودهای این پست")
+                            all_downloads_finished = True
                             break
-                        except Exception as e:
-                            logger.error(f"   ❌ خطا در دریافت فایل: {e}")
-                            break
+
+                    if waited >= absolute_timeout:
+                        logger.warning(f"   ⚠️ زمان کلی {absolute_timeout}s به پایان رسید – {len(downloaded_files)} فایل دریافت شد.")
 
             except Exception as e:
                 logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود (تلاش {scroll_attempt+1}): {e}")
@@ -267,6 +286,12 @@ class PlaywrightDownloader:
                     logger.info(f"   📸 اسکرین‌شات خطا: {path.name}")
                 except:
                     pass
+
+        # حذف listener دائمی (اگر هنوز فعال باشد)
+        try:
+            page.remove_listener("download", on_download)
+        except:
+            pass
 
         # بستن منو (اگر هنوز باز باشد)
         try:
@@ -301,7 +326,7 @@ class PlaywrightDownloader:
 
     async def _download_link(self, page: Page, link: str, post_id: str, idx: int,
                              media_map: Dict[str, List[str]]):
-        """کمکی برای دانلود یک لینک مستقیم و اضافه کردن به media_map"""
+        """کمکی برای دانلود یک لینک مستقیم"""
         for attempt in range(self.max_retries + 1):
             try:
                 resp = await page.request.get(link, headers={"Referer": "https://web.telegram.org/"})
