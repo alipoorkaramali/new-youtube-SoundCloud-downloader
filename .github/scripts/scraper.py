@@ -212,7 +212,7 @@ class TelegramChannelScraper:
 
         return items, context, page
 
-    # ═══════════════════ جستجو و ورود به کانال ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (چندمرحله‌ای) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
         # ۱. پیدا کردن نوار جستجو
         search_input = None
@@ -235,43 +235,60 @@ class TelegramChannelScraper:
         # ۲. تایپ نام کاربری (username) برای جستجو
         await search_input.fill(self.channel)                # همیشه username
         self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
-        # 🌟 اسکرین‌شات از نوار جستجو پس از تایپ (قبل از Enter)
         await self._take_screenshot(page, "search_input_filled")
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
-        # 🌟 افزایش صبر برای لود کامل نتایج (از ۶ به ۱۰ ثانیه)
-        await human_sleep(10, 0.5)
 
-        # ۳. کلیک روی تب Channels (اگر وجود دارد)
-        try:
-            channels_tab = page.get_by_role("tab", name="Channels").first
-            if await channels_tab.count() > 0:
-                await channels_tab.click()
-                await human_sleep(4, 0.4)
-                self.logger.info("📑 تب Channels انتخاب شد.")
-        except Exception:
-            pass
-
-        # ۴. انتظار هوشمند برای نتایج (با استفاده از نام نمایشی یا username)
+        # 🌟 ۳. انتظار چندمرحله‌ای برای ظاهر شدن نتایج (بدون تب Channels)
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
-        for _ in range(15):
-            await human_sleep(2, 0.3)
+
+        # مرحلهٔ ۱: ۱۰ ثانیه
+        self.logger.info("   🕐 مرحلهٔ اول انتظار (۱۰ ثانیه)...")
+        await human_sleep(10, 0.5)
+        if await self._check_text_on_page(page, search_term):
+            found = True
+            self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ اول یافت شد.")
+        
+        # مرحلهٔ ۲: ۱۵ ثانیه
+        if not found:
+            self.logger.info("   🕑 مرحلهٔ دوم انتظار (۱۵ ثانیه)...")
+            await human_sleep(15, 0.5)
+            if await self._check_text_on_page(page, search_term):
+                found = True
+                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ دوم یافت شد.")
+
+        # مرحلهٔ ۳: ۲۰ ثانیه
+        if not found:
+            self.logger.info("   🕒 مرحلهٔ سوم انتظار (۲۰ ثانیه)...")
+            await human_sleep(20, 0.5)
+            if await self._check_text_on_page(page, search_term):
+                found = True
+                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ سوم یافت شد.")
+
+        # اگر پس از ۳ مرحله (۴۵ ثانیه) هم پیدا نشد، کلیک روی تب Channels را امتحان کن
+        if not found:
+            self.logger.info("   📑 کلیک روی تب Channels (در صورت وجود)...")
             try:
-                text_exists = await page.evaluate(f'''(term) => {{
-                    const bodyText = document.body.innerText || '';
-                    return bodyText.toLowerCase().includes(term.toLowerCase());
-                }}''', search_term)
-                if text_exists:
-                    self.logger.info(f"✅ عبارت '{search_term}' در صفحه یافت شد.")
-                    found = True
-                    break
+                channels_tab = page.get_by_role("tab", name="Channels").first
+                if await channels_tab.count() > 0:
+                    await channels_tab.click()
+                    await human_sleep(4, 0.4)
+                    self.logger.info("   📑 تب Channels انتخاب شد.")
             except Exception:
-                continue
+                pass
+
+            # حالا دوباره با حلقهٔ ۱۵ مرحله‌ای (هر ۲ ثانیه) بررسی کن
+            for attempt in range(15):
+                await human_sleep(2, 0.3)
+                if await self._check_text_on_page(page, search_term):
+                    found = True
+                    self.logger.info(f"   ✅ عبارت '{search_term}' بعد از کلیک Channels یافت شد (تلاش {attempt+1}).")
+                    break
 
         if not found:
-            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۳۰ ثانیه).")
+            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۴۵+ ثانیه).")
             await self._take_screenshot(page, "search_failed")
             return False
 
@@ -281,6 +298,17 @@ class TelegramChannelScraper:
 
         # ۵. کلیک روی اولین نتیجه (با استفاده از همان search_term)
         return await self._click_search_result(page, search_term)
+
+    # ═══════════════════ متد کمکی: بررسی وجود عبارت در صفحه ═══════════════════
+    async def _check_text_on_page(self, page, term: str) -> bool:
+        """با JavaScript بررسی می‌کند که آیا عبارت term در innerText کل صفحه وجود دارد"""
+        try:
+            return await page.evaluate(f'''(t) => {{
+                const bodyText = document.body.innerText || '';
+                return bodyText.toLowerCase().includes(t.toLowerCase());
+            }}''', term)
+        except Exception:
+            return False
 
     # ═══════════════════ کلیک روی نتیجه (force + JS) ═══════════════════
     async def _click_search_result(self, page, search_term: str) -> bool:
