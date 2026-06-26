@@ -231,6 +231,9 @@ class TelegramChannelScraper:
 
         # ۲. تایپ نام کاربری (username) برای جستجو
         await search_input.fill(self.channel)                # همیشه username
+        self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
+        # 🌟 اسکرین‌شات از نوار جستجو پس از تایپ (قبل از Enter)
+        await self._take_screenshot(page, "search_input_filled")
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
