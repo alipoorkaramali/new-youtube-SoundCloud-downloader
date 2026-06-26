@@ -1,123 +1,89 @@
-2026-06-26 07:06:09,931 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-26 07:06:09,931 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=4)
-2026-06-26 07:06:21,973 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-26 07:06:22,066 [INFO] 🔍 در حال جستجوی: @bbcpersian
-2026-06-26 07:06:22,327 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_input_filled.png
-2026-06-26 07:06:23,449 [INFO] ⏳ منتظر نتایج...
-2026-06-26 07:06:31,195 [INFO] ✅ عبارت 'bbcpersian' در صفحه یافت شد.
-2026-06-26 07:06:31,195 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
-2026-06-26 07:06:31,336 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
-2026-06-26 07:06:39,308 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-06-26 07:06:39,504 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
-2026-06-26 07:06:39,547 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
-2026-06-26 07:06:43,657 [INFO] 📊 4 پست جدیدترین جمع‌آوری شد.
-2026-06-26 07:06:43,818 [INFO] 📸 گرفتن اسکرین‌شات از 4 پست...
-2026-06-26 07:06:46,920 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 4
-2026-06-26 07:06:46,949 [INFO] 📥 4 پست استخراج شد (جدیدترین‌ها).
-2026-06-26 07:06:46,950 [INFO] 📥 [1/4] پست 285078
-2026-06-26 07:06:46,951 [INFO] 📍 شروع دانلود پست 285078
-2026-06-26 07:06:49,204 [INFO]    📍 پست 285078 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 07:06:50,263 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 07:06:51,320 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285078.png
-2026-06-26 07:06:51,323 [INFO]    📸 اسکرین‌شات از گزینهٔ دانلود با ضربدر ذخیره شد
-2026-06-26 07:07:21,328 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
+2026-06-26 07:47:24,713 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-26 07:47:24,713 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=4)
+2026-06-26 07:47:32,043 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-26 07:47:34,042 [INFO] ⏳ منتظر نتایج...
+2026-06-26 07:47:42,266 [INFO] ✅ نام کانال 'bbcpersian' در صفحه یافت شد.
+2026-06-26 07:47:42,266 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-26 07:47:42,431 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
+2026-06-26 07:47:48,325 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-26 07:47:48,497 [INFO] ⬇️ پرش به جدیدترین پست‌ها...
+2026-06-26 07:47:51,503 [WARNING]    ⚠️ خطا در کلیک دکمه پرش: Locator.click: Timeout 3000ms exceeded.
 Call log:
-  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
-    - locator resolved to <div id="portals">…</div>
+  - waiting for locator("button[title=\"Go to bottom\"]").first
+    - locator resolved to <button type="button" title="Go to bottom" aria-label="Go to bottom" class="Button HtxjjRCC default secondary round">…</button>
   - attempting click action
     2 × waiting for element to be visible, enabled and stable
-      - element is not visible
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div id="message-285078" data-message-id="285078" class="Message message-list-item first-in-group allow-selection last-in-group last-in-list has-views was-edited is-album shown open">…</div> from <div class="with-bottom-snap Transition MessageList custom-scroll no-avatars no-composer with-default-bg scrolled">…</div> subtree intercepts pointer events
     - retrying click action
     - waiting 20ms
     2 × waiting for element to be visible, enabled and stable
-      - element is not visible
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div id="message-285078" data-message-id="285078" class="Message message-list-item first-in-group allow-selection last-in-group last-in-list has-views was-edited is-album shown open">…</div> from <div class="with-bottom-snap Transition MessageList custom-scroll no-avatars no-composer with-default-bg scrolled">…</div> subtree intercepts pointer events
     - retrying click action
       - waiting 100ms
-    56 × waiting for element to be visible, enabled and stable
-       - element is not visible
-     - retrying click action
-       - waiting 500ms
+    5 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div id="message-285078" data-message-id="285078" class="Message message-list-item first-in-group allow-selection last-in-group last-in-list has-views was-edited is-album shown open">…</div> from <div class="with-bottom-snap Transition MessageList custom-scroll no-avatars no-composer with-default-bg scrolled">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
 
-2026-06-26 07:07:21,532 [INFO]    📸 اسکرین‌شات خطا: error_285078.png
-2026-06-26 07:07:22,708 [INFO] 📥 [2/4] پست 285077
-2026-06-26 07:07:22,709 [INFO] 📍 شروع دانلود پست 285077
-2026-06-26 07:07:25,365 [INFO]    📍 پست 285077 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 07:07:26,382 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 07:07:27,336 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285077.png
-2026-06-26 07:07:27,339 [INFO]    📸 اسکرین‌شات از گزینهٔ دانلود با ضربدر ذخیره شد
-2026-06-26 07:07:57,343 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
-Call log:
-  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
-    - locator resolved to <div id="portals">…</div>
-  - attempting click action
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-      - waiting 100ms
-    56 × waiting for element to be visible, enabled and stable
-       - element is not visible
-     - retrying click action
-       - waiting 500ms
-
-2026-06-26 07:07:57,540 [INFO]    📸 اسکرین‌شات خطا: error_285077.png
-2026-06-26 07:07:59,926 [INFO] 📥 [3/4] پست 285076
-2026-06-26 07:07:59,926 [INFO] 📍 شروع دانلود پست 285076
-2026-06-26 07:08:02,468 [INFO]    📍 پست 285076 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 07:08:03,827 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 07:08:05,172 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285076.png
-2026-06-26 07:08:05,175 [INFO]    📸 اسکرین‌شات از گزینهٔ دانلود با ضربدر ذخیره شد
-2026-06-26 07:08:35,178 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
-Call log:
-  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
-    - locator resolved to <div id="portals">…</div>
-  - attempting click action
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-      - waiting 100ms
-    56 × waiting for element to be visible, enabled and stable
-       - element is not visible
-     - retrying click action
-       - waiting 500ms
-
-2026-06-26 07:08:35,379 [INFO]    📸 اسکرین‌شات خطا: error_285076.png
-2026-06-26 07:08:37,293 [INFO] 📥 [4/4] پست 285075
-2026-06-26 07:08:37,294 [INFO] 📍 شروع دانلود پست 285075
-2026-06-26 07:08:40,576 [INFO]    📍 پست 285075 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 07:08:42,613 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 353)
-2026-06-26 07:08:43,525 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285075.png
-2026-06-26 07:08:43,528 [INFO]    📸 اسکرین‌شات از گزینهٔ دانلود با ضربدر ذخیره شد
-2026-06-26 07:09:13,531 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
-Call log:
-  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
-    - locator resolved to <div id="portals">…</div>
-  - attempting click action
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-      - waiting 100ms
-    56 × waiting for element to be visible, enabled and stable
-       - element is not visible
-     - retrying click action
-       - waiting 500ms
-
-2026-06-26 07:09:13,695 [INFO]    📸 اسکرین‌شات خطا: error_285075.png
-2026-06-26 07:09:13,999 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
-2026-06-26 07:09:13,999 [INFO] 📊 media_map برای 0 پست پر شد.
-2026-06-26 07:09:14,000 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
-2026-06-26 07:09:14,000 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
-2026-06-26 07:09:14,011 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
-2026-06-26 07:09:14,311 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
-2026-06-26 07:09:14,823 [INFO] ✅ پایان موفقیت‌آمیز.
+2026-06-26 07:47:51,559 [INFO] 📊 4 پست جدیدترین جمع‌آوری شد.
+2026-06-26 07:47:51,726 [INFO] 📸 گرفتن اسکرین‌شات از 4 پست...
+2026-06-26 07:47:54,345 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 4
+2026-06-26 07:47:54,386 [INFO] 📥 4 پست استخراج شد (جدیدترین‌ها).
+2026-06-26 07:47:54,386 [INFO] 📥 [1/4] پست 285078
+2026-06-26 07:47:54,387 [INFO] 📍 شروع دانلود پست 285078
+2026-06-26 07:47:57,970 [INFO]    📍 پست 285078 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 07:47:59,969 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 07:48:01,039 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285078.png
+2026-06-26 07:48:01,042 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد
+2026-06-26 07:48:01,050 [INFO]    ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)
+2026-06-26 07:48:02,357 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:02,358 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:02,358 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:02,358 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:02,359 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:02,359 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:02,359 [INFO] ✅ دانلود شد: 285078_0.jpg (0.2 MB)
+2026-06-26 07:48:17,551 [INFO] 📦 پست 285078: 7 رسانه دانلود شد.
+2026-06-26 07:48:19,661 [INFO] 📥 [2/4] پست 285077
+2026-06-26 07:48:19,661 [INFO] 📍 شروع دانلود پست 285077
+2026-06-26 07:48:22,762 [INFO]    📍 پست 285077 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 07:48:23,926 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 07:48:24,838 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285077.png
+2026-06-26 07:48:24,844 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد
+2026-06-26 07:48:24,850 [INFO]    ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)
+2026-06-26 07:48:26,091 [INFO] ✅ دانلود شد: 285077_0.jpg (0.0 MB)
+2026-06-26 07:48:38,394 [INFO] 📦 پست 285077: 1 رسانه دانلود شد.
+2026-06-26 07:48:39,575 [INFO] 📥 [3/4] پست 285076
+2026-06-26 07:48:39,575 [INFO] 📍 شروع دانلود پست 285076
+2026-06-26 07:48:42,130 [INFO]    📍 پست 285076 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 07:48:43,511 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 07:48:44,781 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285076.png
+2026-06-26 07:48:44,785 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد
+2026-06-26 07:48:44,794 [INFO]    ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)
+2026-06-26 07:48:49,095 [INFO] ✅ دانلود شد: 285076_0.mov (19.4 MB)
+2026-06-26 07:49:00,290 [INFO] 📦 پست 285076: 1 رسانه دانلود شد.
+2026-06-26 07:49:01,544 [INFO] 📥 [4/4] پست 285075
+2026-06-26 07:49:01,544 [INFO] 📍 شروع دانلود پست 285075
+2026-06-26 07:49:04,324 [INFO]    📍 پست 285075 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 07:49:06,106 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 352)
+2026-06-26 07:49:06,985 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد: debug_click_download_option_285075.png
+2026-06-26 07:49:06,994 [INFO]    📸 اسکرین‌شات با ضربدر ذخیره شد
+2026-06-26 07:49:07,000 [INFO]    ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)
+2026-06-26 07:49:08,233 [INFO] ✅ دانلود شد: 285075_0.jpg (0.2 MB)
+2026-06-26 07:49:23,575 [INFO] 📦 پست 285075: 1 رسانه دانلود شد.
+2026-06-26 07:49:23,576 [INFO] 🖼️ 10 فایل رسانه دانلود شد.
+2026-06-26 07:49:23,576 [INFO] 📊 media_map برای 4 پست پر شد.
+2026-06-26 07:49:23,576 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-26 07:49:23,577 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-26 07:49:23,599 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
+2026-06-26 07:49:24,319 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
+2026-06-26 07:49:24,548 [INFO] ✅ پایان موفقیت‌آمیز.
