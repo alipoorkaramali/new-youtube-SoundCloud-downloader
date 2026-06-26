@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import random
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -21,9 +22,9 @@ class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
     برای پست‌های صوتی/ویس، هدف راست‌کلیک را دقیق‌تر روی المان صوتی تنظیم می‌کند.
-    در صورت شکست اولیه، صفحه را کمی به بالا اسکرول می‌کند (برای خارج شدن از زیر
-    پست‌های پین‌شده) و دوباره تلاش می‌کند.
-    اگر همچنان ناموفق بود، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
+    در صورت شکست در یافتن پست، با الگوی هوشمند اسکرول (بالا/پایین) تلاش می‌کند
+    تا محتوای جدید بارگذاری شود.
+    اگر منوی context ناموفق بود، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
     """
 
     MIME_TO_EXT = {
@@ -72,37 +73,63 @@ class PlaywrightDownloader:
                             media_map: Dict[str, List[str]]) -> None:
         logger.info(f"📍 شروع دانلود پست {post_id}")
 
+        # ──────────────── نمایش پست (حل ریشه‌ای + کاهش نویز) ────────────────
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # ──────────────── نمایش پست ────────────────
         success = False
-        for attempt in range(5):
-            try:
-                logger.debug(f"   🔄 تلاش {attempt+1} برای نمایان کردن پست")
-                await message_locator.scroll_into_view_if_needed(timeout=20000)
-                if attempt == 0:
-                    await human_sleep(2.0, 0.4)
-                else:
-                    await human_sleep(1.0, 0.3)
-                await message_locator.wait_for(state="visible", timeout=20000)
-                await human_sleep(0.8, 0.3)
+        max_attempts = 8
+        logger.info(f"   🔍 جستجوی پست {post_id} ...")
 
-                if await message_locator.count() > 0:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.debug(f"   🔄 تلاش {attempt}/{max_attempts} برای پیدا کردن پست {post_id}")
+
+                await page.wait_for_selector(f'[data-message-id="{post_id}"]',
+                                             state='attached', timeout=10000)
+
+                await message_locator.scroll_into_view_if_needed(timeout=15000)
+                await human_sleep(1.0 if attempt == 1 else 0.7, 0.3)
+
+                is_visible = await message_locator.is_visible(timeout=8000)
+                count = await message_locator.count()
+
+                if count > 0 and is_visible:
                     success = True
-                    logger.debug(f"   ✅ پست بعد از {attempt+1} تلاش نمایان شد")
+                    logger.info(f"   ✅ پست {post_id} پیدا و نمایان شد (تلاش {attempt})")
                     break
-            except Exception:
-                if attempt < 4:
-                    logger.debug(f"   🔄 تلاش ناموفق — اسکرول کمکی و صبر دوباره")
-                    await page.evaluate("window.scrollBy(0, -1200)")
-                    await human_sleep(2.5, 0.5)
-                else:
-                    path = self.debug_dir / f"post_not_found_{post_id}.png"
-                    await page.screenshot(path=path)
-                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد. اسکرین‌شات: {path.name}")
-                    return
+
+                if attempt < max_attempts:
+                    if attempt <= 3:
+                        await page.evaluate("window.scrollTo(0, 0)")
+                    elif attempt <= 5:
+                        await page.evaluate(f"window.scrollBy(0, {800 * attempt})")
+                    else:
+                        await page.evaluate(f"window.scrollBy(0, -{1200 * (attempt - 5)})")
+                    await human_sleep(2.2, 0.5)
+
+            except Exception as e:
+                logger.debug(f"   🔄 تلاش {attempt} ناموفق: {type(e).__name__}")
 
         if not success:
+            logger.warning(f"⚠️ پست {post_id} بعد از {max_attempts} تلاش پیدا نشد.")
+
+            try:
+                element_exists = await page.locator(f'[data-message-id="{post_id}"]').count() > 0
+                if element_exists:
+                    logger.info(f"   ℹ️ المان وجود دارد ولی نمایان نشد (احتمالاً حذف شده)")
+                else:
+                    logger.info(f"   ℹ️ المان در DOM وجود ندارد (خیلی قدیمی یا نامعتبر)")
+            except:
+                pass
+
+            # فقط یک اسکرین‌شات نهایی
+            try:
+                path = self.debug_dir / f"post_not_found_{post_id}.png"
+                await page.screenshot(path=path)
+                logger.debug(f"   📸 آخرین وضعیت: {path.name}")
+            except:
+                pass
+
             return
 
         logger.info(f"   📍 پست {post_id} آماده شد.")
@@ -120,42 +147,38 @@ class PlaywrightDownloader:
             click_target = message_locator
             logger.info("   🎯 هدف: کل حباب پیام")
 
-        # شمارش مدیای visible (فقط برای اطلاع)
-        media_elements = message_locator.locator(
-            'div.media-photo, div.media-video, div.document, a.media-photo, '
-            'video, img[src], div[class*="media"], audio'
-        )
-        visible_count = 0
+        # شمارش تقریبی مدیا
+        visible_count = 1
         try:
+            media_elements = message_locator.locator(
+                'div.media-photo, div.media-video, img[src], video, div[class*="media"]'
+            )
             all_media = await media_elements.count()
-            for i in range(all_media):
-                if await media_elements.nth(i).is_visible(timeout=3000):
-                    visible_count += 1
+            visible_count = sum(1 for i in range(all_media)
+                                if await media_elements.nth(i).is_visible(timeout=2000))
         except Exception:
-            visible_count = 1
+            pass
+
         logger.info(f"   🖼️ تعداد تقریبی مدیا: {visible_count} | شروع دانلود...")
 
         downloaded_files = []
         file_index = 0
-        seen_suggested = set()          # ← جلوگیری از دانلود تکراری
+        seen_suggested = set()
 
         async def on_download(download: Download):
-            nonlocal file_index, seen_suggested   # ← هر دو را معرفی کن
+            nonlocal file_index, seen_suggested
             try:
-                suggested = download.suggested_filename or f"unknown_{file_index}.bin"
+                suggested = download.suggested_filename or f"unknown_{int(time.time())}_{file_index}.bin"
 
-                # رد رویدادهای تکراری (مخصوصاً برای آلبوم)
                 if suggested in seen_suggested:
                     logger.debug(f"   ⏭ رد رویداد تکراری: {suggested}")
                     return
                 seen_suggested.add(suggested)
 
                 ext = suggested.rsplit('.', 1)[-1].lower() if '.' in suggested else "bin"
-                # استفاده از نام پیشنهادی اصلی (بدون شمارنده دستی)
                 base_name = f"{post_id}_{suggested}"
                 filepath = self.media_dir / base_name
 
-                # جلوگیری از overwrite
                 counter = 1
                 original = filepath
                 while filepath.exists():
@@ -206,7 +229,8 @@ class PlaywrightDownloader:
 
                     menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
                     try:
-                        await page.wait_for_selector(menu_selector, state="attached", timeout=5000 if right_attempt == 0 else 7000)
+                        await page.wait_for_selector(menu_selector, state="attached",
+                                                     timeout=5000 if right_attempt == 0 else 7000)
                         menu_appeared = True
                         await human_sleep(0.8, 0.3)
                         break
@@ -246,13 +270,14 @@ class PlaywrightDownloader:
                 }''')
 
                 if download_coords:
-                    await self._draw_debug_cross(page, download_coords['x'], download_coords['y'], f"download_option_{post_id}_{scroll_attempt}")
+                    await self._draw_debug_cross(page, download_coords['x'], download_coords['y'],
+                                                 f"download_option_{post_id}_{scroll_attempt}")
                     logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد")
                     await page.mouse.click(download_coords['x'], download_coords['y'])
                     logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد (مختصات)")
                     menu_success = True
                 else:
-                    download_option = page.get_by_text("Download", exact=False).first
+                    download_option = page.locator('[role="menuitem"]:has-text("Download")').first
                     if await download_option.count() > 0:
                         await download_option.click()
                         logger.info(f"   ✅ کلیک روی گزینهٔ دانلود (fallback)")
@@ -261,11 +286,9 @@ class PlaywrightDownloader:
                         logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
                 if menu_success:
-                    # ← صبر اولیه پس از کلیک دانلود
-                    await human_sleep(2.5 if visible_count > 4 else 1.2)
+                    await human_sleep(2.5 if visible_count > 4 else 1.5)
 
-                    # ← آستانه سکوت پویا برای آلبوم‌ها
-                    quiet_threshold = 20 + (visible_count * 3)
+                    quiet_threshold = 20 + (visible_count * 4)
                     logger.info(f"   ⏳ آستانه سکوت برای این پست: {quiet_threshold} ثانیه")
 
                     absolute_timeout = 600
