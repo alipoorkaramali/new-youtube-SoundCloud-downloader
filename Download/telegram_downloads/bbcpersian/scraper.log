@@ -1,71 +1,136 @@
-2026-06-26 05:26:32,078 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-26 05:26:32,078 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
-2026-06-26 05:26:50,278 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-26 05:26:51,919 [INFO] ⏳ منتظر نتایج...
-2026-06-26 05:27:00,018 [INFO] ✅ عبارت 'bbcpersian' در صفحه یافت شد.
-2026-06-26 05:27:00,018 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
-2026-06-26 05:27:00,194 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
-2026-06-26 05:27:05,297 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-06-26 05:27:05,455 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
-2026-06-26 05:27:05,512 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
-2026-06-26 05:27:34,698 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
-2026-06-26 05:27:34,880 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
-2026-06-26 05:27:38,606 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
-2026-06-26 05:27:38,668 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
-2026-06-26 05:27:38,668 [INFO] 📥 [1/5] پست 285066
-2026-06-26 05:27:38,668 [INFO] 📍 شروع دانلود پست 285066
-2026-06-26 05:27:42,090 [INFO]    📍 پست 285066 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 05:27:44,188 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 05:27:49,190 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+2026-06-26 06:08:28,919 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-26 06:08:28,919 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=5)
+2026-06-26 06:08:38,220 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-26 06:08:39,847 [INFO] ⏳ منتظر نتایج...
+2026-06-26 06:08:44,978 [INFO] ✅ نام کانال 'bbcpersian' در صفحه یافت شد.
+2026-06-26 06:08:44,978 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-26 06:08:45,134 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
+2026-06-26 06:08:53,588 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-26 06:08:53,814 [INFO] ⬇️ پرش به جدیدترین پست‌ها...
+2026-06-26 06:08:53,864 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
+2026-06-26 06:08:59,448 [INFO] 📊 5 پست جدیدترین جمع‌آوری شد.
+2026-06-26 06:08:59,621 [INFO] 📸 گرفتن اسکرین‌شات از 5 پست...
+2026-06-26 06:09:03,356 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 5
+2026-06-26 06:09:03,385 [INFO] 📥 5 پست استخراج شد (جدیدترین‌ها).
+2026-06-26 06:09:03,386 [INFO] 📥 [1/5] پست 285067
+2026-06-26 06:09:03,386 [INFO] 📍 شروع دانلود پست 285067
+2026-06-26 06:09:06,156 [INFO]    📍 پست 285067 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:09:07,747 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 06:09:38,802 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
 Call log:
-  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
-    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    56 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
 
-2026-06-26 05:27:49,372 [INFO]    📸 اسکرین‌شات خطا: error_285066.png
-2026-06-26 05:27:50,695 [INFO] 📥 [2/5] پست 285057
-2026-06-26 05:27:50,695 [INFO] 📍 شروع دانلود پست 285057
-2026-06-26 05:27:53,812 [INFO]    📍 پست 285057 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 05:27:55,055 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 05:28:00,056 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+2026-06-26 06:09:39,024 [INFO]    📸 اسکرین‌شات خطا: error_285067.png
+2026-06-26 06:09:40,559 [INFO] 📥 [2/5] پست 285066
+2026-06-26 06:09:40,559 [INFO] 📍 شروع دانلود پست 285066
+2026-06-26 06:09:43,177 [INFO]    📍 پست 285066 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:09:44,233 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 06:10:14,876 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
 Call log:
-  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
-    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    56 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
 
-2026-06-26 05:28:00,250 [INFO]    📸 اسکرین‌شات خطا: error_285057.png
-2026-06-26 05:28:01,401 [INFO] 📥 [3/5] پست 285055
-2026-06-26 05:28:01,402 [INFO] 📍 شروع دانلود پست 285055
-2026-06-26 05:28:04,510 [INFO]    📍 پست 285055 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 05:28:05,980 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 05:28:10,981 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+2026-06-26 06:10:15,065 [INFO]    📸 اسکرین‌شات خطا: error_285066.png
+2026-06-26 06:10:16,632 [INFO] 📥 [3/5] پست 285057
+2026-06-26 06:10:16,633 [INFO] 📍 شروع دانلود پست 285057
+2026-06-26 06:10:20,189 [INFO]    📍 پست 285057 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:10:21,557 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 06:10:52,278 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
 Call log:
-  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
-    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    54 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
 
-2026-06-26 05:28:11,159 [INFO]    📸 اسکرین‌شات خطا: error_285055.png
-2026-06-26 05:28:13,207 [INFO] 📥 [4/5] پست 285054
-2026-06-26 05:28:13,208 [INFO] 📍 شروع دانلود پست 285054
-2026-06-26 05:28:16,014 [INFO]    📍 پست 285054 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 05:28:17,300 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 05:28:22,301 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+2026-06-26 06:10:52,504 [INFO]    📸 اسکرین‌شات خطا: error_285057.png
+2026-06-26 06:10:54,820 [INFO] 📥 [4/5] پست 285055
+2026-06-26 06:10:54,820 [INFO] 📍 شروع دانلود پست 285055
+2026-06-26 06:10:57,312 [INFO]    📍 پست 285055 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:10:59,023 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 06:11:29,724 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
 Call log:
-  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
-    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    54 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
 
-2026-06-26 05:28:22,479 [INFO]    📸 اسکرین‌شات خطا: error_285054.png
-2026-06-26 05:28:24,495 [INFO] 📥 [5/5] پست 285053
-2026-06-26 05:28:24,495 [INFO] 📍 شروع دانلود پست 285053
-2026-06-26 05:28:26,794 [INFO]    📍 پست 285053 آماده شد. راست‌کلیک و دانلود...
-2026-06-26 05:28:28,004 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
-2026-06-26 05:28:33,004 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Page.wait_for_selector: Timeout 5000ms exceeded.
+2026-06-26 06:11:29,927 [INFO]    📸 اسکرین‌شات خطا: error_285055.png
+2026-06-26 06:11:31,269 [INFO] 📥 [5/5] پست 285054
+2026-06-26 06:11:31,269 [INFO] 📍 شروع دانلود پست 285054
+2026-06-26 06:11:34,583 [INFO]    📍 پست 285054 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:11:35,536 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 06:12:06,252 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
 Call log:
-  - waiting for locator("[role=\"menu\"], [role=\"listbox\"], div[class*=\"context-menu\"], div[class*=\"ContextMenu\"], div[class*=\"popup\"]") to be visible
-    14 × locator resolved to 3 elements. Proceeding with the first one: <div class="Menu compact in-portal MessageContextMenu fluid">…</div>
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    54 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
 
-2026-06-26 05:28:33,213 [INFO]    📸 اسکرین‌شات خطا: error_285053.png
-2026-06-26 05:28:33,510 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
-2026-06-26 05:28:33,511 [INFO] 📊 media_map برای 0 پست پر شد.
-2026-06-26 05:28:33,511 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
-2026-06-26 05:28:33,512 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
-2026-06-26 05:28:33,537 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
-2026-06-26 05:28:33,797 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
-2026-06-26 05:28:34,418 [INFO] ✅ پایان موفقیت‌آمیز.
+2026-06-26 06:12:06,460 [INFO]    📸 اسکرین‌شات خطا: error_285054.png
+2026-06-26 06:12:06,807 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
+2026-06-26 06:12:06,807 [INFO] 📊 media_map برای 0 پست پر شد.
+2026-06-26 06:12:06,807 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-26 06:12:06,807 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-26 06:12:06,819 [INFO] 🌐 HTML: Download/telegram_downloads/bbcpersian/posts.html
+2026-06-26 06:12:07,115 [INFO] 📦 ZIP: Download/telegram_downloads/bbcpersian/bbcpersian_archive.zip
+2026-06-26 06:12:07,684 [INFO] ✅ پایان موفقیت‌آمیز.
