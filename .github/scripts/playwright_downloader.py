@@ -22,9 +22,8 @@ class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
     برای پست‌های صوتی/ویس، هدف راست‌کلیک را دقیق‌تر روی المان صوتی تنظیم می‌کند.
-    در صورت شکست در یافتن پست، با الگوی هوشمند اسکرول (بالا/پایین) تلاش می‌کند
-    تا محتوای جدید بارگذاری شود.
-    اگر منوی context ناموفق بود، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
+    اسکرول‌ها به‌گونه‌ای تنظیم شده‌اند که از چت خارج نشوند (حل مشکل پست‌های نامرئی).
+    در صورت شکست منوی context، لینک مستقیم را از DOM استخراج و دانلود می‌کند.
     """
 
     MIME_TO_EXT = {
@@ -55,6 +54,10 @@ class PlaywrightDownloader:
             logger.info("هیچ پستی برای دانلود وجود ندارد.")
             return
 
+        # ابتدا صفحه را به بالاترین نقطه ببر تا تمام پست‌های کانال بارگذاری شوند
+        await page.evaluate("window.scrollTo(0, 0)")
+        await human_sleep(3.0, 0.5)
+
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
@@ -73,24 +76,26 @@ class PlaywrightDownloader:
                             media_map: Dict[str, List[str]]) -> None:
         logger.info(f"📍 شروع دانلود پست {post_id}")
 
-        # ──────────────── نمایش پست (حل ریشه‌ای + کاهش نویز) ────────────────
+        # ──────────────── نمایش پست (اسکرول هوشمند بدون خروج از کانال) ────────────────
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
         success = False
-        max_attempts = 8
+        max_attempts = 7
         logger.info(f"   🔍 جستجوی پست {post_id} ...")
 
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.debug(f"   🔄 تلاش {attempt}/{max_attempts} برای پیدا کردن پست {post_id}")
 
+                # چک وجود المان در DOM
                 await page.wait_for_selector(f'[data-message-id="{post_id}"]',
                                              state='attached', timeout=10000)
 
+                # روش اصلی: scroll_into_view_if_needed – ایمن‌ترین و دقیق‌ترین
                 await message_locator.scroll_into_view_if_needed(timeout=15000)
-                await human_sleep(1.0 if attempt == 1 else 0.7, 0.3)
+                await human_sleep(1.0 if attempt == 1 else 0.8, 0.3)
 
-                is_visible = await message_locator.is_visible(timeout=8000)
+                is_visible = await message_locator.is_visible(timeout=10000)
                 count = await message_locator.count()
 
                 if count > 0 and is_visible:
@@ -98,14 +103,19 @@ class PlaywrightDownloader:
                     logger.info(f"   ✅ پست {post_id} پیدا و نمایان شد (تلاش {attempt})")
                     break
 
+                # اسکرول کمکی فقط در صورت نیاز (مقادیر کم، بدون خروج از کانال)
                 if attempt < max_attempts:
-                    if attempt <= 3:
-                        await page.evaluate("window.scrollTo(0, 0)")
-                    elif attempt <= 5:
-                        await page.evaluate(f"window.scrollBy(0, {800 * attempt})")
+                    if attempt <= 2:
+                        # کمی بالا برای رد شدن از پست‌های پین‌شده
+                        await page.evaluate("window.scrollBy(0, -800)")
+                    elif attempt <= 4:
+                        # کمی پایین برای بارگذاری محتوای جدید
+                        await page.evaluate("window.scrollBy(0, 1200)")
                     else:
-                        await page.evaluate(f"window.scrollBy(0, -{1200 * (attempt - 5)})")
-                    await human_sleep(2.2, 0.5)
+                        # برگشت مختصر به وسط برای تازه‌سازی
+                        await page.evaluate("window.scrollBy(0, -600)")
+
+                    await human_sleep(2.0, 0.5)
 
             except Exception as e:
                 logger.debug(f"   🔄 تلاش {attempt} ناموفق: {type(e).__name__}")
@@ -116,13 +126,12 @@ class PlaywrightDownloader:
             try:
                 element_exists = await page.locator(f'[data-message-id="{post_id}"]').count() > 0
                 if element_exists:
-                    logger.info(f"   ℹ️ المان وجود دارد ولی نمایان نشد (احتمالاً حذف شده)")
+                    logger.info(f"   ℹ️ المان وجود دارد ولی نمایان نشد (احتمال حذف شده)")
                 else:
-                    logger.info(f"   ℹ️ المان در DOM وجود ندارد (خیلی قدیمی یا نامعتبر)")
+                    logger.info(f"   ℹ️ المان در DOM وجود ندارد (خیلی قدیمی)")
             except:
                 pass
 
-            # فقط یک اسکرین‌شات نهایی
             try:
                 path = self.debug_dir / f"post_not_found_{post_id}.png"
                 await page.screenshot(path=path)
@@ -423,15 +432,4 @@ class PlaywrightDownloader:
                         <line x1="2" y1="2" x2="22" y2="22" stroke="red" stroke-width="3"/>
                         <line x1="22" y1="2" x2="2" y2="22" stroke="red" stroke-width="3"/>
                     </svg>`;
-                container.appendChild(cross);
-            }}
-        """)
-        path = self.debug_dir / f"debug_click_{name}.png"
-        await page.screenshot(path=path)
-        logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
-        await page.evaluate("""
-            () => {
-                const container = document.getElementById('debug-cross-container');
-                if (container) container.remove();
-            }
-        """)
+                                
