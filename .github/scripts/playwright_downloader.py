@@ -55,7 +55,6 @@ class PlaywrightDownloader:
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
-                # timeout کلی هر پست به ۶۰۰ ثانیه (۱۰ دقیقه) افزایش یافت
                 await asyncio.wait_for(
                     self._process_post(page, post_id, media_map),
                     timeout=600
@@ -78,11 +77,15 @@ class PlaywrightDownloader:
         for attempt in range(5):
             try:
                 logger.debug(f"   🔄 تلاش {attempt+1} برای نمایان کردن پست")
+                # ابتدا یک بار ساده اسکرول، سپس با margine اجباری
                 await message_locator.scroll_into_view_if_needed(timeout=20000)
-                wait = 1.8 if attempt == 0 else 1.2
-                await human_sleep(wait, 0.4)
+                if attempt == 0:
+                    # دفعه اول کمی بیشتر صبر
+                    await human_sleep(2.0, 0.4)
+                else:
+                    await human_sleep(1.0, 0.3)
                 await message_locator.wait_for(state="visible", timeout=20000)
-                await human_sleep(1.0, 0.3)
+                await human_sleep(0.8, 0.3)
 
                 if await message_locator.count() > 0:
                     success = True
@@ -94,7 +97,10 @@ class PlaywrightDownloader:
                     await page.evaluate("window.scrollBy(0, -1200)")
                     await human_sleep(2.5, 0.5)
                 else:
-                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد.")
+                    # 🌟 عکس از وضعیت صفحه وقتی پست پیدا نشد
+                    path = self.debug_dir / f"post_not_found_{post_id}.png"
+                    await page.screenshot(path=path)
+                    logger.warning(f"⚠️ پست {post_id} بعد از ۵ تلاش پیدا نشد. اسکرین‌شات: {path.name}")
                     return
 
         if not success:
@@ -103,7 +109,7 @@ class PlaywrightDownloader:
         logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک و دانلود...")
         await human_sleep(1.5, 0.4)
 
-        # ─────────── شمارش مدیای visible (فقط برای اطلاع) ───────────
+        # شمارش مدیای visible (فقط برای اطلاع)
         media_elements = message_locator.locator(
             'div.media-photo, div.media-video, div.document, a.media-photo, '
             'video, img[src], div[class*="media"]'
@@ -118,7 +124,7 @@ class PlaywrightDownloader:
             visible_count = 1
         logger.info(f"   🖼️ تعداد مدیای visible (تقریبی): {visible_count}")
 
-        # ─────────── لیست فایل‌های دانلودشده و listener ───────────
+        # لیست فایل‌های دانلودشده و listener
         downloaded_files = []
         file_index = 0
 
@@ -148,27 +154,42 @@ class PlaywrightDownloader:
         page.on("download", on_download)
 
         try:
-            # ۱. راست‌کلیک روی پیام
-            box = await message_locator.bounding_box()
-            if box:
-                x = box['x'] + box['width'] / 2
-                y = box['y'] + box['height'] / 2
-                await page.mouse.click(x, y, button='right')
-                logger.info(f"   🖱️ راست‌کلیک روی پیام انجام شد در ({x:.0f}, {y:.0f})")
-            else:
-                await message_locator.click(button='right')
-                logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
+            # ۱. راست‌کلیک (با دو تلاش در صورت نیاز)
+            menu_appeared = False
+            for right_attempt in range(2):
+                # کلیک راست روی مرکز حباب
+                box = await message_locator.bounding_box()
+                if box:
+                    x = box['x'] + box['width'] / 2
+                    y = box['y'] + box['height'] / 2
+                    await page.mouse.click(x, y, button='right')
+                    logger.info(f"   🖱️ راست‌کلیک روی پیام انجام شد در ({x:.0f}, {y:.0f}) (تلاش {right_attempt+1})")
+                else:
+                    await message_locator.click(button='right')
+                    logger.info(f"   🖱️ راست‌کلیک با force (تلاش {right_attempt+1})")
 
-            # ۲. منتظر منوی context
-            menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
-            try:
-                await page.wait_for_selector(menu_selector, state="attached", timeout=6000)
-                await human_sleep(0.8, 0.3)
-            except Exception:
-                logger.warning("   ⚠️ منوی context ظاهر نشد. رد کردن این پست.")
+                # ۲. منتظر منوی context (با timeout کوتاه)
+                menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
+                try:
+                    await page.wait_for_selector(menu_selector, state="attached", timeout=5000 if right_attempt == 0 else 7000)
+                    menu_appeared = True
+                    await human_sleep(0.8, 0.3)
+                    break
+                except Exception:
+                    if right_attempt == 0:
+                        logger.debug("   🔄 منو نیامد – صبر کوتاه و تلاش دوباره...")
+                        await human_sleep(3.0, 0.5)
+                    else:
+                        # 🌟 عکس از وضعیت صفحه وقتی منو اصلاً باز نشد
+                        path = self.debug_dir / f"menu_failed_{post_id}.png"
+                        await page.screenshot(path=path)
+                        logger.warning(f"   ⚠️ منوی context بعد از ۲ تلاش ظاهر نشد. اسکرین‌شات: {path.name}")
+
+            if not menu_appeared:
+                logger.warning("   ❌ رد کردن این پست به دلیل عدم نمایش منو.")
                 return
 
-            # ۳. یافتن گزینهٔ "Download" با جستجوی دقیق متن
+            # ۳. یافتن گزینهٔ "Download" (مانند قبل)
             download_coords = await page.evaluate('''() => {
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                 let node;
@@ -204,13 +225,10 @@ class PlaywrightDownloader:
                 else:
                     logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
-            # ═══════════════════════════════════════════
-            # 🌟 انتظار تطبیقی: تا وقتی فایل جدید می‌آید صبر کن،
-            #     اگر ۱۵ ثانیه هیچ فایلی نیامد، تمام شده فرض کن.
-            # ═══════════════════════════════════════════
-            absolute_timeout = 600        # حداکثر ۱۰ دقیقه برای کل دانلودهای یک پست
-            quiet_threshold = 15          # ۱۵ ثانیه سکوت
-            check_interval = 2            # هر ۲ ثانیه بررسی
+            # 🌟 انتظار تطبیقی (همان منطق قبلی)
+            absolute_timeout = 600
+            quiet_threshold = 15
+            check_interval = 2
             waited = 0
             last_count = 0
             quiet_elapsed = 0
@@ -218,25 +236,21 @@ class PlaywrightDownloader:
             while waited < absolute_timeout:
                 await asyncio.sleep(check_interval)
                 waited += check_interval
-
                 current_count = len(downloaded_files)
                 if current_count > last_count:
-                    # فایل جدیدی دریافت شده → سکوت را صفر کن
                     last_count = current_count
                     quiet_elapsed = 0
-                    logger.debug(f"   ⏳ {waited}s – {current_count} فایل تا اینجا دریافت شد (فعالیت جدید)")
+                    logger.debug(f"   ⏳ {waited}s – {current_count} فایل دریافت شد (فعالیت جدید)")
                 else:
                     quiet_elapsed += check_interval
                     logger.debug(f"   ⏳ {waited}s – {current_count} فایل، {quiet_elapsed}s سکوت")
 
-                # اگر به اندازهٔ کافی سکوت شده، فرض کن همهٔ دانلودها تمام شده‌اند
                 if quiet_elapsed >= quiet_threshold:
                     logger.info(f"   🔇 {quiet_threshold} ثانیه بدون دانلود جدید – اتمام دانلودهای این پست")
                     break
 
             if waited >= absolute_timeout:
                 logger.warning(f"   ⚠️ زمان کلی {absolute_timeout}s به پایان رسید – {len(downloaded_files)} فایل دریافت شد.")
-            # ═══════════════════════════════════════════
 
         except Exception as e:
             logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
@@ -247,7 +261,7 @@ class PlaywrightDownloader:
             except:
                 pass
         finally:
-            # بستن منو و حذف listener (فقط بعد از پایان کامل این پست)
+            # بستن منو و حذف listener
             try:
                 await page.mouse.click(10, 10)
                 await human_sleep(0.3, 0.2)
@@ -259,9 +273,8 @@ class PlaywrightDownloader:
             media_map[post_id] = downloaded_files
             logger.info(f"📦 پست {post_id}: {len(downloaded_files)} رسانه دانلود شد.")
 
-    # ═══════════════════ متد کمکی برای رسم ضربدر قرمز ═══════════════════
     async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
-        """رسم ضربدر قرمز در مختصات، گرفتن اسکرین‌شات و سپس حذف ضربدر"""
+        """رسم ضربدر قرمز و ذخیره اسکرین‌شات"""
         await page.evaluate(f"""
             () => {{
                 const container = document.createElement('div');
