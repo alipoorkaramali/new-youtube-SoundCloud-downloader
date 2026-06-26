@@ -21,7 +21,7 @@ class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
     موقعیت گزینه با جستجوی دقیق متن «Download» مانند جستجوی نام کانال پیدا می‌شود.
-    پس از کلیک، تا دریافت همهٔ فایل‌ها (با در نظر گرفتن تعداد مدیاها) صبر می‌کند.
+    پس از کلیک، با یک روش تطبیقی منتظر می‌ماند تا همهٔ فایل‌ها دریافت شوند.
     """
 
     MIME_TO_EXT = {
@@ -55,10 +55,10 @@ class PlaywrightDownloader:
         for idx, post_id in enumerate(post_ids, start=1):
             logger.info(f"📥 [{idx}/{len(post_ids)}] پست {post_id}")
             try:
-                # timeout کلی هر پست افزایش یافته تا فایل‌های حجیم هم فرصت دانلود داشته باشند
+                # timeout کلی هر پست به ۶۰۰ ثانیه (۱۰ دقیقه) افزایش یافت
                 await asyncio.wait_for(
                     self._process_post(page, post_id, media_map),
-                    timeout=240
+                    timeout=600
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"⏰ پست {post_id} تایم‌اوت کلی شد، رد می‌شود.")
@@ -73,7 +73,7 @@ class PlaywrightDownloader:
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # نمایش پست
+        # ──────────────── نمایش پست ────────────────
         success = False
         for attempt in range(5):
             try:
@@ -103,9 +103,7 @@ class PlaywrightDownloader:
         logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک و دانلود...")
         await human_sleep(1.5, 0.4)
 
-        # ──────────────────────────────────────────────
-        # 🌟 شمارش تعداد مدیای visible برای حدس تعداد فایل‌های مورد انتظار
-        # ──────────────────────────────────────────────
+        # ─────────── شمارش مدیای visible (فقط برای اطلاع) ───────────
         media_elements = message_locator.locator(
             'div.media-photo, div.media-video, div.document, a.media-photo, '
             'video, img[src], div[class*="media"]'
@@ -117,9 +115,10 @@ class PlaywrightDownloader:
                 if await media_elements.nth(i).is_visible(timeout=3000):
                     visible_count += 1
         except Exception:
-            visible_count = 1  # حداقل یک فایل فرض می‌کنیم
-        logger.info(f"   🖼️ تعداد مدیای visible: {visible_count} (برای تخمین زمان انتظار)")
+            visible_count = 1
+        logger.info(f"   🖼️ تعداد مدیای visible (تقریبی): {visible_count}")
 
+        # ─────────── لیست فایل‌های دانلودشده و listener ───────────
         downloaded_files = []
         file_index = 0
 
@@ -169,7 +168,7 @@ class PlaywrightDownloader:
                 logger.warning("   ⚠️ منوی context ظاهر نشد. رد کردن این پست.")
                 return
 
-            # ۳. یافتن گزینهٔ "Download" با جستجوی دقیق متن (شبیه جستجوی نام کانال)
+            # ۳. یافتن گزینهٔ "Download" با جستجوی دقیق متن
             download_coords = await page.evaluate('''() => {
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                 let node;
@@ -206,24 +205,37 @@ class PlaywrightDownloader:
                     logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
 
             # ═══════════════════════════════════════════
-            # 🌟 انتظار هوشمند برای دریافت کامل فایل‌ها
+            # 🌟 انتظار تطبیقی: تا وقتی فایل جدید می‌آید صبر کن،
+            #     اگر ۱۵ ثانیه هیچ فایلی نیامد، تمام شده فرض کن.
             # ═══════════════════════════════════════════
-            # به‌جای یک sleep ثابت، هر ۲ ثانیه بررسی می‌کنیم که آیا
-            # تعداد فایل‌های دانلودشده به تعداد مدیای visible رسیده است یا نه.
-            # این روش خودبه‌خود منتظر حجم‌های بالا می‌ماند و برای فایل‌های کوچک
-            # بلافاصله پایان می‌یابد.
-            max_wait = 180          # حداکثر ۱۸۰ ثانیه انتظار
-            check_interval = 2      # هر ۲ ثانیه وضعیت بررسی شود
+            absolute_timeout = 600        # حداکثر ۱۰ دقیقه برای کل دانلودهای یک پست
+            quiet_threshold = 15          # ۱۵ ثانیه سکوت
+            check_interval = 2            # هر ۲ ثانیه بررسی
             waited = 0
-            while len(downloaded_files) < visible_count and waited < max_wait:
+            last_count = 0
+            quiet_elapsed = 0
+
+            while waited < absolute_timeout:
                 await asyncio.sleep(check_interval)
                 waited += check_interval
-                logger.debug(f"   ⏳ {waited}s گذشته – {len(downloaded_files)}/{visible_count} فایل دریافت شد")
 
-            if len(downloaded_files) >= visible_count:
-                logger.info(f"   🎉 همهٔ {visible_count} فایل با موفقیت دریافت شدند.")
-            else:
-                logger.warning(f"   ⚠️ فقط {len(downloaded_files)} از {visible_count} فایل دریافت شد (تایم‌اوت).")
+                current_count = len(downloaded_files)
+                if current_count > last_count:
+                    # فایل جدیدی دریافت شده → سکوت را صفر کن
+                    last_count = current_count
+                    quiet_elapsed = 0
+                    logger.debug(f"   ⏳ {waited}s – {current_count} فایل تا اینجا دریافت شد (فعالیت جدید)")
+                else:
+                    quiet_elapsed += check_interval
+                    logger.debug(f"   ⏳ {waited}s – {current_count} فایل، {quiet_elapsed}s سکوت")
+
+                # اگر به اندازهٔ کافی سکوت شده، فرض کن همهٔ دانلودها تمام شده‌اند
+                if quiet_elapsed >= quiet_threshold:
+                    logger.info(f"   🔇 {quiet_threshold} ثانیه بدون دانلود جدید – اتمام دانلودهای این پست")
+                    break
+
+            if waited >= absolute_timeout:
+                logger.warning(f"   ⚠️ زمان کلی {absolute_timeout}s به پایان رسید – {len(downloaded_files)} فایل دریافت شد.")
             # ═══════════════════════════════════════════
 
         except Exception as e:
@@ -235,6 +247,7 @@ class PlaywrightDownloader:
             except:
                 pass
         finally:
+            # بستن منو و حذف listener (فقط بعد از پایان کامل این پست)
             try:
                 await page.mouse.click(10, 10)
                 await human_sleep(0.3, 0.2)
