@@ -13,7 +13,6 @@ logger = logging.getLogger("TelegramScraper")
 
 
 async def human_sleep(base: float, jitter: float = 0.4):
-    """خواب انسانی با کمی تصادف"""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
@@ -21,7 +20,6 @@ async def human_sleep(base: float, jitter: float = 0.4):
 class PlaywrightDownloader:
     """
     دانلود مدیا با راست‌کلیک روی پیام و انتخاب گزینهٔ «Download» از منوی context.
-    کاملاً انسانی، بدون نیاز به Media Viewer یا کلیک‌های پیچیده.
     """
 
     MIME_TO_EXT = {
@@ -41,7 +39,6 @@ class PlaywrightDownloader:
         self.max_retries = max_retries
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
-        # پوشهٔ دیباگ (فقط در صورت نیاز به اسکرین‌شات خطا)
         self.debug_dir = self.media_dir.parent / "debug_rightclick"
         self.debug_dir.mkdir(parents=True, exist_ok=True)
 
@@ -69,12 +66,10 @@ class PlaywrightDownloader:
 
     async def _process_post(self, page: Page, post_id: str,
                             media_map: Dict[str, List[str]]) -> None:
-        """راست‌کلیک روی پیام، کلیک روی Download، ذخیرهٔ فایل(ها)"""
         logger.info(f"📍 شروع دانلود پست {post_id}")
 
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
 
-        # نمایش پست (با تلاش مجدد)
         success = False
         for attempt in range(5):
             try:
@@ -104,12 +99,9 @@ class PlaywrightDownloader:
         logger.info(f"   📍 پست {post_id} آماده شد. راست‌کلیک و دانلود...")
         await human_sleep(1.5, 0.4)
 
-        # لیست فایل‌های دانلودشده برای این پست
         downloaded_files = []
-        # ایندکس فایل‌ها از 0 شروع می‌شود (برای نام‌گذاری)
         file_index = 0
 
-        # Listener دائمی برای کل این پست (برای دریافت چندین فایل آلبوم)
         async def on_download(download: Download):
             nonlocal file_index
             try:
@@ -117,7 +109,6 @@ class PlaywrightDownloader:
                 ext = suggested.rsplit('.', 1)[-1] if '.' in suggested else "bin"
                 base_name = f"{post_id}_{file_index}.{ext}"
                 filepath = self.media_dir / base_name
-                # جلوگیری از بازنویسی
                 counter = 1
                 while filepath.exists():
                     filepath = self.media_dir / f"{post_id}_{file_index}_{counter}.{ext}"
@@ -148,10 +139,14 @@ class PlaywrightDownloader:
                 await message_locator.click(button='right')
                 logger.info(f"   🖱️ راست‌کلیک با force انجام شد")
 
-            # ۲. منتظر منوی context
+            # ۲. منتظر منوی context (با state="attached" برای مقاومت در برابر opacity)
             menu_selector = '[role="menu"], [role="listbox"], div[class*="context-menu"], div[class*="ContextMenu"], div[class*="popup"]'
-            await page.wait_for_selector(menu_selector, timeout=5000)
-            await human_sleep(0.5, 0.2)
+            try:
+                await page.wait_for_selector(menu_selector, state="attached", timeout=6000)
+                await human_sleep(0.8, 0.3)
+            except Exception:
+                logger.warning("   ⚠️ منوی context ظاهر نشد. رد کردن این پست.")
+                return
 
             # ۳. پیدا کردن و کلیک روی گزینهٔ «Download»
             download_option = page.locator(
@@ -168,12 +163,11 @@ class PlaywrightDownloader:
                 logger.info(f"   ✅ کلیک روی گزینهٔ دانلود انجام شد")
 
                 # ۴. صبر برای دریافت همهٔ فایل‌ها (مخصوصاً آلبوم‌ها)
-                await human_sleep(15.0, 0.2)   # ۱۵ ثانیه صبر برای آلبوم‌های بزرگ
+                await human_sleep(15.0, 0.2)
             else:
                 logger.warning("   ⚠️ گزینهٔ دانلود در منوی راست‌کلیک پیدا نشد!")
         except Exception as e:
             logger.warning(f"   ❌ خطا در فرایند راست‌کلیک/دانلود: {e}")
-            # در صورت شکست، اسکرین‌شات خطا گرفته می‌شود (اختیاری)
             try:
                 path = self.debug_dir / f"error_{post_id}.png"
                 await page.screenshot(path=path)
@@ -181,16 +175,13 @@ class PlaywrightDownloader:
             except:
                 pass
         finally:
-            # بستن منو با کلیک در نقطهٔ امن (اگر هنوز باز باشد)
             try:
                 await page.mouse.click(10, 10)
                 await human_sleep(0.3, 0.2)
             except:
                 pass
-            # حذف listener
             page.remove_listener("download", on_download)
 
-        # ثبت در media_map
         if downloaded_files:
             media_map[post_id] = downloaded_files
             logger.info(f"📦 پست {post_id}: {len(downloaded_files)} رسانه دانلود شد.")
