@@ -212,7 +212,7 @@ class TelegramChannelScraper:
 
         return items, context, page
 
-    # ═══════════════════ جستجو و ورود به کانال (چندمرحله‌ای) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال (چندمرحله‌ای + تایپ مقاوم) ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
         # ۱. پیدا کردن نوار جستجو
         search_input = None
@@ -232,15 +232,21 @@ class TelegramChannelScraper:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
 
-        # ۲. تایپ نام کاربری (username) برای جستجو
-        await search_input.fill(self.channel)                # همیشه username
+        # ۲. تایپ مقاوم نام کاربری (username) در نوار جستجو
+        #     ابتدا کلیک، پاک‌سازی، سپس تایپ انسانی
+        await search_input.click()
+        await human_sleep(0.3, 0.2)
+        await search_input.fill('')                     # پاک‌سازی کامل
+        await human_sleep(0.2, 0.1)
+        await search_input.type(self.channel, delay=random.randint(80, 150))   # تایپ انسانی
         self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
+        # 🌟 اسکرین‌شات بلافاصله بعد از تایپ
         await self._take_screenshot(page, "search_input_filled")
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
 
-        # 🌟 ۳. انتظار چندمرحله‌ای برای ظاهر شدن نتایج (بدون تب Channels)
+        # ۳. انتظار چندمرحله‌ای برای ظاهر شدن نتایج
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
 
@@ -250,7 +256,7 @@ class TelegramChannelScraper:
         if await self._check_text_on_page(page, search_term):
             found = True
             self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ اول یافت شد.")
-        
+
         # مرحلهٔ ۲: ۱۵ ثانیه
         if not found:
             self.logger.info("   🕑 مرحلهٔ دوم انتظار (۱۵ ثانیه)...")
