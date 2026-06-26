@@ -1,7 +1,116 @@
-2026-06-26 06:05:58,252 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTV
-2026-06-26 06:05:58,252 [INFO] 🚀 شروع اسکریپر مستقل برای @IranintlTV (limit=5)
-2026-06-26 06:06:12,167 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-06-26 06:06:14,104 [INFO] ⏳ منتظر نتایج...
-2026-06-26 06:06:51,392 [ERROR] ❌ نتایج جستجو برای این کانال پیدا نشد (حتی پس از ۳۰ ثانیه).
-2026-06-26 06:06:51,617 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_IranintlTV_search_failed.png
-2026-06-26 06:06:52,151 [WARNING] هیچ پستی دریافت نشد.
+2026-06-26 06:19:20,350 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTV
+2026-06-26 06:19:20,350 [INFO] 🚀 شروع اسکریپر مستقل برای @IranintlTV (limit=4)
+2026-06-26 06:19:28,453 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-26 06:19:28,492 [INFO] 🔍 در حال جستجوی: @IranintlTV
+2026-06-26 06:19:28,734 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_IranintlTV_search_input_filled.png
+2026-06-26 06:19:29,992 [INFO] ⏳ منتظر نتایج...
+2026-06-26 06:19:38,136 [INFO] ✅ عبارت 'IranintlTV' در صفحه یافت شد.
+2026-06-26 06:19:38,137 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-26 06:19:38,287 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_IranintlTV_search_results_IranintlTV.png
+2026-06-26 06:19:43,925 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-26 06:19:44,121 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
+2026-06-26 06:19:44,182 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
+2026-06-26 06:19:47,187 [INFO] 📊 4 پست جدیدترین جمع‌آوری شد.
+2026-06-26 06:19:47,351 [INFO] 📸 گرفتن اسکرین‌شات از 4 پست...
+2026-06-26 06:19:50,336 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 4
+2026-06-26 06:19:50,372 [INFO] 📥 4 پست استخراج شد (جدیدترین‌ها).
+2026-06-26 06:19:50,373 [INFO] 📥 [1/4] پست 344399
+2026-06-26 06:19:50,374 [INFO] 📍 شروع دانلود پست 344399
+2026-06-26 06:19:53,734 [INFO]    📍 پست 344399 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:19:54,796 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 663)
+2026-06-26 06:20:25,480 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    56 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
+
+2026-06-26 06:20:25,636 [INFO]    📸 اسکرین‌شات خطا: error_344399.png
+2026-06-26 06:20:28,236 [INFO] 📥 [2/4] پست 344398
+2026-06-26 06:20:28,236 [INFO] 📍 شروع دانلود پست 344398
+2026-06-26 06:20:31,278 [INFO]    📍 پست 344398 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:20:33,056 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 490)
+2026-06-26 06:21:03,960 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div tabindex="0" role="menuitem" class="MenuItem compact">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    56 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
+
+2026-06-26 06:21:04,120 [INFO]    📸 اسکرین‌شات خطا: error_344398.png
+2026-06-26 06:21:05,296 [INFO] 📥 [3/4] پست 344397
+2026-06-26 06:21:05,296 [INFO] 📍 شروع دانلود پست 344397
+2026-06-26 06:21:08,293 [INFO]    📍 پست 344397 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:21:09,811 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 363)
+2026-06-26 06:21:40,577 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    56 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
+
+2026-06-26 06:21:40,760 [INFO]    📸 اسکرین‌شات خطا: error_344397.png
+2026-06-26 06:21:41,794 [INFO] 📥 [4/4] پست 344396
+2026-06-26 06:21:41,794 [INFO] 📍 شروع دانلود پست 344396
+2026-06-26 06:21:45,309 [INFO]    📍 پست 344396 آماده شد. راست‌کلیک و دانلود...
+2026-06-26 06:21:46,234 [INFO]    🖱️ راست‌کلیک روی پیام انجام شد در (858, 486)
+2026-06-26 06:22:17,259 [WARNING]    ❌ خطا در فرایند راست‌کلیک/دانلود: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("[role=\"menuitem\"]:has-text(\"Download\"), [role=\"menuitem\"]:has-text(\"Save\"), button:has-text(\"Download\"), div:has-text(\"Download\")").first
+    - locator resolved to <div id="portals">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying click action
+      - waiting 100ms
+    52 × waiting for element to be visible, enabled and stable
+       - element is not visible
+     - retrying click action
+       - waiting 500ms
+    - waiting for element to be visible, enabled and stable
+
+2026-06-26 06:22:17,521 [INFO]    📸 اسکرین‌شات خطا: error_344396.png
+2026-06-26 06:22:17,774 [INFO] 🖼️ 0 فایل رسانه دانلود شد.
+2026-06-26 06:22:17,774 [INFO] 📊 media_map برای 0 پست پر شد.
+2026-06-26 06:22:17,775 [INFO] 📄 JSON: Download/telegram_downloads/IranintlTV/posts.json
+2026-06-26 06:22:17,775 [INFO] 📊 CSV: Download/telegram_downloads/IranintlTV/posts.csv
+2026-06-26 06:22:17,790 [INFO] 🌐 HTML: Download/telegram_downloads/IranintlTV/posts.html
+2026-06-26 06:22:18,023 [INFO] 📦 ZIP: Download/telegram_downloads/IranintlTV/IranintlTV_archive.zip
+2026-06-26 06:22:18,552 [INFO] ✅ پایان موفقیت‌آمیز.
