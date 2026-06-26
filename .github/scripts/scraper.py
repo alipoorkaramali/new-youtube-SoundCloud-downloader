@@ -162,7 +162,6 @@ class TelegramChannelScraper:
                         await msg.scroll_into_view_if_needed()
                         await msg.wait_for(state="visible", timeout=5000)
 
-                        # استخراج متن با طول بیشتر (۱۰۰۰ کاراکتر)
                         text = (await msg.inner_text()).strip()[:1000]
                         date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
                         date = ""
@@ -241,7 +240,8 @@ class TelegramChannelScraper:
         await human_sleep(1.5, 0.3)
         await search_input.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
-        await human_sleep(6, 0.4)
+        # 🌟 افزایش صبر برای لود کامل نتایج (از ۶ به ۱۰ ثانیه)
+        await human_sleep(10, 0.5)
 
         # ۳. کلیک روی تب Channels (اگر وجود دارد)
         try:
