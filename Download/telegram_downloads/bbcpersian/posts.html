@@ -4,292 +4,1089 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@bbcpersian - آرشیو تلگرام</title>
+
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
     <style>
-        body { font-family: Tahoma, sans-serif; background: #f5f5f5; direction: rtl; padding: 20px; }
-        .post { background: white; margin: 15px; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .date { color: #666; font-size: 14px; }
-        .text { margin: 10px 0; font-size: 16px; line-height: 2; }
-        .media { display: flex; flex-wrap: wrap; gap: 10px; }
-        .media img, .media video { max-width: 100%; max-height: 300px; border-radius: 5px; }
-        h1 { text-align: center; color: #2a6df4; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #f0f2f5; --card-bg: #ffffff; --text: #1c1e21;
+            --text-secondary: #65676b; --primary: #2a6df4; --primary-dark: #1e4fcf;
+            --border: #e4e6eb; --shadow: 0 2px 10px rgba(0,0,0,0.08);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.12); --glass: rgba(255,255,255,0.75);
+            --tag-bg: #e7f0ff; --tag-text: #1e4fcf; --footer-bg: #ffffff;
+            --lightbox-bg: rgba(0,0,0,0.9); --highlight-bg: #ffeb3b; --highlight-text: #000;
+        }
+        .dark {
+            --bg: #18191a; --card-bg: #242526; --text: #e4e6eb;
+            --text-secondary: #b0b3b8; --primary: #4d8bf7; --primary-dark: #2a6df4;
+            --border: #3e4042; --shadow: 0 2px 10px rgba(0,0,0,0.3);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.5); --glass: rgba(36,37,38,0.8);
+            --tag-bg: #1e3a5f; --tag-text: #8ab4f8; --footer-bg: #242526;
+            --lightbox-bg: rgba(0,0,0,0.95); --highlight-bg: #f9a825; --highlight-text: #000;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--bg); color: var(--text); direction: rtl;
+            line-height: 1.8; transition: background 0.3s, color 0.3s;
+            min-height: 100vh; padding-bottom: 60px; position: relative; overflow-x: hidden;
+        }
+        .bg-animation {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.15;
+            background: linear-gradient(45deg, #2a6df4, #8b5cf6, #ec4899, #f59e0b);
+            background-size: 400% 400%; animation: gradientShift 15s ease infinite;
+        }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        #progress-bar {
+            position: fixed; top: 0; right: 0; height: 4px;
+            background: linear-gradient(to left, var(--primary), #8b5cf6);
+            width: 0%; z-index: 10000; transition: width 0.1s ease; border-radius: 0 0 4px 0;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
+        .header {
+            position: sticky; top: 20px; z-index: 100; backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px); background: var(--glass);
+            border: 1px solid var(--border); border-radius: 20px; padding: 25px 30px;
+            margin: 20px auto; max-width: 880px; box-shadow: var(--shadow);
+            text-align: center; transition: all 0.3s;
+        }
+        .header:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+        .header h1 {
+            font-size: 28px; font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; margin-bottom: 5px;
+        }
+        .header .stats {
+            display: flex; justify-content: center; align-items: center;
+            gap: 25px; flex-wrap: wrap; margin: 12px 0 0;
+            font-size: 14px; color: var(--text-secondary);
+        }
+        .header .stats i { margin-left: 5px; color: var(--primary); }
+        .theme-toggle {
+            position: absolute; left: 25px; top: 28px; cursor: pointer;
+            font-size: 20px; color: var(--text-secondary);
+            background: none; border: none; transition: 0.3s;
+        }
+        .theme-toggle:hover { color: var(--primary); transform: rotate(30deg) scale(1.1); }
+        .search-box { margin: 15px auto 0; max-width: 400px; position: relative; }
+        .search-box input {
+            width: 100%; padding: 12px 45px 12px 15px; border-radius: 30px;
+            border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+            font-family: 'Vazirmatn', sans-serif; font-size: 14px; transition: 0.3s; outline: none;
+        }
+        .search-box input:focus {
+            border-color: var(--primary); box-shadow: 0 0 0 3px rgba(42,109,244,0.2);
+        }
+        .search-box i {
+            position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+            color: var(--text-secondary); font-size: 16px;
+        }
+        .container { max-width: 880px; margin: 0 auto; padding: 0 15px; }
+        .post {
+            background: var(--card-bg); border-radius: 16px; padding: 24px;
+            margin-bottom: 22px; box-shadow: var(--shadow);
+            border-right: 4px solid var(--primary); transition: all 0.3s ease;
+            animation: fadeInUp 0.5s ease forwards; opacity: 0;
+            position: relative; overflow: hidden;
+        }
+        .post:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+        .post::before {
+            content: ''; position: absolute; top: 0; right: 0; width: 4px; height: 100%;
+            background: linear-gradient(180deg, var(--primary), #8b5cf6);
+            border-radius: 0 16px 16px 0;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .post-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 12px;
+            border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px;
+        }
+        .post-number {
+            background: var(--primary); color: white; padding: 4px 12px;
+            border-radius: 20px; font-size: 13px; font-weight: 700;
+        }
+        .post-date {
+            color: var(--text-secondary); font-size: 13px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .post-body {
+            font-size: 16px; line-height: 2.2; white-space: pre-wrap;
+            word-break: break-word; margin-bottom: 16px; position: relative;
+        }
+        .hashtag {
+            display: inline-block; color: var(--tag-text); background: var(--tag-bg);
+            padding: 3px 10px; border-radius: 15px; font-size: 13px;
+            margin: 2px 4px; transition: all 0.2s;
+        }
+        .hashtag:hover { background: var(--primary); color: white; cursor: pointer; }
+        .copy-btn {
+            position: absolute; top: 0; left: 0; background: var(--primary); color: white;
+            border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px;
+            cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;
+            font-family: 'Vazirmatn';
+        }
+        .copy-btn:hover { background: var(--primary-dark); }
+        .media-container { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 18px 0; }
+        .media-item {
+            background: var(--bg); border-radius: 12px; padding: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); max-width: 100%;
+            text-align: center; transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer; position: relative; overflow: hidden;
+        }
+        .media-item:hover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+        .media-item img, .media-item video {
+            max-width: 100%; max-height: 400px; border-radius: 8px;
+            display: block; transition: transform 0.3s;
+        }
+        .media-item:hover img { transform: scale(1.02); }
+        .media-item audio {
+            width: 100%;
+            max-width: 100%;
+            margin: 12px 0;
+            display: block;
+            border-radius: 8px;
+            background: var(--bg);
+            padding: 8px;
+        }
+        .media-item .file-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--primary); color: white !important;
+            padding: 10px 18px; border-radius: 10px; text-decoration: none;
+            font-size: 14px; transition: background 0.3s, transform 0.3s;
+        }
+        .media-item .file-link:hover { background: var(--primary-dark); transform: translateY(-2px); }
+        .no-media {
+            color: var(--text-secondary); font-size: 14px; padding: 14px;
+            background: var(--bg); border-radius: 10px; text-align: center; width: 100%;
+        }
+        .post-url {
+            display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
+            background: var(--primary); color: white !important; padding: 8px 16px;
+            border-radius: 10px; font-size: 13px; text-decoration: none;
+            transition: all 0.3s; font-weight: 500;
+        }
+        .post-url:hover {
+            background: var(--primary-dark); transform: translateX(-4px);
+            box-shadow: 0 4px 15px rgba(42,109,244,0.3);
+        }
+        .extra-meta { display: flex; gap: 15px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+        .lightbox {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--lightbox-bg); z-index: 9999;
+            align-items: center; justify-content: center; flex-direction: column; cursor: pointer;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 90vw; max-height: 80vh; border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); animation: zoomIn 0.3s ease;
+        }
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .lightbox-close {
+            position: absolute; top: 20px; left: 30px; color: white;
+            font-size: 36px; cursor: pointer; transition: transform 0.3s; z-index: 10000;
+        }
+        .lightbox-close:hover { transform: rotate(90deg); }
+        .back-to-top {
+            position: fixed; bottom: 25px; left: 25px; background: var(--primary);
+            color: white; width: 45px; height: 45px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 20px;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(42,109,244,0.4);
+            transition: all 0.3s; opacity: 0; visibility: hidden; z-index: 999; border: none;
+        }
+        .back-to-top.visible { opacity: 1; visibility: visible; }
+        .back-to-top:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(42,109,244,0.5); }
+        .footer {
+            text-align: center; margin-top: 40px; padding: 20px;
+            color: var(--text-secondary); font-size: 13px;
+            border-top: 1px solid var(--border); background: var(--footer-bg);
+        }
+        .highlight {
+            background-color: var(--highlight-bg); color: var(--highlight-text);
+            font-weight: bold; border-radius: 3px; padding: 0 2px;
+        }
+        @media (max-width: 768px) {
+            .header { margin: 10px; padding: 18px 15px; border-radius: 14px; }
+            .header h1 { font-size: 22px; }
+            .post { padding: 16px; margin-bottom: 16px; border-radius: 12px; }
+            .media-item img, .media-item video { max-height: 280px; }
+            .theme-toggle { left: 15px; top: 20px; font-size: 18px; }
+        }
     </style>
 </head>
 <body>
+<div class="bg-animation"></div>
+<div id="progress-bar"></div>
+
+<div class="header">
+    <button class="theme-toggle" onclick="toggleTheme()" title="تغییر حالت تاریک/روشن">
+        <i id="theme-icon" class="fas fa-moon"></i>
+    </button>
     <h1>@bbcpersian</h1>
-    <p style="text-align:center;">15 پست | آخرین بروزرسانی: 2026/06/27 - 00:57</p>
+    <div class="stats">
+        <span><i class="fas fa-file-alt"></i> 10 پست</span>
+        <span><i class="fas fa-clock"></i> بروزرسانی: 2026/06/27 - 19:52</span>
+    </div>
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="جستجو در پست‌ها..." oninput="filterPosts()">
+    </div>
+</div>
 
-    <div class="post">
-        <div class="date">#1 | </div>
-        <div class="text">گزارش صداوسیمای ایران از حمله به اسکله طاهرویی سیریک
+<div class="container" id="postsContainer">
+    
+    
+    <div class="post" data-text="0:29
+بسیاری از بازیکنان جام جهانی فوتبال ۲۰۲۶ در بازی‌ها کفش‌ صورتی به پا داشته‌اند. این موضوع برای برخی سوال برانگیز شده است.
+ 
+گفته می‌شود که یکی از دلایل اصلی این است که شرکت‌های مطرح جهانی مانند نایکی، آدیداس و پوما همگی کفش‌هایی با طراحی مشابه و در رنگ‌های مشابه برای این رقابت‌ها عرضه کرده‌اند.
+ 
+برخی کارشناسان می‌گویند این رنگ پس از مشورت با  متخصصان مد انتخاب شده است، در حالی که برخی دیگر معتقدند ممکن است این موضوع صرفا یک اتفاق تصادفی باشد.
 
-خبرنگار صداوسیمای ایران در سیریک گزارش داد که ساعت ۲۳:۱۵ جمعه‌شب به وقت محلی، صدای انفجاری در محدوده اسکله طاهرویی شنیده شده است.
+@bbcpersian
+18.2K
+03:06 PM" style="animation-delay: 0.0s;">
+        <div class="post-header">
+            <span class="post-number">#1</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
 
-او به نقل از یک منبع آگاه نظامی گفت این صدا ناشی از اصابت یک پرتابه به محدوده اسکله طاهرویی بوده است. جزئیات بیشتری درباره خسارات یا تلفات احتمالی منتشر نشده است.
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="0:29
+بسیاری از بازیکنان جام جهانی فوتبال ۲۰۲۶ در بازی‌ها کفش‌ صورتی به پا داشته‌اند. این موضوع برای برخی سوال برانگیز شده است.
+ 
+گفته می‌شود که یکی از دلایل اصلی این است که شرکت‌های مطرح جهانی مانند نایکی، آدیداس و پوما همگی کفش‌هایی با طراحی مشابه و در رنگ‌های مشابه برای این رقابت‌ها عرضه کرده‌اند.
+ 
+برخی کارشناسان می‌گویند این رنگ پس از مشورت با  متخصصان مد انتخاب شده است، در حالی که برخی دیگر معتقدند ممکن است این موضوع صرفا یک اتفاق تصادفی باشد.
 
-همزمان، فرماندهی مرکزی ارتش آمریکا، سنتکام، اعلام کرد که هواپیماهای آمریکایی انبارهای موشک و پهپاد و همچنین تأسیسات راداری ساحلی ایران را هدف قرار داده‌اند.
+@bbcpersian
+18.2K
+03:06 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            0:29
+بسیاری از بازیکنان جام جهانی فوتبال ۲۰۲۶ در بازی‌ها کفش‌ صورتی به پا داشته‌اند. این موضوع برای برخی سوال برانگیز شده است.
+ 
+گفته می‌شود که یکی از دلایل اصلی این است که شرکت‌های مطرح جهانی مانند نایکی، آدیداس و پوما همگی کفش‌هایی با طراحی مشابه و در رنگ‌های مشابه برای این رقابت‌ها عرضه کرده‌اند.
+ 
+برخی کارشناسان می‌گویند این رنگ پس از مشورت با  متخصصان مد انتخاب شده است، در حالی که برخی دیگر معتقدند ممکن است این موضوع صرفا یک اتفاق تصادفی باشد.
 
-صداوسیمای ایران همچنین گزارش داد که حدود پنج ساعت پیش از این حمله، از منطقه سیریک چند شلیک اخطار به سوی شناورهایی انجام شده بود که «متخلف» خوانده شدند.
+@bbcpersian
+18.2K
+03:06 PM
+        </div>
 
-بر اساس این گزارش، دو پرتابه هشداردهنده از حوالی کرپان به سمت تنگه هرمز شلیک شده بود.
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/285217_IMG_2118.MP4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
 
-شهرستان سیریک در حدود ۱۷۰ کیلومتری شرق بندرعباس قرار دارد.
+        
+        <a href="https://t.me/bbcpersian/285217" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
 
-https://bbc.in/440UjbD
+        
+    </div>
+    
+    
+    <div class="post" data-text="...
+سازمان عملیات تجارت دریایی بریتانیا می‌گوید به یک نفت‌کش با پرچم پاناما در تنگه هرمز حمله شده. 
+
+تهران، واشنگتن را به نقض آتش‌بس متهم کرد، معاون اول رئیس جمهوری آمریکا به ایران هشدار داد در صورت انجام حملات بیشتر با «خشونت» روبه‌رو خواهد شد.
+
+جزئیات بیشتر از فرین عاصمی:
 @BBCPersian
-4.2K
-09:14 PM</div>
-        <div class="media">
-<img src="media/285130_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285130" target="_blank">مشاهده در تلگرام</a></div>
+17.8K
+03:02 PM" style="animation-delay: 0.05s;">
+        <div class="post-header">
+            <span class="post-number">#2</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
 
-    <div class="post">
-        <div class="date">#2 | </div>
-        <div class="text">‌فرماندهی مرکزی ارتش آمریکا، سنتکام، اعلام کرد که نیروهای آمریکایی روز جمعه در واکنش به حمله ایران به یک کشتی تجاری در تنگه هرمز، مواضعی را در ایران هدف قرار دادند.
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="...
+سازمان عملیات تجارت دریایی بریتانیا می‌گوید به یک نفت‌کش با پرچم پاناما در تنگه هرمز حمله شده. 
 
-بر اساس بیانیه سنتکام، هواپیماهای آمریکایی انبارهای موشک و پهپاد و همچنین تأسیسات راداری ساحلی ایران را بمباران کردند.
+تهران، واشنگتن را به نقض آتش‌بس متهم کرد، معاون اول رئیس جمهوری آمریکا به ایران هشدار داد در صورت انجام حملات بیشتر با «خشونت» روبه‌رو خواهد شد.
 
-فرماندهی مرکزی ارتش آمریکا، سنتکام کمی بعد جزئیات بیشتری از حملات به ایران را منتشر کرد.
-
-سنتکام گفت که هواپیماهای آمریکایی انبارهای موشک و پهپاد و همچنین تأسیسات راداری ساحلی ایران را هدف قرار دادند.
-
-بر اساس این بیانیه، کشتی «اور لاولی» با پرچم سنگاپور روز ۲۵ ژوئن، هنگام خروج از تنگه هرمز در امتداد سواحل عمان، با یک پهپاد انتحاری یک‌طرفه هدف حمله قرار گرفت.
-
-سنتکام این حمله را کار ایران و نقض آشکار آتش‌بس توصیف کرد و گفت که چنین اقدامی آزادی کشتیرانی در یکی از مهم‌ترین مسیرهای تجارت جهانی را به خطر انداخته است.
-
-لینک خبر کامل:
-
-https://bbc.in/4wgvEfi
+جزئیات بیشتر از فرین عاصمی:
 @BBCPersian
-9.6K
-09:05 PM</div>
-        <div class="media">
-<img src="media/285129_5906809247805149083.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285129" target="_blank">مشاهده در تلگرام</a></div>
+17.8K
+03:02 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            ...
+سازمان عملیات تجارت دریایی بریتانیا می‌گوید به یک نفت‌کش با پرچم پاناما در تنگه هرمز حمله شده. 
 
-    <div class="post">
-        <div class="date">#3 | </div>
-        <div class="text">‌دونالد ترامپ، رئیس‌جمهور آمریکا، در پاسخ به پرسشی درباره پیامدهای حمله ایران به یک کشتی باری گفت: «خواهید دید.»
+تهران، واشنگتن را به نقض آتش‌بس متهم کرد، معاون اول رئیس جمهوری آمریکا به ایران هشدار داد در صورت انجام حملات بیشتر با «خشونت» روبه‌رو خواهد شد.
 
-او گفت از اینکه ایران روز گذشته به یک کشتی شلیک کرده خشنود نیست و افزود که این کشتی، با وجود آسیب‌دیدن، به حرکت خود ادامه داده است.
+جزئیات بیشتر از فرین عاصمی:
+@BBCPersian
+17.8K
+03:02 PM
+        </div>
 
-برن دبوزمن، خبرنگار بی‌بی‌سی، از آقای ترامپ پرسید چرا ایران در حالی دست به این حمله زده که او بارها گفته است مذاکرات به‌خوبی پیش می‌رود و انگیزه تهران از حمله به کشتی چه بوده است.
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/285216_IMG_3174.MP4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
 
-آقای ترامپ پاسخ روشنی به این پرسش نداد و بار دیگر گفت: «خواهید دید.»
+        
+        <a href="https://t.me/bbcpersian/285216" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
 
-Getty Images
-https://bbc.in/4exyYN6
+        
+    </div>
+    
+    
+    <div class="post" data-text="ایران از طریق سفیر عراق در تهران از این کشور خواسته که در مورد حضور احزاب کرد مخالف حکومت ایران اقدام کند.
+
+پرس تی‌وی، رسانه انگلیسی زبان حکومت ایران می‌گوید این نامه از طریق یاسر الحجاج، سفیر عراق در تهران، منتقل شده و یک نسخه به بغداد و نسخه دیگر به دست مقامات اقلیم کردستان عراق رسیده است.
+
+تهران از دولت عراق و حکومت اقلیم کردستان خواسته که یا رهبران و اعضای احزاب کرد را به ایران تحویل دهند یا آنها را در یک بازه زمانی مشخص به کشور سوم منتقل کنند.
+
+مقامات دولت عراق و اقلیم کردستان و احزاب کرد ایران هنوز واکنشی به این خبر نشان نداده‌اند.
+
+ایران و عراق بیش از سه سال پیش توافقی را با هدف تامین «امنیت مرزی» امضا کرده‌ بودند.
+
+مطلب کامل را از لینک زیر در وب‌سایت بی‌بی‌سی فارسی بخوانید: 
+https://bbc.in/4eQUqLP
+@BBCPersian
+18.8K
+02:55 PM" style="animation-delay: 0.1s;">
+        <div class="post-header">
+            <span class="post-number">#3</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="ایران از طریق سفیر عراق در تهران از این کشور خواسته که در مورد حضور احزاب کرد مخالف حکومت ایران اقدام کند.
+
+پرس تی‌وی، رسانه انگلیسی زبان حکومت ایران می‌گوید این نامه از طریق یاسر الحجاج، سفیر عراق در تهران، منتقل شده و یک نسخه به بغداد و نسخه دیگر به دست مقامات اقلیم کردستان عراق رسیده است.
+
+تهران از دولت عراق و حکومت اقلیم کردستان خواسته که یا رهبران و اعضای احزاب کرد را به ایران تحویل دهند یا آنها را در یک بازه زمانی مشخص به کشور سوم منتقل کنند.
+
+مقامات دولت عراق و اقلیم کردستان و احزاب کرد ایران هنوز واکنشی به این خبر نشان نداده‌اند.
+
+ایران و عراق بیش از سه سال پیش توافقی را با هدف تامین «امنیت مرزی» امضا کرده‌ بودند.
+
+مطلب کامل را از لینک زیر در وب‌سایت بی‌بی‌سی فارسی بخوانید: 
+https://bbc.in/4eQUqLP
+@BBCPersian
+18.8K
+02:55 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            ایران از طریق سفیر عراق در تهران از این کشور خواسته که در مورد حضور احزاب کرد مخالف حکومت ایران اقدام کند.
+
+پرس تی‌وی، رسانه انگلیسی زبان حکومت ایران می‌گوید این نامه از طریق یاسر الحجاج، سفیر عراق در تهران، منتقل شده و یک نسخه به بغداد و نسخه دیگر به دست مقامات اقلیم کردستان عراق رسیده است.
+
+تهران از دولت عراق و حکومت اقلیم کردستان خواسته که یا رهبران و اعضای احزاب کرد را به ایران تحویل دهند یا آنها را در یک بازه زمانی مشخص به کشور سوم منتقل کنند.
+
+مقامات دولت عراق و اقلیم کردستان و احزاب کرد ایران هنوز واکنشی به این خبر نشان نداده‌اند.
+
+ایران و عراق بیش از سه سال پیش توافقی را با هدف تامین «امنیت مرزی» امضا کرده‌ بودند.
+
+مطلب کامل را از لینک زیر در وب‌سایت بی‌بی‌سی فارسی بخوانید: 
+https://bbc.in/4eQUqLP
+@BBCPersian
+18.8K
+02:55 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285215_5909061047618834551.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285215_5909061047618834551.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285215" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="مرکز رسانه قوه قضائیه در توضیحی به خانه موسیقی درباره حکم صادر شده در مورد خواننده، دست اندرکاران و نوازندگان در پرونده «کنسرت کاروانسرا»‌ گفته است که این حکم «هنوز قطعی نشده است.»
+
+چند روز پیش اعلام شد که پرستو احمدی، خواننده و هشت نفر دیگردر این پرونده به ۷۴ ضربه شلاق تعزیری، دو سال ممنوع‌الخروجی و دو سال ممنوعیت از فعالیت هنری محکوم شدند.
+
+انتشار این حکم با واکنش‌هایی در شبکه‌های اجتماعی روبرو شد.
+
+گفته شده بود که این حکم که از سوی دادگاه کیفری استان قم صادر شده،‌ حکم بدوی است و در مهلت قانونی قابل واخواهی و تجدیدنظرخواهی است.
+
+اتهام مطرح‌شده علیه آنها «جریحه‌دار کردن عفت عمومی از طریق تولید و انتشار محتوای مبتذل و خلاف اخلاق در بستر فضای مجازی» عنوان شده است.
+
+ویدیوی «کنسرت کاروانسرا» در آذرماه ۱۴۰۳ در کانال یوتیوب پرستو احمدی منتشر شد و با واکنش‌های گسترده‌ای در شبکه‌های اجتماعی همراه بود. او در این «کنسرت مجازی» بدون حجاب اجباری روی صحنه خواند.
+@BBCPersian
+21.5K
+02:34 PM" style="animation-delay: 0.15000000000000002s;">
+        <div class="post-header">
+            <span class="post-number">#4</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="مرکز رسانه قوه قضائیه در توضیحی به خانه موسیقی درباره حکم صادر شده در مورد خواننده، دست اندرکاران و نوازندگان در پرونده «کنسرت کاروانسرا»‌ گفته است که این حکم «هنوز قطعی نشده است.»
+
+چند روز پیش اعلام شد که پرستو احمدی، خواننده و هشت نفر دیگردر این پرونده به ۷۴ ضربه شلاق تعزیری، دو سال ممنوع‌الخروجی و دو سال ممنوعیت از فعالیت هنری محکوم شدند.
+
+انتشار این حکم با واکنش‌هایی در شبکه‌های اجتماعی روبرو شد.
+
+گفته شده بود که این حکم که از سوی دادگاه کیفری استان قم صادر شده،‌ حکم بدوی است و در مهلت قانونی قابل واخواهی و تجدیدنظرخواهی است.
+
+اتهام مطرح‌شده علیه آنها «جریحه‌دار کردن عفت عمومی از طریق تولید و انتشار محتوای مبتذل و خلاف اخلاق در بستر فضای مجازی» عنوان شده است.
+
+ویدیوی «کنسرت کاروانسرا» در آذرماه ۱۴۰۳ در کانال یوتیوب پرستو احمدی منتشر شد و با واکنش‌های گسترده‌ای در شبکه‌های اجتماعی همراه بود. او در این «کنسرت مجازی» بدون حجاب اجباری روی صحنه خواند.
+@BBCPersian
+21.5K
+02:34 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            مرکز رسانه قوه قضائیه در توضیحی به خانه موسیقی درباره حکم صادر شده در مورد خواننده، دست اندرکاران و نوازندگان در پرونده «کنسرت کاروانسرا»‌ گفته است که این حکم «هنوز قطعی نشده است.»
+
+چند روز پیش اعلام شد که پرستو احمدی، خواننده و هشت نفر دیگردر این پرونده به ۷۴ ضربه شلاق تعزیری، دو سال ممنوع‌الخروجی و دو سال ممنوعیت از فعالیت هنری محکوم شدند.
+
+انتشار این حکم با واکنش‌هایی در شبکه‌های اجتماعی روبرو شد.
+
+گفته شده بود که این حکم که از سوی دادگاه کیفری استان قم صادر شده،‌ حکم بدوی است و در مهلت قانونی قابل واخواهی و تجدیدنظرخواهی است.
+
+اتهام مطرح‌شده علیه آنها «جریحه‌دار کردن عفت عمومی از طریق تولید و انتشار محتوای مبتذل و خلاف اخلاق در بستر فضای مجازی» عنوان شده است.
+
+ویدیوی «کنسرت کاروانسرا» در آذرماه ۱۴۰۳ در کانال یوتیوب پرستو احمدی منتشر شد و با واکنش‌های گسترده‌ای در شبکه‌های اجتماعی همراه بود. او در این «کنسرت مجازی» بدون حجاب اجباری روی صحنه خواند.
+@BBCPersian
+21.5K
+02:34 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285214_5909061047618834546.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285214_5909061047618834546.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285214" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="به گزارش رسانه‌های ایران ارائه خدمات بعضی از بانک‌ها از صبح امروز (شنبه، ۶ تیر ۱۴۰۵) دوباره مختل شده است؛ خبرگزاری ایسنا به بانک‌های ملی و صادرات در این زمینه اشاره کرده است.
+
+شرکت خدمات انفورماتیک این اختلال را مرتبط با حمله سایبری دانسته است.
+
+در اطلاعیه این شرکت آمده است: «بررسی‌های فنی نشان می‌دهد این اختلال در امتداد آثار حمله سایبری پیشین بر زیرساخت‌های فنی و سامانه‌های متمرکز بانکی پدید آمده است.»
+
+هفته گذشته اعلام شد تمامی اختلال‌های پیش آمده در بانک‌های تجارت، ملی و صادرات برطرف شده است.
+
+اختلال هفته پیش باعث شده بود که در بعضی موارد، حتی انجام عملیات خرید با کارت‌های بانکی هم امکان‌پذیر نباشد.
+
+AFP via Getty Images
+https://bbc.in/4gJn83G
+@BBCPersian
+21.5K
+02:25 PM" style="animation-delay: 0.2s;">
+        <div class="post-header">
+            <span class="post-number">#5</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="به گزارش رسانه‌های ایران ارائه خدمات بعضی از بانک‌ها از صبح امروز (شنبه، ۶ تیر ۱۴۰۵) دوباره مختل شده است؛ خبرگزاری ایسنا به بانک‌های ملی و صادرات در این زمینه اشاره کرده است.
+
+شرکت خدمات انفورماتیک این اختلال را مرتبط با حمله سایبری دانسته است.
+
+در اطلاعیه این شرکت آمده است: «بررسی‌های فنی نشان می‌دهد این اختلال در امتداد آثار حمله سایبری پیشین بر زیرساخت‌های فنی و سامانه‌های متمرکز بانکی پدید آمده است.»
+
+هفته گذشته اعلام شد تمامی اختلال‌های پیش آمده در بانک‌های تجارت، ملی و صادرات برطرف شده است.
+
+اختلال هفته پیش باعث شده بود که در بعضی موارد، حتی انجام عملیات خرید با کارت‌های بانکی هم امکان‌پذیر نباشد.
+
+AFP via Getty Images
+https://bbc.in/4gJn83G
+@BBCPersian
+21.5K
+02:25 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            به گزارش رسانه‌های ایران ارائه خدمات بعضی از بانک‌ها از صبح امروز (شنبه، ۶ تیر ۱۴۰۵) دوباره مختل شده است؛ خبرگزاری ایسنا به بانک‌های ملی و صادرات در این زمینه اشاره کرده است.
+
+شرکت خدمات انفورماتیک این اختلال را مرتبط با حمله سایبری دانسته است.
+
+در اطلاعیه این شرکت آمده است: «بررسی‌های فنی نشان می‌دهد این اختلال در امتداد آثار حمله سایبری پیشین بر زیرساخت‌های فنی و سامانه‌های متمرکز بانکی پدید آمده است.»
+
+هفته گذشته اعلام شد تمامی اختلال‌های پیش آمده در بانک‌های تجارت، ملی و صادرات برطرف شده است.
+
+اختلال هفته پیش باعث شده بود که در بعضی موارد، حتی انجام عملیات خرید با کارت‌های بانکی هم امکان‌پذیر نباشد.
+
+AFP via Getty Images
+https://bbc.in/4gJn83G
+@BBCPersian
+21.5K
+02:25 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285213_5909061047618834545.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285213_5909061047618834545.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285213" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="نوستالژی چیست؟.mp3
+
+55:16
+این هفته در پرگار: نوستالژی چیست؟
+
+نوستالژی چیست؟ نوستالژی یک حالت روانی از سر درماندگی‌ست یا نیرویی‌ست بسیج‌کننده و هویت‌ساز؟ نوستالژی چگونه در سال‌های اخیر در ایران رشد کرد و چه کارکردی یافت؟ 
+
+میهمان‌ها:
+نغمه سهرابی، استاد تاریخ خاورمیانه
+اسفندیار طبری، مدرس فلسفه سیاسی
 
 @BBCPersian
-14.9K
-08:54 PM</div>
-        <div class="media">
-<img src="media/285128_5906809247805149079.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285128" target="_blank">مشاهده در تلگرام</a></div>
+21.2K
+02:20 PM" style="animation-delay: 0.25s;">
+        <div class="post-header">
+            <span class="post-number">#6</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
 
-    <div class="post">
-        <div class="date">#4 | </div>
-        <div class="text">گزارش‌ها از شنیده‌شدن صدای انفجار در سیریک؛ علت هنوز مشخص نیست
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="نوستالژی چیست؟.mp3
 
-رسانه‌های ایران روز جمعه از شنیده‌شدن صدای انفجار در سیریک، در جنوب کشور، خبر دادند. علت این صدا هنوز مشخص نیست.
+55:16
+این هفته در پرگار: نوستالژی چیست؟
 
-به گزارش رویترز این گزارش‌ها اندکی پس از آن منتشر شد که دونالد ترامپ، رئیس‌جمهور آمریکا، تلویحا از احتمال واکنش واشنگتن به حمله ایران به یک کشتی باری سخن گفت.
+نوستالژی چیست؟ نوستالژی یک حالت روانی از سر درماندگی‌ست یا نیرویی‌ست بسیج‌کننده و هویت‌ساز؟ نوستالژی چگونه در سال‌های اخیر در ایران رشد کرد و چه کارکردی یافت؟ 
 
-وقتی از آقای ترامپ پرسیده شد آیا این حمله برای تهران پیامدی خواهد داشت، پاسخ داد: «خواهید دید.»
-
-https://bbc.in/3QIROHK
-@BBCPersian
-17K
-08:46 PM</div>
-        <div class="media">
-<img src="media/285127_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285127" target="_blank">مشاهده در تلگرام</a></div>
-
-    <div class="post">
-        <div class="date">#5 | </div>
-        <div class="text">هشدار سازمان بین‌المللی دریانوردی به کشتی‌ها درباره استفاده از مسیرهای غیرمجاز در تنگه هرمز
-
-رئیس سازمان بین‌المللی دریانوردی، وابسته به سازمان ملل، از کشتی‌ها خواسته است برای عبور از تنگه هرمز، خطر استفاده از مسیرهای غیرمجاز را نپذیرند؛ در حالی که عملیات خروج کشتی‌ها از منطقه همچنان متوقف است.
-
-آرسنیو دومینگز گفت که گفت‌وگوها با همه طرف‌های درگیر، از جمله ایران، برای تضمین امنیت کشتی‌ها ادامه دارد. این اظهارات پس از حمله روز پنجشنبه به یک کشتی باری مطرح شد.
-
-دونالد ترامپ، رئیس‌جمهور آمریکا، این حمله را «نقض احمقانه» آتش‌بس میان آمریکا و ایران توصیف کرده است.
-
-آقای دومینگز همچنین گفت که در چهار روز گذشته ۱۵۰ کشتی با مجموع چهار هزار دریانورد از منطقه خارج شده‌اند.
-
-https://bbc.in/4oSIqxV
-@BBCPersian
-23.5K
-08:21 PM</div>
-        <div class="media">
-<img src="media/285126_0.png" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285126" target="_blank">مشاهده در تلگرام</a></div>
-
-    <div class="post">
-        <div class="date">#6 | </div>
-        <div class="text">حسین محبی، سخنگوی سپاه، خبر برقراری خط مستقیم میان ایران و آمریکا را «دروغ محض» خواند.
-
-او در شبکه ایکس نوشت که «ادعاهای مقامات آمریکایی مبنی بر برقرار شدن خط مستقیم بین ایران و آمریکا در خصوص تنگه هرمز، دروغ محض است و به شدت تکذیب می‌گردد.»
-
-پیشتر جی دی ونس، معاون رئیس‌جمهور آمریکا، گفته بود که واشنگتن و تهران توافق کرده‌اند برای کاهش خطر درگیری‌های بیشتر، یک کانال ارتباطی مستقیم با سپاه پاسداران ایجاد کنند.
-
-آقای ونس گفته بود که این سازوکار شامل دیدار مقام‌های نظامی ایران و آمریکا در قطر خواهد بود تا اختلافات و تنش‌های احتمالی را مدیریت کنند.
-
-اما سخنگوی سپاه پاسداران می‌گوید که «این اتفاق نیفتاده و نخواهد افتاد.»
-
-این در حالی است که خبرگزاری میزان به نقل از پرس‌تی وی، شاخه برون‌مرزی صداوسیمای ایران خبر داد که به منظور «جلوگیری از حوادث در تنگه هرمز که ممکن است منجر به درگیری نظامی شود» خط مستقیمی میان ایران و آمریکا برقرار شده است.
-
-https://bbc.in/4v1qByf
-IRNA
+میهمان‌ها:
+نغمه سهرابی، استاد تاریخ خاورمیانه
+اسفندیار طبری، مدرس فلسفه سیاسی
 
 @BBCPersian
-23.2K
-08:18 PM</div>
-        <div class="media">
-<img src="media/285124_5906809247805149060.jpg" loading="lazy" alt="media"><img src="media/285124_5906809247805149059.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285124" target="_blank">مشاهده در تلگرام</a></div>
+21.2K
+02:20 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            نوستالژی چیست؟.mp3
 
-    <div class="post">
-        <div class="date">#7 | </div>
-        <div class="text">1:06
-آخرین خبرهای مهم روز جمعه ۵ تیر ۱۴۰۵
+55:16
+این هفته در پرگار: نوستالژی چیست؟
+
+نوستالژی چیست؟ نوستالژی یک حالت روانی از سر درماندگی‌ست یا نیرویی‌ست بسیج‌کننده و هویت‌ساز؟ نوستالژی چگونه در سال‌های اخیر در ایران رشد کرد و چه کارکردی یافت؟ 
+
+میهمان‌ها:
+نغمه سهرابی، استاد تاریخ خاورمیانه
+اسفندیار طبری، مدرس فلسفه سیاسی
+
 @BBCPersian
-27.8K
-07:38 PM</div>
-        <div class="media">
-<video controls><source src="media/285123_Untitled.mp4"></video></div><a href="https://t.me/bbcpersian/285123" target="_blank">مشاهده در تلگرام</a></div>
+21.2K
+02:20 PM
+        </div>
 
-    <div class="post">
-        <div class="date">#8 | </div>
-        <div class="text">رئیس‌جمهور موقت ونزوئلا می‌گوید که تاکنون مرگ ۵۸۹ نفر در دو زلزله مهیب روز چهارشنبه در این کشور تایید شده است؛ یعنی بیش از دو برابر برآوردهای اولیه. دلسی رودریگز همچنین آمار مجروحان را ۲۹۸۰ نفر اعلام کرد. در همین حال عملیات جستجو برای یافتن بازماندگان احتمالی ادامه دارد.
+        <div class="media-container">
+            
+                <div class="no-media">
+                    <i class="far fa-image"></i> بدون رسانه
+                </div>
+            
+        </div>
 
-خانم رودریگز گفت که تاکنون ۲۱۴ پس‌لرزه رخ داده و برای تسهیل فعلایت امداد و نجات، در ایالت لا گوایرا شرایط «نظامی» برقرار شده است. لا گوایرا یکی از مناطقی است که بیشترین آسیب را از این دو زلزله دیده است.
-ادامه از:
-https://bbc.in/4xNvldm
+        
+        <a href="https://t.me/bbcpersian/285212" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="Forwarded from
+MJ
+
+تازه‌ترین خبرهای جهان، شنبه ۶ تیر ۱۴۰۵
+
+4:43
+•
+رادیو بی‌بی‌سی
+تازه‌ترین خبرهای جهان، شنبه ۶ تیر ۱۴۰۵
+22.6K
+02:06 PM" style="animation-delay: 0.30000000000000004s;">
+        <div class="post-header">
+            <span class="post-number">#7</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="Forwarded from
+MJ
+
+تازه‌ترین خبرهای جهان، شنبه ۶ تیر ۱۴۰۵
+
+4:43
+•
+رادیو بی‌بی‌سی
+تازه‌ترین خبرهای جهان، شنبه ۶ تیر ۱۴۰۵
+22.6K
+02:06 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            Forwarded from
+MJ
+
+تازه‌ترین خبرهای جهان، شنبه ۶ تیر ۱۴۰۵
+
+4:43
+•
+رادیو بی‌بی‌سی
+تازه‌ترین خبرهای جهان، شنبه ۶ تیر ۱۴۰۵
+22.6K
+02:06 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <audio controls preload="metadata">
+                                <source src="media/285211_تازه_ترین_خبرهای_جهان،_شنبه_۶_تیر_۱۴۰۵.mp3">
+                            </audio>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285211" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="1:03
+سرخط خبرهای شنبه ۶ تیر ۱۴۰۵
+
+@BBCPersian
+26.9K
+01:37 PM" style="animation-delay: 0.35000000000000003s;">
+        <div class="post-header">
+            <span class="post-number">#8</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="1:03
+سرخط خبرهای شنبه ۶ تیر ۱۴۰۵
+
+@BBCPersian
+26.9K
+01:37 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            1:03
+سرخط خبرهای شنبه ۶ تیر ۱۴۰۵
+
+@BBCPersian
+26.9K
+01:37 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/285210_Untitled.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285210" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="طرح تازه وزیر کشور بریتانیا در مورد پناهندگان
+
+وزارت کشور بریتانیا می‌گوید که قصد دارد طی سال جاری میلادی مسیرهای جدید «امن و قانونی» برای ورود پناهندگان به این کشور معرفی کند.
+
+این وزارتخانه اعلام کرد که به نهادهایی مانند دانشگاه‌ها، گروه‌های اجتماعی و مشاغل اجازه می‌دهد تا از پناهندگانی که برای آمدن به بریتانیا درخواست داده‌اند، بر اساس الگویی مانند سیستم پناهندگی کانادا، حمایت کنند.
+
+اما حزب محافظه‌کار بریتانیا در واکنش گفته است تا زمانی که مهاجرت غیرقانونی متوقف نشود، نباید اجازه ورود افراد بیشتری که در صدد پناهندگی هستند به این کشور داده شود.
+
+https://bbc.in/4oVULBI
 @BBCPersian
 BBC News فارسی
 
-افزایش آمار رسمی کشته‌شدگان زمین‌لرزه‌های ونزوئلا به بیش از دو برابر برآورد اولیه
+طرح تازه وزیر کشور بریتانیا در مورد پناهندگان
 
-رئیس‌جمهور موقت ونزوئلا می‌گوید که تاکنون مرگ ۵۸۹ نفر در دو زلزله مهیب روز چهارشنبه در این کشور تایید شده است؛ یعنی بیش از دو برابر برآوردهای اولیه. دلسی رودریگز همچنین آ...
+وزارت کشور بریتانیا می‌گوید که قصد دارد طی سال جاری میلادی مسیرهای جدید «امن و قانونی» برای ورود پناهندگان به این کشور معرفی کند. این وزارتخانه اعلام کرد که به سازمان‌های...
 
 INSTANT VIEW
-37.1K
-06:37 PM</div>
-        <div class="media">
-<img src="media/285121_5908121940134661428.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285121" target="_blank">مشاهده در تلگرام</a></div>
+28.2K
+01:29 PM" style="animation-delay: 0.4s;">
+        <div class="post-header">
+            <span class="post-number">#9</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
 
-    <div class="post">
-        <div class="date">#9 | </div>
-        <div class="text">‌اسرائیل و لبنان با میانجیگری آمریکا، یک توافقنامه چارچوبی را امضا کردند.
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="طرح تازه وزیر کشور بریتانیا در مورد پناهندگان
 
-این توافق پس از چهار روز مذاکره میان سه کشور در واشنگتن حاصل شد.
+وزارت کشور بریتانیا می‌گوید که قصد دارد طی سال جاری میلادی مسیرهای جدید «امن و قانونی» برای ورود پناهندگان به این کشور معرفی کند.
 
-این در حالی است که علیرغم آتش‌بس،تبادل آتش بین ارتش اسرائیل و حزب‌الله در جنوب لبنان ادامه دارد.
+این وزارتخانه اعلام کرد که به نهادهایی مانند دانشگاه‌ها، گروه‌های اجتماعی و مشاغل اجازه می‌دهد تا از پناهندگانی که برای آمدن به بریتانیا درخواست داده‌اند، بر اساس الگویی مانند سیستم پناهندگی کانادا، حمایت کنند.
 
-یک مقام ارشد اسرائیلی به رسانه‌های اسرائیلی گفته است که هدف از امضای این چهارچوب، هموار کردن راه برای توافق‌های آینده و در نهایت پایان دادن به درگیری بین دو کشور است.
+اما حزب محافظه‌کار بریتانیا در واکنش گفته است تا زمانی که مهاجرت غیرقانونی متوقف نشود، نباید اجازه ورود افراد بیشتری که در صدد پناهندگی هستند به این کشور داده شود.
 
-حزب‌الله از مخالفان اصلی توافق بین اسرائيل و لبنان است.
-
-صبح امروز نعیم قاسم، رهبر حزب‌الله لبنان، گفت که اسرائیل «هیچ گزینه‌ای» جز خروج بدون قید و شرط از لبنان ندارد.
-
-او هم‌زمان هرگونه عادی‌سازی روابط میان دو کشور را رد کرد.
-
-علاءالدین بروجردی، عضو کمیسیون امنیت ملی مجلس ایران نیز، تاکید کرد که «حمایت از لبنان و محور مقاومت (از جمله حزب‌الله، حشد الشعبی و گروه‌های مقاومت در فلسطین و یمن) یک اولویت بنیادین است.»
-
-او در صورت ادامه حملات به مواضع حزب‌الله در جنوب لبنان، تلویحا اسرائيل را تهدید به حمله بازدارنده کرد.
-AFP via Getty
+https://bbc.in/4oVULBI
 @BBCPersian
-33.6K
-06:32 PM</div>
-        <div class="media">
-<img src="media/285120_5906539184556543575.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285120" target="_blank">مشاهده در تلگرام</a></div>
+BBC News فارسی
 
-    <div class="post">
-        <div class="date">#10 | </div>
-        <div class="text">0:29
-0:37
-از آنچه از تصاویر شبکه‌های اجتماعی و نظرات کاربران برمی‌آید، به نظر می‌رسد که حال و هوای دهه اول محرم امسال در ایران با سال‌های گذشته متفاوت بوده است.
+طرح تازه وزیر کشور بریتانیا در مورد پناهندگان
 
-هیئت‌های عزاداری در کوچه‌‌ها و خیابان‌های شهرهای مختلف دیده می‌شد و دسته‌های سینه‌زنی از این سو به آن‌سو می‌رفتند. اما بسیاری از مراسمی که برگزار شد متاثر از وقایعی بوده‌اند که ایرانیان در ماه‌های اخیر از سر گذراندند.
-32K
-06:03 PM</div>
-        <div class="media">
-<img src="media/285110_5906539184556543557.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543556.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543554.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543555.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543553.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543551.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543550.jpg" loading="lazy" alt="media"><img src="media/285110_5906539184556543552.jpg" loading="lazy" alt="media"><video controls><source src="media/285110_Copy of Copy of Copy of Portrait Insta Post (1).mp4"></video><video controls><source src="media/285110_Copy of Copy of Copy of Portrait Insta Post.mp4"></video></div><a href="https://t.me/bbcpersian/285110" target="_blank">مشاهده در تلگرام</a></div>
+وزارت کشور بریتانیا می‌گوید که قصد دارد طی سال جاری میلادی مسیرهای جدید «امن و قانونی» برای ورود پناهندگان به این کشور معرفی کند. این وزارتخانه اعلام کرد که به سازمان‌های...
 
-    <div class="post">
-        <div class="date">#11 | </div>
-        <div class="text">2:12
-تیم ملی فوتبال مصر برای اولین بار در تاریخ خود، در آستانه صعود به دور دوم مسابقات جام جهانی قرار گرفته است و صبح فردا در شهر سیاتل آمریکا به مصاف تیم ملی ایران خواهد رفت.
+INSTANT VIEW
+28.2K
+01:29 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            طرح تازه وزیر کشور بریتانیا در مورد پناهندگان
 
-گزارش عطیه نبیل در مورد این تیم و بیم و امید طرف‌داران آن را بشنوید.
+وزارت کشور بریتانیا می‌گوید که قصد دارد طی سال جاری میلادی مسیرهای جدید «امن و قانونی» برای ورود پناهندگان به این کشور معرفی کند.
 
-@bbcpersian
-34.5K
-05:47 PM</div>
-        <div class="media">
-<a href="media/285109_IMG_2115.M4V">📎 285109_IMG_2115.M4V</a></div><a href="https://t.me/bbcpersian/285109" target="_blank">مشاهده در تلگرام</a></div>
+این وزارتخانه اعلام کرد که به نهادهایی مانند دانشگاه‌ها، گروه‌های اجتماعی و مشاغل اجازه می‌دهد تا از پناهندگانی که برای آمدن به بریتانیا درخواست داده‌اند، بر اساس الگویی مانند سیستم پناهندگی کانادا، حمایت کنند.
 
-    <div class="post">
-        <div class="date">#12 | </div>
-        <div class="text">_پادکست_برنامه_جام_جهان_نما،_جمعه_۵_تیر_۱۴۰۵.mp3
+اما حزب محافظه‌کار بریتانیا در واکنش گفته است تا زمانی که مهاجرت غیرقانونی متوقف نشود، نباید اجازه ورود افراد بیشتری که در صدد پناهندگی هستند به این کشور داده شود.
 
-29:25
-پادکست برنامه جام‌ جهان‌نما، جمعه ۵ تیر ۱۴۰۵
-در این برنامه:
-تنگه هرمز همچنان در کانون تنش‌هاست. تهران درباره عبور کشتی‌ها هشدار داده و دونالد ترامپ ایران را به نقض آتش‌بس با حمله پهپادی به یک کشتی متهم کرده است. همزمان، مدیرکل آژانس بین‌المللی انرژی اتمی از ضرورت برقراری نظامی مؤثر برای راستی‌آزمایی برنامه هسته‌ای ایران سخن گفته است.
-و در پایان، از سیاتل آخرین خبرها از اردوی تیم ملی ایران را در آستانه آخرین دیدار مرحله گروهی جام جهانی خواهیم شنید.
-35.4K
-05:25 PM</div>
-        <div class="media">
-<audio controls><source src="media/285108__پادکست_برنامه_جام_جهان_نما،_جمعه_۵_تیر_۱۴۰۵.mp3"></audio></div><a href="https://t.me/bbcpersian/285108" target="_blank">مشاهده در تلگرام</a></div>
-
-    <div class="post">
-        <div class="date">#13 | </div>
-        <div class="text">...
-در جام جهانی ۲۰۶، در جریان نشست خبری قبل از بازی ایران و مصر که به نام «پراید مچ» نامگذاری شده، یک خوکچه هندی به نام تام پیش‌بینی کرد که تیم ایران برنده این بازی خواهد بود.
-
-تام، با برداشتن یک تکه فلفل دلمه قرمز از ظرفی که در سمت تیم ایران در ماکت زمین فوتبال گذاشته شده بود این پیش‌بینی را انجام داد و آن تکه فلفل دلمه را هم میل نمود.
-
-حالا باید دید چقدر می‌توان روی پیشگویی‌های تام حساب باز کرد.
-
-به نظر شما پیشگویی تام درست از آب در می‌آید؟ بازی با چه نتیجه‌ای تمام خواهد شد؟
+https://bbc.in/4oVULBI
 @BBCPersian
-35.4K
-05:24 PM</div>
-        <div class="media">
-<video controls><source src="media/285107_Tom Low.mp4"></video></div><a href="https://t.me/bbcpersian/285107" target="_blank">مشاهده در تلگرام</a></div>
+BBC News فارسی
 
-    <div class="post">
-        <div class="date">#14 | </div>
-        <div class="text">‌دونالد ترامپ با اشاره به حمله روز جمعه به یک کشتی باری در تنگه هرمز، ایران را به نقض آتش‌بس متهم کرد.
+طرح تازه وزیر کشور بریتانیا در مورد پناهندگان
 
-رئیس‌جمهور آمریکا در پستی در شبکه اجتماعی تروث سوشال، ایران را مسئول این حمله دانست و نوشت: «جمهوری اسلامی ایران دست‌کم چهار پهپاد انتحاری را به سمت کشتی‌هایی که از تنگه هرمز عبور می‌کردند، شلیک کرد.»
+وزارت کشور بریتانیا می‌گوید که قصد دارد طی سال جاری میلادی مسیرهای جدید «امن و قانونی» برای ورود پناهندگان به این کشور معرفی کند. این وزارتخانه اعلام کرد که به سازمان‌های...
 
-در ادامه پست آقای ترامپ آمده است که یکی از پهپادها «به عرشه بالایی یک کشتی باری بزرگ و بسیار گران‌قیمت برخورد کرد. خسارت وارد شد ولی کشتی توانست به مسیر خود ادامه دهد.»
+INSTANT VIEW
+28.2K
+01:29 PM
+        </div>
 
-او همچنین نوشت که آمریکا «سه پهپاد دیگر را سرنگون کرده است.»
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285209_5910319009180093893.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285209_5910319009180093893.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
 
-رئیس‌جمهور آمریکا در پایان نوشت: «بدیهی است که این یک نقض احمقانه توافق آتش‌بس ماست.»
+        
+        <a href="https://t.me/bbcpersian/285209" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
 
-پیش از این هم مقام‌های آمریکایی به رسانه‌های گفته بودند که ایران مسئول این حمله بوده است اما تهران هنوز واکنشی رسمی به این اتهام نشان نداده‌ است.
-EPA
+        
+    </div>
+    
+    
+    <div class="post" data-text="مدیرعامل شرکت شهر فرودگاهی امام خمینی از برقراری دوباره پروازهای میان ایران و امارات تا پایان هفته جاری خبر داد و گفت: ایرلاین‌های داخلی مقدمات راه‌اندازی مجدد مسیر دوبی را فراهم کرده‌اند.
+
+رامین کاشف‌آذر گفته است که مذاکرات با چند شرکت هواپیمایی خارجی هم در جریان است و انتظار می‌رود پرواز ایرلاین‌های خارجی، به‌ویژه شرکت‌های کشورهای همسایه، به‌زودی از‌سر‌گرفته شود.
+
+او همچنین گفت که شرکت هواپیمایی لوفت‌هانزا برای شروع پروازهایش به ایران اعلام آمادگی کرده است اما از آن جایی که «وقتی یک مسیر پروازی لغو می‌شود؛ شرکت‌ها وارد سایر مسیر پروازی جایگزین می‌شوند و برای سایر مسیرهای پروازی برنامه‌ریزی و پروازها را برای مدتی ذخیره می‌کنند، بنابراین برگشت به مسیر پروازی زمان‌بر است.»
+
+به گفته آقای کاشف‌آذر برقراری مجدد پروازهای لوفت‌هانزا از شرکت‌های زیر مجموعه این شرکت، از جمله شرکت اتریشی، آغاز می‌شود.
+
+AFP via Getty Images
+https://bbc.in/4aIEpXh
 @BBCPersian
-35.9K
-05:01 PM</div>
-        <div class="media">
-<img src="media/285106_5906539184556543497.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285106" target="_blank">مشاهده در تلگرام</a></div>
+26.8K
+01:26 PM" style="animation-delay: 0.45s;">
+        <div class="post-header">
+            <span class="post-number">#10</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
 
-    <div class="post">
-        <div class="date">#15 | </div>
-        <div class="text">امام جمعه موقت تهران: اجتماعات شبانه نباید زمینه حضور وحدت‌شکنان باشد
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="مدیرعامل شرکت شهر فرودگاهی امام خمینی از برقراری دوباره پروازهای میان ایران و امارات تا پایان هفته جاری خبر داد و گفت: ایرلاین‌های داخلی مقدمات راه‌اندازی مجدد مسیر دوبی را فراهم کرده‌اند.
 
-امام جمعه موقت تهران در خطبه‌های نماز جمعه در پایتخت گفته است «اجتماعات شبانه هرگز نباید زمینه حضور وحدت‌شکنان باشد.»
+رامین کاشف‌آذر گفته است که مذاکرات با چند شرکت هواپیمایی خارجی هم در جریان است و انتظار می‌رود پرواز ایرلاین‌های خارجی، به‌ویژه شرکت‌های کشورهای همسایه، به‌زودی از‌سر‌گرفته شود.
 
-محمدجواد حاج‌علی‌اکبری گفته است «چه اختلافات موجه و چه اختلافات غیرموجه، باید کنار گذاشته شود.»
+او همچنین گفت که شرکت هواپیمایی لوفت‌هانزا برای شروع پروازهایش به ایران اعلام آمادگی کرده است اما از آن جایی که «وقتی یک مسیر پروازی لغو می‌شود؛ شرکت‌ها وارد سایر مسیر پروازی جایگزین می‌شوند و برای سایر مسیرهای پروازی برنامه‌ریزی و پروازها را برای مدتی ذخیره می‌کنند، بنابراین برگشت به مسیر پروازی زمان‌بر است.»
 
-در تجمعات شبانه‌ای که حکومت ایران از زمان حمله هم‌زمان اسرائیل و آمریکا در شهرهای مختلف برپا کرده، گزارش های متعددی از انتقاد به تفاهم اخیر با آمریکا منتشر شده است.
+به گفته آقای کاشف‌آذر برقراری مجدد پروازهای لوفت‌هانزا از شرکت‌های زیر مجموعه این شرکت، از جمله شرکت اتریشی، آغاز می‌شود.
 
-امام جمعه موقت تهران گفته است « این تفاهم، یک تفاهم راهبردی نیست، این تفاهم از سوی طرف مقابل نیز تفاهمی لرزان و شکننده محسوب می‌شود و در آینده، هم صدق گفتار ما و هم بدعهدی آنان آشکار خواهد شد.»
+AFP via Getty Images
+https://bbc.in/4aIEpXh
+@BBCPersian
+26.8K
+01:26 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            مدیرعامل شرکت شهر فرودگاهی امام خمینی از برقراری دوباره پروازهای میان ایران و امارات تا پایان هفته جاری خبر داد و گفت: ایرلاین‌های داخلی مقدمات راه‌اندازی مجدد مسیر دوبی را فراهم کرده‌اند.
 
-شرکت‌کنندگان در تجمعات شبانه که عموما از طرفداران حکومت و رهبری جمهوری اسلامی ایران هستند، می‌گویند که مذاکره‌کنندگان بر خلاف خواسته رهبر کنونی، در حال توافق با آمریکا هستند.
+رامین کاشف‌آذر گفته است که مذاکرات با چند شرکت هواپیمایی خارجی هم در جریان است و انتظار می‌رود پرواز ایرلاین‌های خارجی، به‌ویژه شرکت‌های کشورهای همسایه، به‌زودی از‌سر‌گرفته شود.
 
-برخی از طرفداران حکومت گفته‌اند که در جریان مذاکرات با آمریکا، «خونخواهی» علی خامنه‌ای که روز اول جنگ در حمله اسرائیل و آمریکا کشته شد، کنار گذاشته شده است.
+او همچنین گفت که شرکت هواپیمایی لوفت‌هانزا برای شروع پروازهایش به ایران اعلام آمادگی کرده است اما از آن جایی که «وقتی یک مسیر پروازی لغو می‌شود؛ شرکت‌ها وارد سایر مسیر پروازی جایگزین می‌شوند و برای سایر مسیرهای پروازی برنامه‌ریزی و پروازها را برای مدتی ذخیره می‌کنند، بنابراین برگشت به مسیر پروازی زمان‌بر است.»
 
-https://bbc.in/4uT</div>
-        <div class="media">
-<img src="media/285105_5907629569378815364.jpg" loading="lazy" alt="media"></div><a href="https://t.me/bbcpersian/285105" target="_blank">مشاهده در تلگرام</a></div>
-</body></html>
+به گفته آقای کاشف‌آذر برقراری مجدد پروازهای لوفت‌هانزا از شرکت‌های زیر مجموعه این شرکت، از جمله شرکت اتریشی، آغاز می‌شود.
+
+AFP via Getty Images
+https://bbc.in/4aIEpXh
+@BBCPersian
+26.8K
+01:26 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285208_5909061047618834304.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285208_5909061047618834304.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285208" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <img id="lightbox-img" src="" alt="پیش‌نمایش">
+</div>
+
+<button id="backToTop" class="back-to-top" onclick="scrollToTop()" title="بازگشت به بالا">
+    <i class="fas fa-chevron-up"></i>
+</button>
+
+<div class="footer">
+    تولید شده توسط <strong>Telegram Channel Scraper</strong> &copy; 2026/06/27 - 19:52
+</div>
+
+<script>
+    function openLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+    function toggleTheme() {
+        const body = document.body;
+        const icon = document.getElementById('theme-icon');
+        body.classList.toggle('dark');
+        const isDark = body.classList.contains('dark');
+        icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+    (function () {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (saved === 'dark' || (!saved && prefersDark)) {
+            document.body.classList.add('dark');
+            document.getElementById('theme-icon').className = 'fas fa-sun';
+        }
+    })();
+
+    const backBtn = document.getElementById('backToTop');
+    window.addEventListener('scroll', () => {
+        backBtn.classList.toggle('visible', window.scrollY > 400);
+        const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const scrolled = (winScroll / height) * 100;
+        document.getElementById('progress-bar').style.width = scrolled + '%';
+    });
+    function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+    function copyText(btn) {
+        const text = btn.getAttribute('data-fulltext');
+        navigator.clipboard.writeText(text).then(() => {
+            btn.innerHTML = '<i class="fas fa-check"></i> کپی شد';
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> کپی'; }, 2000);
+        }).catch(() => alert('خطا در کپی متن'));
+    }
+
+    function filterPosts() {
+        const query = document.getElementById('searchInput').value.trim().toLowerCase();
+        const posts = document.querySelectorAll('.post');
+        
+        posts.forEach(post => {
+            const text = post.getAttribute('data-text').toLowerCase();
+            const shouldShow = !query || text.includes(query);
+            post.style.display = shouldShow ? '' : 'none';
+            
+            if (shouldShow && query) {
+                const bodyDiv = post.querySelector('.post-body');
+                if (bodyDiv) {
+                    let html = bodyDiv.innerHTML;
+                    // حذف کامل تگ‌های highlight قبلی
+                    html = html.replace(/<span class="highlight">|<\/span>/g, '');
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    bodyDiv.innerHTML = html.replace(regex, '<span class="highlight">$1</span>');
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
