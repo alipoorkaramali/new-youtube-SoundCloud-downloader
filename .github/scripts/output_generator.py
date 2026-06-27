@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from markupsafe import Markup
+from markupsafe import Markup      # ← اصلاح‌شده: import از markupsafe
 
 
 class OutputGenerator:
@@ -60,18 +60,22 @@ class OutputGenerator:
         self.logger.info(f"🌐 HTML: {html_path}")
 
     def _build_html_content(self, current_iran: str) -> str:
-        """ساخت HTML با استفاده از قالب Jinja2 موجود در templates/post_template.html"""
+        """ساخت HTML با استفاده از قالب Jinja2 (post_template.html)"""
 
-        # مسیر پوشهٔ templates در ریشهٔ مخزن:
-        # این اسکریپت در .github/scripts/output_generator.py قرار دارد
-        # بنابراین سه پوشه بالاتر به ریشه می‌رسیم
-        script_dir = Path(__file__).resolve().parent         # .github/scripts/
-        repo_root = script_dir.parent.parent                 # ریشهٔ مخزن
+        # ─── مسیر پوشهٔ templates نسبت به محل این اسکریپت ───
+        script_dir = Path(__file__).resolve().parent
+        # اگر اسکریپت در پوشه‌ای به نام "scripts" باشد (مثل .github/scripts)
+        # دو سطح بالا می‌رویم، در غیر این صورت یک سطح بالا (ریشهٔ پروژه)
+        if script_dir.name == "scripts":
+            repo_root = script_dir.parent.parent
+        else:
+            repo_root = script_dir.parent
+
         template_dir = repo_root / "templates"
 
         if not template_dir.exists():
             raise FileNotFoundError(
-                f"پوشهٔ templates یافت نشد: {template_dir}\n"
+                f"پوشهٔ templates پیدا نشد: {template_dir}\n"
                 "لطفاً فایل post_template.html را در مسیر <ریشه>/templates/ قرار دهید."
             )
 
@@ -80,7 +84,7 @@ class OutputGenerator:
             autoescape=select_autoescape(['html', 'xml'])
         )
 
-        # فیلتر سفارشی برای تبدیل هشتگ‌ها به span
+        # فیلتر سفارشی برای تبدیل هشتگ‌ها
         def hashtagify(text):
             return Markup(re.sub(r'(#\w+)', r'<span class="hashtag">\1</span>', str(text)))
 
@@ -99,10 +103,12 @@ class OutputGenerator:
         zip_name = f"{self.channel}_archive.zip"
         zip_path = self.base_dir / zip_name
 
+        # ─── ۱. حذف فایل‌های ZIP قبلی برای این کانال ───
         for f in os.listdir(self.base_dir):
             if f.startswith(f"{self.channel}_archive") and (f.endswith('.zip') or '.z' in f):
                 (self.base_dir / f).unlink(missing_ok=True)
 
+        # ─── ۲. ایجاد فایل ZIP موقت ───
         temp_zip = self.base_dir / "temp_archive.zip"
         with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, _, files in os.walk(self.base_dir):
@@ -113,12 +119,14 @@ class OutputGenerator:
                     arcname = os.path.relpath(file_path, self.base_dir)
                     zipf.write(file_path, arcname)
 
+        # ─── ۳. بررسی حجم فایل ZIP ───
         size_mb = os.path.getsize(temp_zip) / (1024 * 1024)
         self.logger.info(f"📦 حجم فایل ZIP: {size_mb:.1f} MB")
 
         MAX_SPLIT_MB = 30
 
         if size_mb > MAX_SPLIT_MB:
+            # ─── ۴. تقسیم فایل ZIP به قطعات ۳۰ مگابایتی ───
             self.logger.info(f"📦 تقسیم فایل ZIP به قطعات {MAX_SPLIT_MB} مگابایتی...")
             try:
                 cmd = [
@@ -128,8 +136,11 @@ class OutputGenerator:
                     "--out", str(zip_path)
                 ]
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+                # حذف فایل موقت
                 os.remove(temp_zip)
 
+                # لیست قطعات تولیدشده
                 parts = sorted([f for f in os.listdir(self.base_dir) if f.startswith(f"{self.channel}_archive")])
                 self.logger.info(f"✅ فایل ZIP به {len(parts)} قطعه تقسیم شد:")
                 for p in parts:
@@ -145,13 +156,16 @@ class OutputGenerator:
                 self.logger.error("❌ دستور 'zip' پیدا نشد. لطفاً zip را نصب کنید (apt install zip).")
                 os.rename(temp_zip, zip_path)
                 self.logger.info(f"⚠️ فایل کامل ZIP (بدون تقسیم) ذخیره شد: {zip_name}")
+
         else:
+            # ─── حجم کمتر از ۳۰ مگابایت – فقط تغییر نام فایل موقت ───
             os.rename(temp_zip, zip_path)
             self.logger.info(f"ℹ️ حجم ZIP کمتر از {MAX_SPLIT_MB}MB است – تقسیم نیاز نیست")
             self.logger.info(f"✅ فایل ZIP آماده شد: {zip_name}")
 
     # ═══════════════════ اجرای همهٔ مراحل ═══════════════════
     def run_all(self):
+        """تولید تمام خروجی‌ها (JSON، CSV، HTML، ZIP)"""
         self.generate_json()
         self.generate_csv()
         self.generate_html()
