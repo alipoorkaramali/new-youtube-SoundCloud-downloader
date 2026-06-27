@@ -162,13 +162,15 @@
         }
         .media-item:hover img { transform: scale(1.02); }
         .media-item audio {
-            width: 100%;
-            max-width: 100%;
-            margin: 8px 0;
-            display: block;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 12px 0;
+            display: block !important;
             border-radius: 8px;
             background: var(--card-bg);
-            padding: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            border: 1px solid var(--border);
         }
         .media-item .file-link {
             display: inline-flex; align-items: center; gap: 8px;
@@ -288,10 +290,15 @@
                                 <source src="{{ m }}">
                                 مرورگر شما از ویدئو پشتیبانی نمی‌کند.
                             </video>
-                        {% elif ext in ['mp3','ogg','wav','m4a','opus','aac','flac','weba','oga','wma','mka','aiff','pcm','ra','rm','3gp'] %}
-                            <audio controls preload="metadata" style="width: 100%;">
+                        {% elif ext in ['mp3','ogg','wav','m4a','opus','aac','flac','weba','oga','wma','mka','aiff','pcm','ra','rm','3gp'] or 'voice' in m.lower() or 'audio' in m.lower() %}
+                            <audio controls preload="metadata" style="width: 100% !important;">
                                 <source src="{{ m }}">
-                                مرورگر شما از پخش صدا پشتیبانی نمی‌کند.
+                                <div style="padding: 12px; background: #f8f9fa; border-radius: 8px; text-align: center; color: #666; font-size: 14px;">
+                                    <i class="fas fa-download"></i><br>
+                                    <a href="{{ m }}" download style="color: var(--primary); text-decoration: none;">
+                                        دانلود فایل صوتی
+                                    </a>
+                                </div>
                             </audio>
                         {% else %}
                             <a href="{{ m }}" download class="file-link">
