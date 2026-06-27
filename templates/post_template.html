@@ -138,12 +138,22 @@
             font-family: 'Vazirmatn';
         }
         .copy-btn:hover { background: var(--primary-dark); }
-        .media-container { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 18px 0; }
+        .media-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            justify-content: center;
+            margin: 18px 0;
+        }
         .media-item {
-            background: var(--bg); border-radius: 12px; padding: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06); max-width: 100%;
-            text-align: center; transition: transform 0.3s, box-shadow 0.3s;
-            cursor: pointer; position: relative; overflow: hidden;
+            background: var(--bg);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+            text-align: center;
+            transition: all 0.3s;
+            border: 1px solid var(--border);
         }
         .media-item:hover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
         .media-item img, .media-item video {
@@ -154,10 +164,10 @@
         .media-item audio {
             width: 100%;
             max-width: 100%;
-            margin: 12px 0;
+            margin: 8px 0;
             display: block;
             border-radius: 8px;
-            background: var(--bg);
+            background: var(--card-bg);
             padding: 8px;
         }
         .media-item .file-link {
@@ -279,8 +289,9 @@
                                 مرورگر شما از ویدئو پشتیبانی نمی‌کند.
                             </video>
                         {% elif ext in ['mp3','ogg','wav','m4a','opus','aac','flac','weba','oga','wma','mka','aiff','pcm','ra','rm','3gp'] %}
-                            <audio controls preload="metadata">
+                            <audio controls preload="metadata" style="width: 100%;">
                                 <source src="{{ m }}">
+                                مرورگر شما از پخش صدا پشتیبانی نمی‌کند.
                             </audio>
                         {% else %}
                             <a href="{{ m }}" download class="file-link">
