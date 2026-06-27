@@ -4,77 +4,1540 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@IranintlTV - آرشیو تلگرام</title>
+
+    <!-- فونت وزیرمتن -->
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
     <style>
-        body { font-family: Tahoma, sans-serif; background: #f5f5f5; direction: rtl; padding: 20px; }
-        .post { background: white; margin: 15px; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .date { color: #666; font-size: 14px; }
-        .text { margin: 10px 0; font-size: 16px; line-height: 2; }
-        .media { display: flex; flex-wrap: wrap; gap: 10px; }
-        .media img, .media video { max-width: 100%; max-height: 300px; border-radius: 5px; }
-        h1 { text-align: center; color: #2a6df4; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --text: #1c1e21;
+            --text-secondary: #65676b;
+            --primary: #2a6df4;
+            --primary-dark: #1e4fcf;
+            --border: #e4e6eb;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.12);
+            --glass: rgba(255, 255, 255, 0.75);
+            --tag-bg: #e7f0ff;
+            --tag-text: #1e4fcf;
+            --footer-bg: #ffffff;
+            --lightbox-bg: rgba(0, 0, 0, 0.9);
+            --highlight-bg: #ffeb3b;
+            --highlight-text: #000;
+        }
+
+        .dark {
+            --bg: #18191a;
+            --card-bg: #242526;
+            --text: #e4e6eb;
+            --text-secondary: #b0b3b8;
+            --primary: #4d8bf7;
+            --primary-dark: #2a6df4;
+            --border: #3e4042;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.5);
+            --glass: rgba(36, 37, 38, 0.8);
+            --tag-bg: #1e3a5f;
+            --tag-text: #8ab4f8;
+            --footer-bg: #242526;
+            --lightbox-bg: rgba(0, 0, 0, 0.95);
+            --highlight-bg: #f9a825;
+            --highlight-text: #000;
+        }
+
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            direction: rtl;
+            line-height: 1.8;
+            transition: background 0.3s, color 0.3s;
+            min-height: 100vh;
+            padding-bottom: 60px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* پس‌زمینه متحرک */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.15;
+            background: linear-gradient(45deg, #2a6df4, #8b5cf6, #ec4899, #f59e0b);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* نوار پیشرفت اسکرول */
+        #progress-bar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(to left, var(--primary), #8b5cf6);
+            width: 0%;
+            z-index: 10000;
+            transition: width 0.1s ease;
+            border-radius: 0 0 4px 0;
+        }
+
+        /* اسکرول‌بار سفارشی */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
+
+        /* Header */
+        .header {
+            position: sticky;
+            top: 20px;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 25px 30px;
+            margin: 20px auto;
+            max-width: 880px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .header:hover {
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 5px;
+        }
+
+        .header .stats {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            flex-wrap: wrap;
+            margin: 12px 0 0;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .header .stats i {
+            margin-left: 5px;
+            color: var(--primary);
+        }
+
+        .theme-toggle {
+            position: absolute;
+            left: 25px;
+            top: 28px;
+            cursor: pointer;
+            font-size: 20px;
+            color: var(--text-secondary);
+            transition: color 0.3s, transform 0.3s;
+            background: none;
+            border: none;
+        }
+
+        .theme-toggle:hover {
+            color: var(--primary);
+            transform: rotate(30deg) scale(1.1);
+        }
+
+        /* جعبه جستجو */
+        .search-box {
+            margin: 15px auto 0;
+            max-width: 400px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 45px 12px 15px;
+            border-radius: 30px;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text);
+            font-family: 'Vazirmatn', sans-serif;
+            font-size: 14px;
+            transition: 0.3s;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(42, 109, 244, 0.2);
+        }
+
+        .search-box i {
+            position: absolute;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        /* Container */
+        .container {
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        /* Post cards */
+        .post {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 22px;
+            box-shadow: var(--shadow);
+            border-right: 4px solid var(--primary);
+            transition: all 0.3s ease;
+            animation: fadeInUp 0.5s ease forwards;
+            opacity: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .post:hover {
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-3px);
+        }
+
+        .post::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--primary), #8b5cf6);
+            border-radius: 0 16px 16px 0;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .post-number {
+            background: var(--primary);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .post-date {
+            color: var(--text-secondary);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .post-body {
+            font-size: 16px;
+            line-height: 2.2;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-bottom: 16px;
+            position: relative;
+        }
+
+        /* هشتگ‌ها */
+        .hashtag {
+            display: inline-block;
+            color: var(--tag-text);
+            background: var(--tag-bg);
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 13px;
+            margin: 2px 4px;
+            transition: all 0.2s;
+        }
+
+        .hashtag:hover {
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+        }
+
+        /* دکمه کپی */
+        .copy-btn {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-family: 'Vazirmatn';
+        }
+
+        .copy-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        /* رسانه‌ها */
+        .media-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            justify-content: center;
+            margin: 18px 0;
+        }
+
+        .media-item {
+            background: var(--bg);
+            border-radius: 12px;
+            padding: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            max-width: 100%;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .media-item:hover {
+            transform: scale(1.03);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .media-item img,
+        .media-item video {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+            display: block;
+            transition: transform 0.3s;
+        }
+
+        .media-item:hover img {
+            transform: scale(1.02);
+        }
+
+        .media-item audio {
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .media-item .file-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--primary);
+            color: white !important;
+            padding: 10px 18px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background 0.3s, transform 0.3s;
+        }
+
+        .media-item .file-link:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .no-media {
+            color: var(--text-secondary);
+            font-size: 14px;
+            padding: 14px;
+            background: var(--bg);
+            border-radius: 10px;
+            text-align: center;
+            width: 100%;
+        }
+
+        .post-url {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 16px;
+            background: var(--primary);
+            color: white !important;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .post-url:hover {
+            background: var(--primary-dark);
+            transform: translateX(-4px);
+            box-shadow: 0 4px 15px rgba(42, 109, 244, 0.3);
+        }
+
+        /* متادیتا (بازدید، فوروارد) */
+        .extra-meta {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Lightbox */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--lightbox-bg);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            cursor: pointer;
+        }
+
+        .lightbox.active {
+            display: flex;
+        }
+
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 80vh;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            animation: zoomIn 0.3s ease;
+        }
+
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            left: 30px;
+            color: white;
+            font-size: 36px;
+            cursor: pointer;
+            transition: transform 0.3s;
+            z-index: 10000;
+        }
+
+        .lightbox-close:hover {
+            transform: rotate(90deg);
+        }
+
+        /* دکمه بازگشت به بالا */
+        .back-to-top {
+            position: fixed;
+            bottom: 25px;
+            left: 25px;
+            background: var(--primary);
+            color: white;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(42, 109, 244, 0.4);
+            transition: all 0.3s;
+            opacity: 0;
+            visibility: hidden;
+            z-index: 999;
+            border: none;
+        }
+
+        .back-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(42, 109, 244, 0.5);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            border-top: 1px solid var(--border);
+            background: var(--footer-bg);
+        }
+
+        /* هایلایت جستجو */
+        .highlight {
+            background-color: var(--highlight-bg);
+            color: var(--highlight-text);
+            font-weight: bold;
+            border-radius: 3px;
+            padding: 0 2px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                margin: 10px;
+                padding: 18px 15px;
+                border-radius: 14px;
+            }
+            .header h1 { font-size: 22px; }
+            .post {
+                padding: 16px;
+                margin-bottom: 16px;
+                border-radius: 12px;
+            }
+            .media-item img,
+            .media-item video {
+                max-height: 280px;
+            }
+            .theme-toggle {
+                left: 15px;
+                top: 20px;
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 <body>
+<!-- پس‌زمینه متحرک -->
+<div class="bg-animation"></div>
+<!-- نوار پیشرفت -->
+<div id="progress-bar"></div>
+
+<!-- Header -->
+<div class="header">
+    <button class="theme-toggle" onclick="toggleTheme()" title="تغییر حالت تاریک/روشن">
+        <i id="theme-icon" class="fas fa-moon"></i>
+    </button>
     <h1>@IranintlTV</h1>
-    <p style="text-align:center;">5 پست | آخرین بروزرسانی: 2026/06/27 - 00:27</p>
+    <div class="stats">
+        <span><i class="fas fa-file-alt"></i> 15 پست</span>
+        <span><i class="fas fa-clock"></i> بروزرسانی: 2026/06/27 - 14:00</span>
+    </div>
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="جستجو در پست‌ها..." oninput="filterPosts()">
+    </div>
+</div>
 
-    <div class="post">
-        <div class="date">#1 | </div>
-        <div class="text">فرماندهی مرکزی ایالات متحده (سنتکام) اعلام کرد که در تاریخ ۲۶ ژوئن، ششم تیر، نیروهای این فرماندهی «در واکنشی قدرتمند به حمله روز گذشته به یک کشتی تجاری که در حال عبور از تنگه هرمز بود، علیه ایران حملاتی انجام دادند.»
+<div class="container" id="postsContainer">
 
-در بیانیه سنتکام آمده است: «پس از آنکه ایران در ۲۵ ژوئن (پنجم تیر) کشتی اِم/وی اور لاولی را با یک پهپاد انتحاری هدف قرار داد، هواپیماهای آمریکایی محل‌های ذخیره موشک‌ها و پهپادهای ایران و همچنین سایت‌های راداری ساحلی را هدف قرار دادند. این کشتی باری با پرچم سنگاپور در زمان حمله ایران در حال خروج از تنگه هرمز و حرکت در امتداد سواحل عمان بود.»
+    
+    
+    <div class="post" data-text="3:55
+چندین روز پس از آغاز آتش‌سوزی گسترده در جنگل‌ها و مراتع زاگرس، شعله‌های آتش همچنان بخش‌هایی از این منطقه را در بر گرفته و در حال گسترش است.
 
-سنتکام افزود: «این اقدام تجاوزکارانه غیرموجه علیه کشتیرانی تجاری توسط نیروهای ایرانی به‌طور آشکار آتش‌بس را نقض کرد. علاوه بر این، رفتار خطرناک ایران آزادی ناوبری را تضعیف می‌کند. این در حالی است که جریان تجارت به‌طور فزاینده‌ از این گذرگاه حیاتی بین‌المللی عبور می‌کند.»
-https://iranintl.com/202606264421
-13.5K
-08:47 PM</div>
-        <div class="media">
-<img src="media/344506_5907682453311131048.jpg" loading="lazy" alt="media"></div><a href="https://t.me/IranintlTV/344506" target="_blank">مشاهده در تلگرام</a></div>
-
-    <div class="post">
-        <div class="date">#2 | </div>
-        <div class="text">16:32
-تنش بر سر تنگه هرمز پس از حمله جمهوری اسلامی به یک کشتی باری وارد مرحله تازه‌ای شده است. دونالد ترامپ این اقدام را نقض آتش‌بس و «اقدامی احمقانه» توصیف کرد.
-
-در مقابل، معاون وزیر خارجه جمهوری اسلامی هشدار داد عبور ایمن کشتی‌ها بدون در نظر گرفتن ملاحظات ایران تضمین‌شده نیست.
-
-گفت‌وگو با علیرضا نامور حقیقی، تحلیل‌گر سیاسی، و فرزین ندیمی، پژوهشگر ارشد امور دفاعی و امنیتی
+آیه دریس، عضو تحریریه ایران‌اینترنشنال، از واکنش‌ها به این آتش‌سوزی گزارش می‌دهد
 @iranintltv
-13.4K
-08:46 PM</div>
-        <div class="media">
-<video controls><source src="media/344505_9857d62a-7236-44c8-8f11-05eab67e01c6_240p.mp4"></video></div><a href="https://t.me/IranintlTV/344505" target="_blank">مشاهده در تلگرام</a></div>
+8.3K
+10:10 AM" style="animation-delay: 0.0s;">
+        <div class="post-header">
+            <span class="post-number">#1</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
 
-    <div class="post">
-        <div class="date">#3 | </div>
-        <div class="text">به گزارش آکسیوس، ارتش ایالات متحده در منطقه تنگه هرمز حملاتی انجام داده است.
-بر اساس این گزارش، یک مقام آمریکایی اعلام کرد ارتش ایالات متحده اهدافی در ایران را در منطقه تنگه هرمز هدف قرار داده است.
-پیش‌تر رسانه‌های ایران از شنیده شدن صدای چند انفجار در سیریک خبر داده بودند.
-https://iranintl.com/202606260440
-20.7K
-08:41 PM</div>
-        <div class="media">
-<img src="media/344504_5908115330179993184.jpg" loading="lazy" alt="media"></div><a href="https://t.me/IranintlTV/344504" target="_blank">مشاهده در تلگرام</a></div>
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="3:55
+چندین روز پس از آغاز آتش‌سوزی گسترده در جنگل‌ها و مراتع زاگرس، شعله‌های آتش همچنان بخش‌هایی از این منطقه را در بر گرفته و در حال گسترش است.
 
-    <div class="post">
-        <div class="date">#4 | </div>
-        <div class="text">۲۴ با فرداد فرحزاد - ۵ تیر
+آیه دریس، عضو تحریریه ایران‌اینترنشنال، از واکنش‌ها به این آتش‌سوزی گزارش می‌دهد
+@iranintltv
+8.3K
+10:10 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            3:55
+چندین روز پس از آغاز آتش‌سوزی گسترده در جنگل‌ها و مراتع زاگرس، شعله‌های آتش همچنان بخش‌هایی از این منطقه را در بر گرفته و در حال گسترش است.
 
-43:58
-نسخه صوتی ۲۴ با فرداد فرحزاد: تهران آتش‌بس را احمقانه نقض کرده
-@iranintlTV
-23.9K
-08:35 PM</div>
-        <div class="media">
-<audio controls><source src="media/344503_۲۴ با فرداد فرحزاد - ۵ تیر.mp3"></audio></div><a href="https://t.me/IranintlTV/344503" target="_blank">مشاهده در تلگرام</a></div>
+آیه دریس، عضو تحریریه ایران‌اینترنشنال، از واکنش‌ها به این آتش‌سوزی گزارش می‌دهد
+@iranintltv
+8.3K
+10:10 AM
+        </div>
 
-    <div class="post">
-        <div class="date">#5 | </div>
-        <div class="text">1:08
-ویدیوی رسیده نشان می‌دهد گروهی از ایرانیان جمعه پنجم تیرماه مقابل محل اقامت اعضای تیم فوتبال ایران در سیاتل آمریکا تجمع کرده و علیه جمهوری اسلامی شعار می‌دهند.
-بازی فوتبال میان ایران و مصر بامداد شنبه ساعت ۶:۳۰ به وقت تهران در جام‌جهانی انجام خواهد شد.
-31.2K
-08:30 PM</div>
-        <div class="media">
-<video controls><source src="media/344502_Seattle V_1.mp4"></video></div><a href="https://t.me/IranintlTV/344502" target="_blank">مشاهده در تلگرام</a></div>
-</body></html>
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344613_dffa6782-5ee2-4e48-a79a-a53695371b1f_240p.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344613" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="6:22
+محمدجواد اکبرین، عضو تحریریه ایران‌اینترنشنال، گفت: «توافق با آمریکا چه به نتیجه برسد و چه نرسد، بازنده آن جمهوری اسلامی خواهد بود.» او افزود اگر این توافق به ثمر برسد، چیزی از شعارهای جمهوری اسلامی باقی نمی‌ماند و اگر هم توافق به نتیجه نرسد، جمهوری اسلامی بار دیگر جنگ را تجربه خواهد کرد.
+@iranintltv
+19.8K
+09:54 AM" style="animation-delay: 0.05s;">
+        <div class="post-header">
+            <span class="post-number">#2</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="6:22
+محمدجواد اکبرین، عضو تحریریه ایران‌اینترنشنال، گفت: «توافق با آمریکا چه به نتیجه برسد و چه نرسد، بازنده آن جمهوری اسلامی خواهد بود.» او افزود اگر این توافق به ثمر برسد، چیزی از شعارهای جمهوری اسلامی باقی نمی‌ماند و اگر هم توافق به نتیجه نرسد، جمهوری اسلامی بار دیگر جنگ را تجربه خواهد کرد.
+@iranintltv
+19.8K
+09:54 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            6:22
+محمدجواد اکبرین، عضو تحریریه ایران‌اینترنشنال، گفت: «توافق با آمریکا چه به نتیجه برسد و چه نرسد، بازنده آن جمهوری اسلامی خواهد بود.» او افزود اگر این توافق به ثمر برسد، چیزی از شعارهای جمهوری اسلامی باقی نمی‌ماند و اگر هم توافق به نتیجه نرسد، جمهوری اسلامی بار دیگر جنگ را تجربه خواهد کرد.
+@iranintltv
+19.8K
+09:54 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344612_71b7e2f7-15c5-428e-81a3-3437fb5ad245_240p.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344612" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="سازمان عملیات تجارت دریایی بریتانیا (یو‌کی‌ام‌تی‌او) شنبه ششم تیر اعلام کرد یک نفتکش هنگام عبور از تنگه هرمز هدف اصابت یک پرتابه ناشناس قرار گرفته است.
+
+بر اساس اعلام این سازمان، ناخدای نفتکش گزارش داد  که در پی این حادثه، اتاق فرمان کشتی آسیب دیده است، اما همه خدمه در سلامت هستند و تاکنون هیچ‌گونه آلودگی زیست‌محیطی گزارش نشده است.
+
+سازمان عملیات تجارت دریایی بریتانیا از کشتی‌ها خواست با احتیاط از تنگه هرمز عبور کنند و هرگونه فعالیت مشکوک را گزارش دهند. این سازمان افزود که تحقیقات درباره این حادثه ادامه دارد.
+https://iranintl.com/202606277706
+22.9K
+09:50 AM" style="animation-delay: 0.1s;">
+        <div class="post-header">
+            <span class="post-number">#3</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="سازمان عملیات تجارت دریایی بریتانیا (یو‌کی‌ام‌تی‌او) شنبه ششم تیر اعلام کرد یک نفتکش هنگام عبور از تنگه هرمز هدف اصابت یک پرتابه ناشناس قرار گرفته است.
+
+بر اساس اعلام این سازمان، ناخدای نفتکش گزارش داد  که در پی این حادثه، اتاق فرمان کشتی آسیب دیده است، اما همه خدمه در سلامت هستند و تاکنون هیچ‌گونه آلودگی زیست‌محیطی گزارش نشده است.
+
+سازمان عملیات تجارت دریایی بریتانیا از کشتی‌ها خواست با احتیاط از تنگه هرمز عبور کنند و هرگونه فعالیت مشکوک را گزارش دهند. این سازمان افزود که تحقیقات درباره این حادثه ادامه دارد.
+https://iranintl.com/202606277706
+22.9K
+09:50 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            سازمان عملیات تجارت دریایی بریتانیا (یو‌کی‌ام‌تی‌او) شنبه ششم تیر اعلام کرد یک نفتکش هنگام عبور از تنگه هرمز هدف اصابت یک پرتابه ناشناس قرار گرفته است.
+
+بر اساس اعلام این سازمان، ناخدای نفتکش گزارش داد  که در پی این حادثه، اتاق فرمان کشتی آسیب دیده است، اما همه خدمه در سلامت هستند و تاکنون هیچ‌گونه آلودگی زیست‌محیطی گزارش نشده است.
+
+سازمان عملیات تجارت دریایی بریتانیا از کشتی‌ها خواست با احتیاط از تنگه هرمز عبور کنند و هرگونه فعالیت مشکوک را گزارش دهند. این سازمان افزود که تحقیقات درباره این حادثه ادامه دارد.
+https://iranintl.com/202606277706
+22.9K
+09:50 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344611_5907812401841638923.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344611_5907812401841638923.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344611" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="1:15
+سرخط خبرهای شنبه ۶ تیر
+@iranintltv
+28.2K
+09:34 AM" style="animation-delay: 0.15000000000000002s;">
+        <div class="post-header">
+            <span class="post-number">#4</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="1:15
+سرخط خبرهای شنبه ۶ تیر
+@iranintltv
+28.2K
+09:34 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            1:15
+سرخط خبرهای شنبه ۶ تیر
+@iranintltv
+28.2K
+09:34 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344610_52a01ba9-536c-42da-87a6-4448dbe2b8ed_240p.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344610" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="...
+دیدار حساس و سرنوشت‌ساز تیم‌های فوتبال ایران و مصر در دور سوم مرحله گروهی جام جهانی ۲۰۲۶ با تساوی ۱-۱ به پایان رسید.
+
+احسان اکبری، ایران‌اینترنشنال، شانس تیم فوتبال ایران برای صعود به مرحله حذفی را بررسی می‌کند
+@iranintltv
+37.4K
+09:18 AM" style="animation-delay: 0.2s;">
+        <div class="post-header">
+            <span class="post-number">#5</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="...
+دیدار حساس و سرنوشت‌ساز تیم‌های فوتبال ایران و مصر در دور سوم مرحله گروهی جام جهانی ۲۰۲۶ با تساوی ۱-۱ به پایان رسید.
+
+احسان اکبری، ایران‌اینترنشنال، شانس تیم فوتبال ایران برای صعود به مرحله حذفی را بررسی می‌کند
+@iranintltv
+37.4K
+09:18 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            ...
+دیدار حساس و سرنوشت‌ساز تیم‌های فوتبال ایران و مصر در دور سوم مرحله گروهی جام جهانی ۲۰۲۶ با تساوی ۱-۱ به پایان رسید.
+
+احسان اکبری، ایران‌اینترنشنال، شانس تیم فوتبال ایران برای صعود به مرحله حذفی را بررسی می‌کند
+@iranintltv
+37.4K
+09:18 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344609_224c20e0-c400-4c51-85ce-2c6b30cce67a_240p.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344609" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="0:27
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد روز شنبه ششم تیرماه دانشجویان دانشگاه آزاد مقاطع کارشناسی ارشد و دکتری در تهران تجمع کرده و نسبت به حضوری شدن امتحانات خود اعتراض کردند.
+36.4K
+09:18 AM" style="animation-delay: 0.25s;">
+        <div class="post-header">
+            <span class="post-number">#6</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="0:27
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد روز شنبه ششم تیرماه دانشجویان دانشگاه آزاد مقاطع کارشناسی ارشد و دکتری در تهران تجمع کرده و نسبت به حضوری شدن امتحانات خود اعتراض کردند.
+36.4K
+09:18 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            0:27
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد روز شنبه ششم تیرماه دانشجویان دانشگاه آزاد مقاطع کارشناسی ارشد و دکتری در تهران تجمع کرده و نسبت به حضوری شدن امتحانات خود اعتراض کردند.
+36.4K
+09:18 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344608_Student protest.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344608" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="3:25
+آموزش خانگی دانش‌آموزان در ایران مجوز قانونی ندارد، اما به‌صورت غیررسمی و از مسیرهای مختلف در حال گسترش است.
+
+منصوره حسینی یگانه، عضو تحریریه ایران‌اینترنشنال، گفت مقاومت حکومت در برابر قانونی کردن آموزش خانگی دانش‌آموزان از آن‌جا ناشی می‌شود که جمهوری اسلامی همواره در پی دخالت در سبک زندگی شهروندان، از جمله کودکان، بوده است.
+@iranintltv
+33.3K
+09:14 AM" style="animation-delay: 0.30000000000000004s;">
+        <div class="post-header">
+            <span class="post-number">#7</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="3:25
+آموزش خانگی دانش‌آموزان در ایران مجوز قانونی ندارد، اما به‌صورت غیررسمی و از مسیرهای مختلف در حال گسترش است.
+
+منصوره حسینی یگانه، عضو تحریریه ایران‌اینترنشنال، گفت مقاومت حکومت در برابر قانونی کردن آموزش خانگی دانش‌آموزان از آن‌جا ناشی می‌شود که جمهوری اسلامی همواره در پی دخالت در سبک زندگی شهروندان، از جمله کودکان، بوده است.
+@iranintltv
+33.3K
+09:14 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            3:25
+آموزش خانگی دانش‌آموزان در ایران مجوز قانونی ندارد، اما به‌صورت غیررسمی و از مسیرهای مختلف در حال گسترش است.
+
+منصوره حسینی یگانه، عضو تحریریه ایران‌اینترنشنال، گفت مقاومت حکومت در برابر قانونی کردن آموزش خانگی دانش‌آموزان از آن‌جا ناشی می‌شود که جمهوری اسلامی همواره در پی دخالت در سبک زندگی شهروندان، از جمله کودکان، بوده است.
+@iranintltv
+33.3K
+09:14 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344607_dfb6b682-cfab-46d9-bbaf-3d7692c5f3a5_240p.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344607" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="1:18
+بنیامین نتانیاهو، توافق با لبنان را دستاوردی بزرگ خواند و آن را ضربه‌ای بزرگ به جمهوری اسلامی دانست.
+
+نتانیاهو گفت: «این توافق به اسرائیل اجازه می‌دهد تا زمان خلع سلاح حزب‌الله، حضور خود را در منطقه حائل در جنوب لبنان حفظ کند.»
+
+@iranintltv
+34.4K
+09:10 AM" style="animation-delay: 0.35000000000000003s;">
+        <div class="post-header">
+            <span class="post-number">#8</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="1:18
+بنیامین نتانیاهو، توافق با لبنان را دستاوردی بزرگ خواند و آن را ضربه‌ای بزرگ به جمهوری اسلامی دانست.
+
+نتانیاهو گفت: «این توافق به اسرائیل اجازه می‌دهد تا زمان خلع سلاح حزب‌الله، حضور خود را در منطقه حائل در جنوب لبنان حفظ کند.»
+
+@iranintltv
+34.4K
+09:10 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            1:18
+بنیامین نتانیاهو، توافق با لبنان را دستاوردی بزرگ خواند و آن را ضربه‌ای بزرگ به جمهوری اسلامی دانست.
+
+نتانیاهو گفت: «این توافق به اسرائیل اجازه می‌دهد تا زمان خلع سلاح حزب‌الله، حضور خود را در منطقه حائل در جنوب لبنان حفظ کند.»
+
+@iranintltv
+34.4K
+09:10 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344606_ssstwitter.com_1782551387294.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344606" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="وزارت خارجه بحرین در بیانیه‌ای اعلام کرد جمهوری اسلامی بامداد شنبه با چند پهپاد به خاک این کشور حمله کرده است. این وزارتخانه با محکوم کردن این حمله، آن را نقض حاکمیت بحرین و تعهدات جمهوری اسلامی بر اساس تفاهم‌نامه اسلام‌آباد با آمریکا دانست.
+
+در این بیانیه آمده است حمله پهپادی، نقض آشکار حاکمیت بحرین، تهدیدی علیه امنیت شهروندان و ساکنان این کشور و مغایر با قوانین و عرف‌های بین‌المللی است. وزارت خارجه بحرین همچنین اعلام کرد ادامه حملات جمهوری اسلامی، هم‌زمان با تلاش‌های منطقه‌ای و بین‌المللی برای کاهش تنش، روند صلح را تضعیف می‌کند و نشان‌دهنده رویکردی برای بی‌ثبات کردن منطقه است.
+
+وزارت خارجه بحرین با اشاره به تفاهم‌نامه اسلام‌آباد افزود جمهوری اسلامی متعهد به توقف دائمی عملیات نظامی و احترام به حاکمیت کشورهای منطقه شده بود، اما حمله اخیر به گفته این وزارتخانه، نشان می‌دهد تهران به تعهدات خود و جامعه بین‌المللی پایبند نبوده است.
+
+بحرین همچنین با تاکید بر حق خود برای دفاع از حاکمیت، امنیت و ثباتش، از شورای امنیت سازمان ملل خواست مسئولیت خود را در اجرای قطعنامه ۲۸۱۷ و پاسخگو کردن عامل این" style="animation-delay: 0.4s;">
+        <div class="post-header">
+            <span class="post-number">#9</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="وزارت خارجه بحرین در بیانیه‌ای اعلام کرد جمهوری اسلامی بامداد شنبه با چند پهپاد به خاک این کشور حمله کرده است. این وزارتخانه با محکوم کردن این حمله، آن را نقض حاکمیت بحرین و تعهدات جمهوری اسلامی بر اساس تفاهم‌نامه اسلام‌آباد با آمریکا دانست.
+
+در این بیانیه آمده است حمله پهپادی، نقض آشکار حاکمیت بحرین، تهدیدی علیه امنیت شهروندان و ساکنان این کشور و مغایر با قوانین و عرف‌های بین‌المللی است. وزارت خارجه بحرین همچنین اعلام کرد ادامه حملات جمهوری اسلامی، هم‌زمان با تلاش‌های منطقه‌ای و بین‌المللی برای کاهش تنش، روند صلح را تضعیف می‌کند و نشان‌دهنده رویکردی برای بی‌ثبات کردن منطقه است.
+
+وزارت خارجه بحرین با اشاره به تفاهم‌نامه اسلام‌آباد افزود جمهوری اسلامی متعهد به توقف دائمی عملیات نظامی و احترام به حاکمیت کشورهای منطقه شده بود، اما حمله اخیر به گفته این وزارتخانه، نشان می‌دهد تهران به تعهدات خود و جامعه بین‌المللی پایبند نبوده است.
+
+بحرین همچنین با تاکید بر حق خود برای دفاع از حاکمیت، امنیت و ثباتش، از شورای امنیت سازمان ملل خواست مسئولیت خود را در اجرای قطعنامه ۲۸۱۷ و پاسخگو کردن عامل این">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            وزارت خارجه بحرین در بیانیه‌ای اعلام کرد جمهوری اسلامی بامداد شنبه با چند پهپاد به خاک این کشور حمله کرده است. این وزارتخانه با محکوم کردن این حمله، آن را نقض حاکمیت بحرین و تعهدات جمهوری اسلامی بر اساس تفاهم‌نامه اسلام‌آباد با آمریکا دانست.
+
+در این بیانیه آمده است حمله پهپادی، نقض آشکار حاکمیت بحرین، تهدیدی علیه امنیت شهروندان و ساکنان این کشور و مغایر با قوانین و عرف‌های بین‌المللی است. وزارت خارجه بحرین همچنین اعلام کرد ادامه حملات جمهوری اسلامی، هم‌زمان با تلاش‌های منطقه‌ای و بین‌المللی برای کاهش تنش، روند صلح را تضعیف می‌کند و نشان‌دهنده رویکردی برای بی‌ثبات کردن منطقه است.
+
+وزارت خارجه بحرین با اشاره به تفاهم‌نامه اسلام‌آباد افزود جمهوری اسلامی متعهد به توقف دائمی عملیات نظامی و احترام به حاکمیت کشورهای منطقه شده بود، اما حمله اخیر به گفته این وزارتخانه، نشان می‌دهد تهران به تعهدات خود و جامعه بین‌المللی پایبند نبوده است.
+
+بحرین همچنین با تاکید بر حق خود برای دفاع از حاکمیت، امنیت و ثباتش، از شورای امنیت سازمان ملل خواست مسئولیت خود را در اجرای قطعنامه ۲۸۱۷ و پاسخگو کردن عامل این
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344605_5910156071005785520.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344605_5910156071005785520.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344605" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="5:48
+حسین آقایی، عضو تحریریه ایران‌اینترنشنال، گفت: «هیچ نشانه‌ای از پایبندی جمهوری اسلامی به مفاد تفاهم‌نامه دیده نمی‌شود.» او افزود: «جمهوری اسلامی نه‌تنها تردد ایمن در تنگه هرمز را تسهیل نکرده، بلکه با اقدامات خود در این مسیر کارشکنی می‌کند.»
+@iranintltv
+41.7K
+08:47 AM" style="animation-delay: 0.45s;">
+        <div class="post-header">
+            <span class="post-number">#10</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="5:48
+حسین آقایی، عضو تحریریه ایران‌اینترنشنال، گفت: «هیچ نشانه‌ای از پایبندی جمهوری اسلامی به مفاد تفاهم‌نامه دیده نمی‌شود.» او افزود: «جمهوری اسلامی نه‌تنها تردد ایمن در تنگه هرمز را تسهیل نکرده، بلکه با اقدامات خود در این مسیر کارشکنی می‌کند.»
+@iranintltv
+41.7K
+08:47 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            5:48
+حسین آقایی، عضو تحریریه ایران‌اینترنشنال، گفت: «هیچ نشانه‌ای از پایبندی جمهوری اسلامی به مفاد تفاهم‌نامه دیده نمی‌شود.» او افزود: «جمهوری اسلامی نه‌تنها تردد ایمن در تنگه هرمز را تسهیل نکرده، بلکه با اقدامات خود در این مسیر کارشکنی می‌کند.»
+@iranintltv
+41.7K
+08:47 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344604_f2b871d4-e833-41d4-a686-88fb6ca5690e_240p.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344604" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="...
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد جوانان دهستان کلیشم در استان گیلان با نوشتن کلمه ۱۸ دی روی طبل‌های عزاداری خود یاد انقلاب ملی و جاویدنامان را گرامی داشتند.
+46K
+08:34 AM" style="animation-delay: 0.5s;">
+        <div class="post-header">
+            <span class="post-number">#11</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="...
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد جوانان دهستان کلیشم در استان گیلان با نوشتن کلمه ۱۸ دی روی طبل‌های عزاداری خود یاد انقلاب ملی و جاویدنامان را گرامی داشتند.
+46K
+08:34 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            ...
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد جوانان دهستان کلیشم در استان گیلان با نوشتن کلمه ۱۸ دی روی طبل‌های عزاداری خود یاد انقلاب ملی و جاویدنامان را گرامی داشتند.
+46K
+08:34 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344603_Dey on Drums___V___01.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344603" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="Forwarded from
+ایران اینترنشنال ورزشی
+مهدی طارمی پس از تساوی تیم ملی ایران مقابل مصر، با انتقاد از شرایط برگزاری جام جهانی ۲۰۲۶، فیفا و جیانی اینفانتینو را به عمل نکردن به وعده‌هایشان متهم کرد.
+
+طارمی در گفتگو با خبرنگاران پس از بازی با مصر گفت: «از همان ابتدای جام جهانی از شرایطی که برای ما به وجود آمد، شکایت داشتیم. این جام جهانی فاجعه‌بار است، واقعاً فاجعه‌بار. برای بازیکنان حرفه‌ای، بازی کردن در چنین شرایطی نه درست است و نه منصفانه. اگر از نظر فیفا این شرایط عادلانه است، برای خودشان خوب است، اما از نظر ما این‌طور نیست. چه کسی قرار است به ما کمک کند؟ فیفا؟ آمریکا؟ فقط یک نفر را نام ببرید که بخواهد این مشکل را حل کند.»
+
+او با اشاره به دیدار جیانی اینفانتینو با اعضای تیم ملی پس از بازی نخست مقابل نیوزیلند گفت: «رییس فیفا به رختکن ما آمد و گفت همه مشکلات را حل خواهد کرد، اما در عمل هیچ کاری انجام نشد.»
+
+جزییات بیشتر را در سایت بخوانید
+
+@iranintltvsport
+57.5K
+08:03 AM" style="animation-delay: 0.55s;">
+        <div class="post-header">
+            <span class="post-number">#12</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="Forwarded from
+ایران اینترنشنال ورزشی
+مهدی طارمی پس از تساوی تیم ملی ایران مقابل مصر، با انتقاد از شرایط برگزاری جام جهانی ۲۰۲۶، فیفا و جیانی اینفانتینو را به عمل نکردن به وعده‌هایشان متهم کرد.
+
+طارمی در گفتگو با خبرنگاران پس از بازی با مصر گفت: «از همان ابتدای جام جهانی از شرایطی که برای ما به وجود آمد، شکایت داشتیم. این جام جهانی فاجعه‌بار است، واقعاً فاجعه‌بار. برای بازیکنان حرفه‌ای، بازی کردن در چنین شرایطی نه درست است و نه منصفانه. اگر از نظر فیفا این شرایط عادلانه است، برای خودشان خوب است، اما از نظر ما این‌طور نیست. چه کسی قرار است به ما کمک کند؟ فیفا؟ آمریکا؟ فقط یک نفر را نام ببرید که بخواهد این مشکل را حل کند.»
+
+او با اشاره به دیدار جیانی اینفانتینو با اعضای تیم ملی پس از بازی نخست مقابل نیوزیلند گفت: «رییس فیفا به رختکن ما آمد و گفت همه مشکلات را حل خواهد کرد، اما در عمل هیچ کاری انجام نشد.»
+
+جزییات بیشتر را در سایت بخوانید
+
+@iranintltvsport
+57.5K
+08:03 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            Forwarded from
+ایران اینترنشنال ورزشی
+مهدی طارمی پس از تساوی تیم ملی ایران مقابل مصر، با انتقاد از شرایط برگزاری جام جهانی ۲۰۲۶، فیفا و جیانی اینفانتینو را به عمل نکردن به وعده‌هایشان متهم کرد.
+
+طارمی در گفتگو با خبرنگاران پس از بازی با مصر گفت: «از همان ابتدای جام جهانی از شرایطی که برای ما به وجود آمد، شکایت داشتیم. این جام جهانی فاجعه‌بار است، واقعاً فاجعه‌بار. برای بازیکنان حرفه‌ای، بازی کردن در چنین شرایطی نه درست است و نه منصفانه. اگر از نظر فیفا این شرایط عادلانه است، برای خودشان خوب است، اما از نظر ما این‌طور نیست. چه کسی قرار است به ما کمک کند؟ فیفا؟ آمریکا؟ فقط یک نفر را نام ببرید که بخواهد این مشکل را حل کند.»
+
+او با اشاره به دیدار جیانی اینفانتینو با اعضای تیم ملی پس از بازی نخست مقابل نیوزیلند گفت: «رییس فیفا به رختکن ما آمد و گفت همه مشکلات را حل خواهد کرد، اما در عمل هیچ کاری انجام نشد.»
+
+جزییات بیشتر را در سایت بخوانید
+
+@iranintltvsport
+57.5K
+08:03 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344602_5910117811437112656.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344602_5910117811437112656.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344602" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="0:09
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد در مراسم چهلم عباس اکبری فیض‌آبادی، معترض در انقلاب ملی که پس از بازداشت به دست جمهوری اسلامی اعدام شد، فریاد زدند: «جاویدنام روحت شاد.» اکبری فیض‌آبادی در اعتراضات دی‌ماه بازداشت و در خردادماه اعدام شد.
+62.7K
+07:30 AM" style="animation-delay: 0.6000000000000001s;">
+        <div class="post-header">
+            <span class="post-number">#13</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="0:09
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد در مراسم چهلم عباس اکبری فیض‌آبادی، معترض در انقلاب ملی که پس از بازداشت به دست جمهوری اسلامی اعدام شد، فریاد زدند: «جاویدنام روحت شاد.» اکبری فیض‌آبادی در اعتراضات دی‌ماه بازداشت و در خردادماه اعدام شد.
+62.7K
+07:30 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            0:09
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد در مراسم چهلم عباس اکبری فیض‌آبادی، معترض در انقلاب ملی که پس از بازداشت به دست جمهوری اسلامی اعدام شد، فریاد زدند: «جاویدنام روحت شاد.» اکبری فیض‌آبادی در اعتراضات دی‌ماه بازداشت و در خردادماه اعدام شد.
+62.7K
+07:30 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344601_RIP___V___02.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344601" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="Forwarded from
+ایران اینترنشنال ورزشی
+رامین رضاییان، مدافع - هافبک تیم ملی ایران که در بازی برابر مصر تک گل شاگردان امیر قلعه‌نویی را به ثمر رساند، پس از سوت پایان بازی، اشک ریخت. 
+
+پس از این اتفاق محمد صلاح، کاپیتان و ستاره تیم ملی مصر به سمت رضاییان رفت و به او دلداری داد.
+
+رضاییان پس از این بازی به از سوی فیفا به عنوان بهترین بازیکن زمین انتخاب شد.
+
+او با گلی که در این بازی به ثمر رساند، در جام جهانی سه گله شد و بهترین گلزن تاریخ فوتبال ایران در ادوار مختلف جام جهانی لقب گرفت.
+
+رضاییان در جام جهانی ۲۰۲۲ در بازی برابر ولز گل دوم ایران را به ثمر رساند و همچنین در بازی برابر نیوزیلند هم موفق شد گلزنی کند.
+
+@iranintltvsport
+54.5K
+07:25 AM" style="animation-delay: 0.65s;">
+        <div class="post-header">
+            <span class="post-number">#14</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="Forwarded from
+ایران اینترنشنال ورزشی
+رامین رضاییان، مدافع - هافبک تیم ملی ایران که در بازی برابر مصر تک گل شاگردان امیر قلعه‌نویی را به ثمر رساند، پس از سوت پایان بازی، اشک ریخت. 
+
+پس از این اتفاق محمد صلاح، کاپیتان و ستاره تیم ملی مصر به سمت رضاییان رفت و به او دلداری داد.
+
+رضاییان پس از این بازی به از سوی فیفا به عنوان بهترین بازیکن زمین انتخاب شد.
+
+او با گلی که در این بازی به ثمر رساند، در جام جهانی سه گله شد و بهترین گلزن تاریخ فوتبال ایران در ادوار مختلف جام جهانی لقب گرفت.
+
+رضاییان در جام جهانی ۲۰۲۲ در بازی برابر ولز گل دوم ایران را به ثمر رساند و همچنین در بازی برابر نیوزیلند هم موفق شد گلزنی کند.
+
+@iranintltvsport
+54.5K
+07:25 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            Forwarded from
+ایران اینترنشنال ورزشی
+رامین رضاییان، مدافع - هافبک تیم ملی ایران که در بازی برابر مصر تک گل شاگردان امیر قلعه‌نویی را به ثمر رساند، پس از سوت پایان بازی، اشک ریخت. 
+
+پس از این اتفاق محمد صلاح، کاپیتان و ستاره تیم ملی مصر به سمت رضاییان رفت و به او دلداری داد.
+
+رضاییان پس از این بازی به از سوی فیفا به عنوان بهترین بازیکن زمین انتخاب شد.
+
+او با گلی که در این بازی به ثمر رساند، در جام جهانی سه گله شد و بهترین گلزن تاریخ فوتبال ایران در ادوار مختلف جام جهانی لقب گرفت.
+
+رضاییان در جام جهانی ۲۰۲۲ در بازی برابر ولز گل دوم ایران را به ثمر رساند و همچنین در بازی برابر نیوزیلند هم موفق شد گلزنی کند.
+
+@iranintltvsport
+54.5K
+07:25 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344595_5906632462656278164.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344595_5906632462656278164.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344595_5906632462656278162.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344595_5906632462656278162.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344595_5906632462656278163.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344595_5906632462656278163.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344595_5906632462656278160.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344595_5906632462656278160.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344595_5906632462656278161.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344595_5906632462656278161.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/344595_5906632462656278159.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/344595_5906632462656278159.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344595" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="0:15
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد رانندگان استیجاری فعال در خدمات حمل و نقل در مقابل نهاد ریاست‌جمهوری تجمع اعتراضی برگزار کردند. آن‌ها خواستار رسیدگی به مطالبات خود در زمینه پرداخت و حقوق شدند.
+57.6K
+07:16 AM" style="animation-delay: 0.7000000000000001s;">
+        <div class="post-header">
+            <span class="post-number">#15</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="0:15
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد رانندگان استیجاری فعال در خدمات حمل و نقل در مقابل نهاد ریاست‌جمهوری تجمع اعتراضی برگزار کردند. آن‌ها خواستار رسیدگی به مطالبات خود در زمینه پرداخت و حقوق شدند.
+57.6K
+07:16 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            0:15
+ویدیوی رسیده به ایران اینترنشنال نشان می‌دهد رانندگان استیجاری فعال در خدمات حمل و نقل در مقابل نهاد ریاست‌جمهوری تجمع اعتراضی برگزار کردند. آن‌ها خواستار رسیدگی به مطالبات خود در زمینه پرداخت و حقوق شدند.
+57.6K
+07:16 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <video controls preload="metadata">
+                                <source src="media/344594_drivers___V___01.mp4">
+                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                            </video>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/344594" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <img id="lightbox-img" src="" alt="پیش‌نمایش">
+</div>
+
+<!-- دکمه بازگشت به بالا -->
+<button id="backToTop" class="back-to-top" onclick="scrollToTop()" title="بازگشت به بالا">
+    <i class="fas fa-chevron-up"></i>
+</button>
+
+<!-- Footer -->
+<div class="footer">
+    تولید شده توسط <strong>Telegram Channel Scraper</strong> &copy; 2026/06/27 - 14:00
+</div>
+
+<script>
+    // ========== Lightbox ==========
+    function openLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
