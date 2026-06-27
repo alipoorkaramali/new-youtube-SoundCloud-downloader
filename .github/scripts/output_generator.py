@@ -11,7 +11,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape, Markup
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup
 
 
 class OutputGenerator:
