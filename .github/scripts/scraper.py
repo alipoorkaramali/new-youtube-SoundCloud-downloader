@@ -495,7 +495,8 @@ class TelegramChannelScraper:
     async def _update_state_file(self, items: List[Dict]):
         """افزودن پست‌های جدید (غیرتکراری) به فایل State با تاریخ ایران و کپشن کوتاه"""
         state_dir = Path("State")
-        state_dir.mkdir(exist_ok=True)
+        state_dir.mkdir(parents=True, exist_ok=True)   # تضمین وجود پوشه حتی با والدین
+
         file_path = state_dir / f"@{self.channel}.jsonl"
         self.logger.info(f"📌 در حال به‌روزرسانی State: {file_path} (تعداد آیتم‌ها: {len(items)})")
 
@@ -516,15 +517,14 @@ class TelegramChannelScraper:
                 continue
 
             # خلاصه کپشن (۲۰۰ کاراکتر اول بدون شکستن کلمه)
-            caption = item['text'][:200]
+            caption = item['text'][:200].strip()
             if len(item['text']) > 200:
                 last_space = caption.rfind(' ')
                 if last_space > 0:
                     caption = caption[:last_space]
-            caption = caption.strip()
 
-            # تبدیل تاریخ به وقت ایران
-            date_iran = item['date']  # fallback
+            # تاریخ ایران
+            date_iran = item.get('date', '')
             raw_dt = item.get('datetime_attr')
             if raw_dt:
                 try:
