@@ -1,18 +1,18 @@
-2026-06-28 19:16:56,594 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-28 19:16:56,594 [INFO] 🔢 حداکثر تلاش اسکرول: 60
-2026-06-28 19:16:56,594 [INFO] 🔊 حالت Verbose فعال است – جزئیات بررسی هر پست نمایش داده می‌شود.
-2026-06-28 19:16:56,594 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=3)
-2026-06-28 19:17:01,086 [INFO] 🎯 جستجوی مستقیم لینک و ورود به پست 285221
-2026-06-28 19:17:09,673 [INFO] 🔍 در حال جستجوی لینک: https://t.me/bbcpersian/285221
-2026-06-28 19:17:09,846 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_link_input.png
-2026-06-28 19:17:11,265 [INFO] ⏳ منتظر نتیجهٔ جستجوی لینک...
-2026-06-28 19:17:11,265 [INFO] 🔎 جستجوی بخش Messages در نتایج جستجو...
-2026-06-28 19:17:26,269 [WARNING] ⚠️ خطا در یافتن بخش Messages: Locator.wait_for: Timeout 15000ms exceeded.
+2026-06-28 19:20:53,262 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-28 19:20:53,262 [INFO] 🔢 حداکثر تلاش اسکرول: 60
+2026-06-28 19:20:53,262 [INFO] 🔊 حالت Verbose فعال است – جزئیات بررسی هر پست نمایش داده می‌شود.
+2026-06-28 19:20:53,262 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=3)
+2026-06-28 19:20:55,032 [INFO] 🎯 جستجوی مستقیم لینک و ورود به پست 285229
+2026-06-28 19:21:01,838 [INFO] 🔍 در حال جستجوی لینک: https://t.me/bbcpersian/285229
+2026-06-28 19:21:01,999 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_link_input.png
+2026-06-28 19:21:03,646 [INFO] ⏳ منتظر نتیجهٔ جستجوی لینک...
+2026-06-28 19:21:03,646 [INFO] 🔎 جستجوی بخش Messages در نتایج جستجو...
+2026-06-28 19:21:18,649 [WARNING] ⚠️ خطا در یافتن بخش Messages: Locator.wait_for: Timeout 15000ms exceeded.
 Call log:
   - waiting for locator("div:has-text(\"Messages\"):not([role=\"menuitem\"])").first to be visible
     33 × locator resolved to hidden <div id="portals">…</div>
 
-2026-06-28 19:17:26,269 [INFO] 🔄 تلاش کلیک با JavaScript روی نتیجهٔ لینک...
-2026-06-28 19:17:26,269 [DEBUG] JavaScript click failed: Page.evaluate() takes from 2 to 3 positional arguments but 4 were given
-2026-06-28 19:17:26,269 [ERROR] ❌ کلیک روی نتیجهٔ لینک موفق نبود.
-2026-06-28 19:17:26,498 [WARNING] هیچ پستی دریافت نشد.
+2026-06-28 19:21:18,649 [INFO] 🔄 تلاش کلیک با JavaScript روی نتیجهٔ لینک...
+2026-06-28 19:21:18,649 [DEBUG] JavaScript click failed: Page.evaluate() takes from 2 to 3 positional arguments but 4 were given
+2026-06-28 19:21:18,649 [ERROR] ❌ کلیک روی نتیجهٔ لینک موفق نبود.
+2026-06-28 19:21:18,792 [WARNING] هیچ پستی دریافت نشد.
