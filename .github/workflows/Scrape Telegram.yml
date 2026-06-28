@@ -8,7 +8,7 @@ on:
         required: true
         default: 'bbcpersian'
       channel_name:
-        description: 'نام نمایشی کانال (اختیاری)'
+        description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
         required: false
         default: ''
       limit:
@@ -20,7 +20,7 @@ on:
         required: false
         default: '80'
       debug_mode:
-        description: 'حالت دیباگ'
+        description: 'حالت دیباگ (اسکرین‌شات از هر مرحله)'
         type: boolean
         required: false
         default: false
@@ -34,11 +34,15 @@ on:
           - manual
           - off
       start_from:
-        description: 'شناسهٔ پست برای شروع دستی'
+        description: 'شناسهٔ پست برای شروع دستی (فقط در حالت manual)'
+        required: false
+        default: ''
+      target_url:
+        description: 'لینک کامل پست برای شروع (مثلاً https://t.me/bbcpersian/285280)'
         required: false
         default: ''
       max_scroll_attempts:
-        description: 'حداکثر تلاش اسکرول (مخصوص جستجوی پست هدف)'
+        description: 'حداکثر تلاش اسکرول (برای جستجوی پست هدف)'
         required: false
         default: '30'
 
@@ -107,6 +111,7 @@ jobs:
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
           c['max_scroll_attempts'] = ${{ github.event.inputs.max_scroll_attempts }}
+          c['target_url'] = '${{ github.event.inputs.target_url }}'
           mode = '${{ github.event.inputs.resume_mode }}'
           if mode == 'auto':
               c['resume'] = True
