@@ -8,7 +8,7 @@ on:
         required: true
         default: 'bbcpersian'
       channel_name:
-        description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
+        description: 'نام نمایشی کانال (اختیاری)'
         required: false
         default: ''
       limit:
@@ -20,7 +20,7 @@ on:
         required: false
         default: '80'
       debug_mode:
-        description: 'حالت دیباگ (اسکرین‌شات از هر مرحله)'
+        description: 'حالت دیباگ'
         type: boolean
         required: false
         default: false
@@ -34,9 +34,13 @@ on:
           - manual
           - off
       start_from:
-        description: 'شناسهٔ پست برای شروع دستی (فقط در حالت manual)'
+        description: 'شناسهٔ پست برای شروع دستی'
         required: false
         default: ''
+      max_scroll_attempts:
+        description: 'حداکثر تلاش اسکرول (مخصوص جستجوی پست هدف)'
+        required: false
+        default: '30'
 
 permissions:
   contents: write
@@ -102,6 +106,7 @@ jobs:
           c['channel_name'] = '${{ github.event.inputs.channel_name }}'
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
+          c['max_scroll_attempts'] = ${{ github.event.inputs.max_scroll_attempts }}
           mode = '${{ github.event.inputs.resume_mode }}'
           if mode == 'auto':
               c['resume'] = True
@@ -156,7 +161,6 @@ jobs:
           fi
           echo "✅ Output directory is ready"
 
-      # ═══════════════ گام جدید برای stage کردن فایل‌های State ═══════════════
       - name: 📌 Stage State files explicitly
         if: ${{ !inputs.debug_mode }}
         run: |
