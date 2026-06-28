@@ -41,6 +41,7 @@ class TelegramChannelScraper:
         self.profile_dir = Path(config.profile_dir)
         self.delay_between_posts = config.delay_between_posts
         self.resume = getattr(config, 'resume', True)
+        self.start_from = getattr(config, 'start_from', '')
 
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -96,7 +97,7 @@ class TelegramChannelScraper:
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    # ═══════════════════ استخراج پست‌ها (با پشتیبانی از resume) ═══════════════════
+    # ═══════════════════ استخراج پست‌ها (با پشتیبانی از resume و start_from) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         from playwright.async_api import async_playwright
 
@@ -110,10 +111,15 @@ class TelegramChannelScraper:
         )
         page = await context.new_page()
 
-        # ─── تعیین استراتژی شروع (resume) ───
+        # ─── تعیین استراتژی شروع ───
         start_id = None
         include_start = False
-        if self.resume:
+
+        if self.start_from:
+            start_id = str(self.start_from)
+            include_start = True
+            self.logger.info(f"🎯 شروع دستی از پست {start_id}")
+        elif self.resume:
             oldest = self._get_oldest_state_id()
             if oldest:
                 start_id = oldest
@@ -121,9 +127,11 @@ class TelegramChannelScraper:
                 self.logger.info(f"🔄 ادامه خودکار از بعد از پست {start_id}")
             else:
                 self.logger.info("ℹ️ فایل State خالی است. شروع از جدیدترین‌ها.")
+        else:
+            self.logger.info("🆕 شروع تازه از جدیدترین پست‌ها.")
 
         if start_id:
-            # پرش مستقیم به قدیمی‌ترین پست ثبت‌شده
+            # پرش مستقیم به پست هدف (دستی یا قدیمی‌ترین پست State)
             target_url = f"https://t.me/{self.channel}/{start_id}"
             self.logger.info(f"📍 پرش مستقیم به پست {start_id} برای ادامه اسکرپ")
             await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
@@ -192,15 +200,15 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # فیلتر resume: رد کردن پست‌های جدیدتر/مساوی start_id
+                        # فیلتر شروع: بسته به include_start، پست‌های نامناسب رد شوند
                         if start_id:
                             id_int = int(msg_id)
                             start_int = int(start_id)
                             if include_start:
-                                if id_int > start_int:
+                                if id_int > start_int:  # فقط پست‌های قدیمی‌تر یا خود start_id
                                     continue
                             else:
-                                if id_int >= start_int:   # فقط قدیمی‌تر از start_id
+                                if id_int >= start_int:  # فقط قدیمی‌تر از start_id
                                     continue
 
                         # 🌟 تضمین visible بودن قبل از استخراج متن
@@ -252,6 +260,7 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
+        # در حالت عادی (بدون start_id) به اولین پست اسکرول کن
         if items and not start_id:
             first_id = items[0]['id']
             try:
