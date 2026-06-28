@@ -193,6 +193,29 @@ jobs:
           echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
+      # 🔍 گام موقت: بررسی وجود فایل State
+      # ════════════════════════════════════════════
+      - name: 🔍 Debug – check State folder
+        if: ${{ !inputs.debug_mode }}
+        run: |
+          echo "======================================"
+          echo "بررسی پوشه State:"
+          if [ -d "State" ]; then
+            echo "✅ پوشه State وجود دارد."
+            ls -la State/
+            echo "----------------------------------"
+            if [ -f "State/@${{ github.event.inputs.channel }}.jsonl" ]; then
+              echo "✅ فایل State برای این کانال پیدا شد:"
+              cat "State/@${{ github.event.inputs.channel }}.jsonl"
+            else
+              echo "❌ فایل State برای @${{ github.event.inputs.channel }} وجود ندارد!"
+            fi
+          else
+            echo "❌ پوشه State اصلاً وجود ندارد!"
+          fi
+          echo "======================================"
+
+      # ════════════════════════════════════════════
       # ۱۱.۵ تنظیم Git LFS برای فایل‌های رسانه و ZIP
       # ════════════════════════════════════════════
       - name: 🐘 Setup Git LFS track for media & zip
