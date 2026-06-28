@@ -13,15 +13,16 @@ class Config:
     max_media_mb: int             # حداکثر حجم هر فایل رسانه (مگابایت)
     output_dir: str               # پوشهٔ اصلی خروجی
     profile_dir: str              # پوشهٔ پروفایل مرورگر
-    delay_between_posts: float = 2.2
-    channel_name: str = ''
-    resume: bool = True
-    start_from: str = ''
-    target_url: str = ''
-    max_scroll_attempts: int = 60
-    verbose: bool = False          # جدید: نمایش جزئیات چک هر پست در لاگ
+    delay_between_posts: float    # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
+    channel_name: str = ''        # نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)
+    resume: bool = True           # ادامهٔ خودکار از آخرین نقطه
+    start_from: str = ''          # شناسهٔ پست برای شروع دستی (message_id)
+    target_url: str = ''          # لینک کامل پست برای شروع مستقیم
+    max_scroll_attempts: int = 60 # حداکثر تلاش اسکرول (در صورت نیاز)
+    verbose: bool = False         # نمایش جزئیات بررسی هر پست در لاگ (DEBUG)
 
 def load_config(path: str = "config.yaml") -> Config:
+    """بارگذاری تنظیمات از فایل YAML"""
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(f"❌ فایل تنظیمات {path} یافت نشد!")
@@ -29,6 +30,7 @@ def load_config(path: str = "config.yaml") -> Config:
     with open(config_path, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
 
+    # اعتبارسنجی
     if not data.get('channel'):
         raise ValueError("❌ نام کانال در config.yaml تنظیم نشده است.")
     if data.get('limit', 0) <= 0:
@@ -50,5 +52,5 @@ def load_config(path: str = "config.yaml") -> Config:
         start_from=data.get('start_from', ''),
         target_url=data.get('target_url', ''),
         max_scroll_attempts=data.get('max_scroll_attempts', 60),
-        verbose=data.get('verbose', False)           # جدید
+        verbose=data.get('verbose', False)
     )
