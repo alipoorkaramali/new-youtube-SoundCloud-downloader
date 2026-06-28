@@ -50,9 +50,6 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      # ════════════════════════════════════════════
-      # ۱. دریافت کد از مخزن
-      # ════════════════════════════════════════════
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
@@ -60,17 +57,11 @@ jobs:
           lfs: true
           fetch-depth: 1
 
-      # ════════════════════════════════════════════
-      # ۲. تنظیم پایتون
-      # ════════════════════════════════════════════
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # ════════════════════════════════════════════
-      # ۳. کش بسته‌های pip
-      # ════════════════════════════════════════════
       - name: 💾 Cache pip packages
         uses: actions/cache@v4
         with:
@@ -79,17 +70,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # ════════════════════════════════════════════
-      # ۴. نصب وابستگی‌های پایتون
-      # ════════════════════════════════════════════
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ════════════════════════════════════════════
-      # ۵. کش مرورگر Playwright
-      # ════════════════════════════════════════════
       - name: 💾 Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -98,24 +83,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
-      # ════════════════════════════════════════════
-      # ۶. نصب Playwright و کرومیوم
-      # ════════════════════════════════════════════
       - name: 🎭 Install Playwright and Chromium
         run: |
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
-      # ════════════════════════════════════════════
-      # ۷. استخراج پروفایل مرورگر
-      # ════════════════════════════════════════════
       - name: 📂 Extract browser profile
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
-      # ════════════════════════════════════════════
-      # ۸. به‌روزرسانی config.yaml با ورودی‌ها
-      # ════════════════════════════════════════════
       - name: ⚙️ Update config.yaml with inputs
         run: |
           python -c "
@@ -140,15 +116,9 @@ jobs:
               yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
           "
 
-      # ════════════════════════════════════════════
-      # ۸.۵ پاکسازی خروجی قبلی همین کانال
-      # ════════════════════════════════════════════
       - name: 🧹 Clean old output for this channel
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
 
-      # ════════════════════════════════════════════
-      # ۹. اجرای اسکریپر (اصلی یا دیباگ)
-      # ════════════════════════════════════════════
       - name: 🚀 Run Telegram Scraper
         if: ${{ !inputs.debug_mode }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
@@ -169,9 +139,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ════════════════════════════════════════════
-      # ۱۰. آپلود اسکرین‌شات‌های دیباگ
-      # ════════════════════════════════════════════
       - name: 📤 Upload debug screenshots
         if: ${{ inputs.debug_mode }}
         uses: actions/upload-artifact@v4
@@ -179,9 +146,6 @@ jobs:
           name: debug-screenshots-${{ github.run_id }}
           path: debug_output/
 
-      # ════════════════════════════════════════════
-      # ۱۱. بررسی خروجی (فقط در حالت عادی)
-      # ════════════════════════════════════════════
       - name: 📊 Verify output
         if: ${{ !inputs.debug_mode }}
         run: |
@@ -192,32 +156,17 @@ jobs:
           fi
           echo "✅ Output directory is ready"
 
-      # ════════════════════════════════════════════
-      # 🔍 گام موقت: بررسی وجود فایل State
-      # ════════════════════════════════════════════
-      - name: 🔍 Debug – check State folder
+      # ═══════════════ گام جدید برای stage کردن فایل‌های State ═══════════════
+      - name: 📌 Stage State files explicitly
         if: ${{ !inputs.debug_mode }}
         run: |
-          echo "======================================"
-          echo "بررسی پوشه State:"
           if [ -d "State" ]; then
-            echo "✅ پوشه State وجود دارد."
-            ls -la State/
-            echo "----------------------------------"
-            if [ -f "State/@${{ github.event.inputs.channel }}.jsonl" ]; then
-              echo "✅ فایل State برای این کانال پیدا شد:"
-              cat "State/@${{ github.event.inputs.channel }}.jsonl"
-            else
-              echo "❌ فایل State برای @${{ github.event.inputs.channel }} وجود ندارد!"
-            fi
+            git add State/
+            echo "✅ State folder staged for commit."
           else
-            echo "❌ پوشه State اصلاً وجود ندارد!"
+            echo "⚠️ State folder not found, skipping."
           fi
-          echo "======================================"
 
-      # ════════════════════════════════════════════
-      # ۱۱.۵ تنظیم Git LFS برای فایل‌های رسانه و ZIP
-      # ════════════════════════════════════════════
       - name: 🐘 Setup Git LFS track for media & zip
         if: ${{ !inputs.debug_mode }}
         run: |
@@ -225,9 +174,6 @@ jobs:
           git lfs track "Download/telegram_downloads/**/media/*"
           git add .gitattributes
 
-      # ════════════════════════════════════════════
-      # ۱۲. ذخیرهٔ نتایج در مخزن (فقط حالت عادی)
-      # ════════════════════════════════════════════
       - name: 💾 Commit and push results
         if: ${{ !inputs.debug_mode }}
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -240,7 +186,6 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
 
-      # پاکسازی آرتیفکت قدیمی اسکرین‌شات پست‌ها
       - name: 🧹 Delete old post screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
@@ -251,9 +196,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ════════════════════════════════════════════
-      # ۱۳. آپلود اسکرین‌شات‌های هر پست (همیشه)
-      # ════════════════════════════════════════════
       - name: 📸 Upload post screenshots
         uses: actions/upload-artifact@v4
         if: always()
