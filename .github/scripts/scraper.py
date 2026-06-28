@@ -161,7 +161,7 @@ class TelegramChannelScraper:
             await human_sleep(1.5, 0.3)
             await search_input.press("Enter")
 
-            # انتظار برای ظاهر شدن نتیجه و کلیک روی آن
+            # انتظار برای ظاهر شدن نتیجه و کلیک روی آن (با اسکرین‌شات ضربدر)
             self.logger.info("⏳ منتظر نتیجهٔ جستجوی لینک...")
             clicked = await self._click_link_search_result(page, self.channel, start_id)
             if not clicked:
@@ -171,6 +171,7 @@ class TelegramChannelScraper:
 
             # حالا کانال با پیام مورد نظر باز شده – صبر برای لود کامل
             await self._wait_for_channel_loaded(page, min_messages=5)
+            await self._save_screenshot(page, "after_link_enter")
 
         # ۲. شناسهٔ دستی یا ادامهٔ خودکار ← روش معمولی
         else:
@@ -307,9 +308,50 @@ class TelegramChannelScraper:
                 continue
         return None
 
+    async def _screenshot_with_cross(self, page, locator, name: str):
+        """اسکرین‌شات از صفحه با یک ضربدر قرمز روی المان مشخص‌شده"""
+        try:
+            box = await locator.bounding_box()
+            if not box:
+                return
+            x = box['x'] + box['width'] / 2
+            y = box['y'] + box['height'] / 2
+            # کشیدن ضربدر با دو div
+            await page.evaluate('''({x, y}) => {
+                const size = 20;
+                const color = 'red';
+                const container = document.createElement('div');
+                container.id = '__debug_cross';
+                container.style.position = 'fixed';
+                container.style.left = (x - size/2) + 'px';
+                container.style.top = (y - size/2) + 'px';
+                container.style.width = size + 'px';
+                container.style.height = size + 'px';
+                container.style.pointerEvents = 'none';
+                container.style.zIndex = '99999';
+                const line1 = document.createElement('div');
+                line1.style.position = 'absolute';
+                line1.style.width = size + 'px';
+                line1.style.height = '2px';
+                line1.style.backgroundColor = color;
+                line1.style.top = (size/2 - 1) + 'px';
+                line1.style.left = '0';
+                line1.style.transform = 'rotate(45deg)';
+                const line2 = line1.cloneNode();
+                line2.style.transform = 'rotate(-45deg)';
+                container.appendChild(line1);
+                container.appendChild(line2);
+                document.body.appendChild(container);
+            }''', {'x': x, 'y': y})
+            await page.screenshot(path=str(self.base_dir / f"debug_{self.channel}_{name}.png"), full_page=True)
+            # حذف ضربدر
+            await page.evaluate('() => { const el = document.getElementById("__debug_cross"); if(el) el.remove(); }')
+            self.logger.info(f"📸 اسکرین‌شات ضربدر ذخیره شد: debug_{self.channel}_{name}.png")
+        except Exception as e:
+            self.logger.warning(f"⚠️ اسکرین‌شات ضربدر ممکن نشد: {e}")
+
     async def _click_link_search_result(self, page, channel, msg_id) -> bool:
-        """بعد از جستجوی لینک، روی نتیجهٔ پیام کلیک می‌کند."""
-        # چند تلاش برای یافتن المان نتیجه
+        """بعد از جستجوی لینک، روی نتیجهٔ پیام کلیک می‌کند (با اسکرین‌شات ضربدر)."""
         selectors = [
             'div.search-result',
             'div[class*="chatlist"] div[class*="item"]',
@@ -320,10 +362,13 @@ class TelegramChannelScraper:
             try:
                 loc = page.locator(sel).first
                 if await loc.count() > 0 and await loc.is_visible(timeout=5000):
+                    # اسکرین‌شات با ضربدر قبل از کلیک
+                    await self._screenshot_with_cross(page, loc, "search_result_before_click")
                     await loc.click(timeout=8000, force=True)
                     await human_sleep(4, 0.5)
                     if await page.locator('div[data-message-id]').count() > 0:
                         self.logger.info("✅ نتیجهٔ لینک کلیک شد و کانال باز شد.")
+                        await self._take_screenshot(page, "after_link_click")
                         return True
             except Exception:
                 continue
@@ -338,13 +383,13 @@ class TelegramChannelScraper:
                     links[0].click();
                     return;
                 }}
-                // Fallback: کلیک روی اولین نتیجه
                 const item = document.querySelector('div.chatlist-item, div.search-result, div[class*="ListItem"]');
                 if (item) item.click();
             }}''', channel, msg_id)
             await human_sleep(5, 0.4)
             if await page.locator('div[data-message-id]').count() > 0:
                 self.logger.info("✅ با JavaScript وارد پیام شدیم.")
+                await self._take_screenshot(page, "after_link_click_js")
                 return True
         except Exception as e:
             self.logger.debug(f"JavaScript click failed: {e}")
