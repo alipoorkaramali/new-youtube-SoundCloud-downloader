@@ -8,7 +8,7 @@ on:
         required: true
         default: 'bbcpersian'
       channel_name:
-        description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
+        description: 'نام نمایشی کانال (اختیاری)'
         required: false
         default: ''
       limit:
@@ -19,34 +19,24 @@ on:
         description: 'حداکثر حجم رسانه (MB)'
         required: false
         default: '80'
-      debug_mode:
-        description: 'حالت دیباگ (اسکرین‌شات از هر مرحله)'
-        type: boolean
-        required: false
-        default: false
       resume_mode:
         description: 'نحوهٔ ادامه'
         required: true
         type: choice
         default: 'auto'
         options:
-          - auto      # ادامهٔ خودکار از آخرین پست ثبت‌شده در State
-          - manual    # شروع از یک شناسهٔ دلخواه (start_from)
-          - off       # شروع تازه از جدیدترین پست‌ها
-      start_from:
-        description: 'شناسهٔ پست برای شروع دستی (فقط در حالت manual)'
-        required: false
-        default: ''
+          - auto
+          - off
       target_url:
-        description: 'لینک کامل پست برای شروع مستقیم (مثلاً https://t.me/bbcpersian/285280). با جستجوی مستقیم در تلگرام وب باز می‌شود.'
+        description: 'لینک کامل پست برای شروع مستقیم'
         required: false
         default: ''
       max_scroll_attempts:
-        description: 'حداکثر تلاش اسکرول (در صورت نیاز به جستجوی بیشتر)'
+        description: 'حداکثر تلاش اسکرول'
         required: false
         default: '60'
       verbose_mode:
-        description: 'نمایش جزئیات بررسی هر پست در لاگ (DEBUG)'
+        description: 'نمایش جزئیات در لاگ'
         type: boolean
         required: false
         default: false
@@ -118,16 +108,7 @@ jobs:
           c['max_scroll_attempts'] = ${{ github.event.inputs.max_scroll_attempts }}
           c['target_url'] = '${{ github.event.inputs.target_url }}'
           c['verbose'] = '${{ github.event.inputs.verbose_mode }}' == 'true'
-          mode = '${{ github.event.inputs.resume_mode }}'
-          if mode == 'auto':
-              c['resume'] = True
-              c['start_from'] = ''
-          elif mode == 'manual':
-              c['resume'] = False
-              c['start_from'] = '${{ github.event.inputs.start_from }}'
-          else:  # off
-              c['resume'] = False
-              c['start_from'] = ''
+          c['resume'] = '${{ github.event.inputs.resume_mode }}' == 'auto'
           with open('config/config.yaml', 'w') as f:
               yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
           "
@@ -136,34 +117,10 @@ jobs:
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
 
       - name: 🚀 Run Telegram Scraper
-        if: ${{ !inputs.debug_mode }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
         timeout-minutes: 35
 
-      - name: 🐞 Run debug script with screenshots
-        if: ${{ inputs.debug_mode }}
-        run: python .github/scripts/debug_full.py
-        timeout-minutes: 35
-
-      - name: 🧹 Delete old debug screenshots artifacts
-        run: |
-          ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name | startswith("debug-screenshots-")) | .id')
-          for id in $ids; do
-            gh api repos/${{ github.repository }}/actions/artifacts/$id -X DELETE
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 📤 Upload debug screenshots
-        if: ${{ inputs.debug_mode }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-screenshots-${{ github.run_id }}
-          path: debug_output/
-
       - name: 📊 Verify output
-        if: ${{ !inputs.debug_mode }}
         run: |
           OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
           if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then
@@ -173,7 +130,6 @@ jobs:
           echo "✅ Output directory is ready"
 
       - name: 📌 Stage State files explicitly
-        if: ${{ !inputs.debug_mode }}
         run: |
           if [ -d "State" ]; then
             git add State/
@@ -183,14 +139,12 @@ jobs:
           fi
 
       - name: 🐘 Setup Git LFS track for media & zip
-        if: ${{ !inputs.debug_mode }}
         run: |
           git lfs install
           git lfs track "Download/telegram_downloads/**/media/*"
           git add .gitattributes
 
       - name: 💾 Commit and push results
-        if: ${{ !inputs.debug_mode }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
