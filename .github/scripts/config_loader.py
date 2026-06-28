@@ -13,15 +13,15 @@ class Config:
     max_media_mb: int             # حداکثر حجم هر فایل رسانه (مگابایت)
     output_dir: str               # پوشهٔ اصلی خروجی
     profile_dir: str              # پوشهٔ پروفایل مرورگر
-    delay_between_posts: float    # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
-    channel_name: str = ''        # نام نمایشی کانال (اختیاری)
-    resume: bool = True           # ادامه خودکار از آخرین نقطه
-    start_from: str = ''          # شناسهٔ پست برای شروع دستی (message_id)
-    target_url: str = ''          # لینک کامل پست برای شروع
-    max_scroll_attempts: int = 60 # حداکثر تلاش اسکرول (افزایش یافته)
+    delay_between_posts: float = 2.2
+    channel_name: str = ''
+    resume: bool = True
+    start_from: str = ''
+    target_url: str = ''
+    max_scroll_attempts: int = 60
+    verbose: bool = False          # جدید: نمایش جزئیات چک هر پست در لاگ
 
 def load_config(path: str = "config.yaml") -> Config:
-    """بارگذاری تنظیمات از فایل YAML"""
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(f"❌ فایل تنظیمات {path} یافت نشد!")
@@ -29,7 +29,6 @@ def load_config(path: str = "config.yaml") -> Config:
     with open(config_path, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
 
-    # اعتبارسنجی
     if not data.get('channel'):
         raise ValueError("❌ نام کانال در config.yaml تنظیم نشده است.")
     if data.get('limit', 0) <= 0:
@@ -45,10 +44,11 @@ def load_config(path: str = "config.yaml") -> Config:
         max_media_mb=data['max_media_mb'],
         output_dir=data.get('output_dir', 'Download'),
         profile_dir=data['profile_dir'],
-        delay_between_posts=data.get('delay_between_posts', 2.2),   # پیش‌فرض ۲.۲
+        delay_between_posts=data.get('delay_between_posts', 2.2),
         channel_name=data.get('channel_name', ''),
         resume=data.get('resume', True),
         start_from=data.get('start_from', ''),
         target_url=data.get('target_url', ''),
-        max_scroll_attempts=data.get('max_scroll_attempts', 60)     # پیش‌فرض ۶۰
+        max_scroll_attempts=data.get('max_scroll_attempts', 60),
+        verbose=data.get('verbose', False)           # جدید
     )
