@@ -30,19 +30,19 @@ on:
         type: choice
         default: 'auto'
         options:
-          - auto
-          - manual
-          - off
+          - auto      # ادامهٔ خودکار از آخرین پست ثبت‌شده در State
+          - manual    # شروع از یک شناسهٔ دلخواه (start_from)
+          - off       # شروع تازه از جدیدترین پست‌ها
       start_from:
         description: 'شناسهٔ پست برای شروع دستی (فقط در حالت manual)'
         required: false
         default: ''
       target_url:
-        description: 'لینک کامل پست برای شروع (مثلاً https://t.me/bbcpersian/285280)'
+        description: 'لینک کامل پست برای شروع مستقیم (مثلاً https://t.me/bbcpersian/285280). با جستجوی مستقیم در تلگرام وب باز می‌شود.'
         required: false
         default: ''
       max_scroll_attempts:
-        description: 'حداکثر تلاش اسکرول (برای جستجوی پست هدف)'
+        description: 'حداکثر تلاش اسکرول (در صورت نیاز به جستجوی بیشتر)'
         required: false
         default: '60'
       verbose_mode:
@@ -125,7 +125,7 @@ jobs:
           elif mode == 'manual':
               c['resume'] = False
               c['start_from'] = '${{ github.event.inputs.start_from }}'
-          else:
+          else:  # off
               c['resume'] = False
               c['start_from'] = ''
           with open('config/config.yaml', 'w') as f:
