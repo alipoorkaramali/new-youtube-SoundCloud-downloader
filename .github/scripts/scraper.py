@@ -17,6 +17,8 @@ from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
 SCROLL_UP = -1200
+SCROLL_UP_FAST = -1800      # گام بلندتر برای جستجوی سریع
+SCROLL_UP_CHECK = -800      # گام کوتاه برای بررسی از دست نرفتن پست
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60
 IRAN_TZ = ZoneInfo("Asia/Tehran")
@@ -170,11 +172,12 @@ class TelegramChannelScraper:
         # رفتن به پایین‌ترین نقطه (جدیدترین‌ها) با صبر بیشتر
         await self._go_to_bottom(page)
 
-        # ─── جمع‌آوری پست‌ها (با تشخیص لینک هدف) ───
+        # ─── جمع‌آوری پست‌ها (با تشخیص لینک هدف و گام دینامیک) ───
         items = []
         seen_ids = set()
         scroll_attempts = 0
         target_found = False
+        fast_scroll_counter = 0   # شمارنده برای ترکیب گام بلند و کوتاه
 
         while len(items) < self.limit and scroll_attempts < self.max_scroll_attempts:
             try:
@@ -195,10 +198,8 @@ class TelegramChannelScraper:
                                 start_id = msg_id
                                 include_start = True
                                 self.logger.info(f"✅ پست هدف با لینک {target_url_normalized} پیدا شد (msg_id={msg_id}). شروع جمع‌آوری از این پست.")
-                                # خود این پست هم جمع شود
                             else:
-                                # هنوز به پست هدف نرسیده‌ایم، اسکرول ادامه دارد
-                                continue
+                                continue   # هنوز نرسیدیم، اسکرول ادامه دارد
 
                         # اگر start_id مشخص شده (حتی از طریق target_url) فیلتر را اعمال کن
                         if start_id:
@@ -242,8 +243,21 @@ class TelegramChannelScraper:
                 if len(items) >= self.limit:
                     break
 
+                # انتخاب گام اسکرول
+                if target_url_normalized and not target_found:
+                    # هر ۳ گام بلند، یک گام کوتاه برای اطمینان از عدم پرش
+                    if fast_scroll_counter % 3 == 0 and fast_scroll_counter > 0:
+                        step = SCROLL_UP_CHECK
+                        self.logger.debug("🐢 گام کوتاه برای بررسی نزدیک")
+                    else:
+                        step = SCROLL_UP_FAST
+                        self.logger.debug("🐇 گام بلند جستجو")
+                    fast_scroll_counter += 1
+                else:
+                    step = SCROLL_UP
+
                 old_height = await page.evaluate("document.documentElement.scrollHeight")
-                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                await page.evaluate(f"window.scrollBy(0, {step})")
                 await human_sleep(2.5, 0.5)
                 new_height = await page.evaluate("document.documentElement.scrollHeight")
 
@@ -278,9 +292,8 @@ class TelegramChannelScraper:
 
         return items, context, page
 
-    # ═══════════════════ منتظر بارگذاری کامل کانال (جدید) ═══════════════════
+    # ═══════════════════ منتظر بارگذاری کامل کانال ═══════════════════
     async def _wait_for_channel_loaded(self, page, min_messages: int = 10):
-        """منتظر لود شدن واقعی کانال با رفتار انسانی"""
         self.logger.info("⏳ در حال منتظر ماندن برای لود کامل کانال...")
         try:
             await page.wait_for_selector('div[data-message-id]', timeout=25000)
@@ -297,7 +310,7 @@ class TelegramChannelScraper:
             self.logger.warning(f"⚠️ زمان انتظار لود کانال تمام شد: {e}")
             await human_sleep(4, 0.5)
 
-    # ═══════════════════ رفتن به پایین (جدید) ═══════════════════
+    # ═══════════════════ رفتن به پایین ═══════════════════
     async def _go_to_bottom(self, page):
         self.logger.info("⬇️ تلاش برای رفتن به جدیدترین پست‌ها...")
         clicked = False
