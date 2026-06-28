@@ -15,7 +15,6 @@ from playwright_downloader import PlaywrightDownloader
 from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
-MAX_SCROLL_ATTEMPTS = 8
 SCROLL_UP = -1200
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60
@@ -42,6 +41,7 @@ class TelegramChannelScraper:
         self.delay_between_posts = config.delay_between_posts
         self.resume = getattr(config, 'resume', True)
         self.start_from = getattr(config, 'start_from', '')
+        self.max_scroll_attempts = getattr(config, 'max_scroll_attempts', 8)  # جدید
 
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -58,6 +58,7 @@ class TelegramChannelScraper:
             self.logger.addHandler(ch)
 
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
+        self.logger.info(f"🔢 حداکثر تلاش اسکرول: {self.max_scroll_attempts}")
 
     # ═══════════════════ متد اصلی ═══════════════════
     async def run(self):
@@ -79,7 +80,6 @@ class TelegramChannelScraper:
             return
         self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
 
-        # بروزرسانی فایل State (لاگ ماندگار)
         await self._update_state_file(items)
 
         media_map, downloaded = await self._download_media(items, page, context)
@@ -111,7 +111,7 @@ class TelegramChannelScraper:
         )
         page = await context.new_page()
 
-        # ─── تعیین استراتژی شروع (فیلتر منطقی) ───
+        # ─── تعیین استراتژی شروع ───
         start_id = None
         include_start = False
 
@@ -130,7 +130,7 @@ class TelegramChannelScraper:
         else:
             self.logger.info("🆕 شروع تازه از جدیدترین پست‌ها.")
 
-        # ─── مسیر همیشگی: رفتن به خانه، جستجو و ورود به کانال ───
+        # ─── ورود به کانال و پرش به جدیدترین پست‌ها ───
         try:
             await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
         except Exception as e:
@@ -145,7 +145,6 @@ class TelegramChannelScraper:
 
         await self._save_screenshot(page, "initial")
 
-        # پرش به جدیدترین پست‌ها با کلیک روی دکمهٔ فلش (رفتار انسانی)
         self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
         clicked = False
         scroll_button_selectors = [
@@ -169,32 +168,33 @@ class TelegramChannelScraper:
         if not clicked:
             self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
 
-        # ─── جمع‌آوری پست‌ها با اسکرول طبیعی ───
+        # ─── جمع‌آوری پست‌ها ───
         items = []
         seen_ids = set()
         scroll_attempts = 0
 
-        while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
+        while len(items) < self.limit and scroll_attempts < self.max_scroll_attempts:
             try:
                 messages = await page.locator('div[data-message-id]').all()
+                found_any_target = False  # آیا حداقل یک پست با شرط start_id دیده شد؟
                 for msg in reversed(messages):
                     try:
                         msg_id = await msg.get_attribute('data-message-id')
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # فیلتر شروع: فقط پست‌های مجاز (قدیمی‌تر از start_id یا خودش)
+                        # فیلتر شروع
                         if start_id:
                             id_int = int(msg_id)
                             start_int = int(start_id)
                             if include_start:
-                                if id_int > start_int:   # جدیدتر از start_id → رد
+                                if id_int > start_int:
                                     continue
                             else:
-                                if id_int >= start_int:  # مساوی یا جدیدتر → رد
+                                if id_int >= start_int:
                                     continue
+                            found_any_target = True
 
-                        # 🌟 تضمین visible بودن قبل از استخراج متن
                         await msg.scroll_into_view_if_needed()
                         await msg.wait_for(state="visible", timeout=5000)
 
@@ -221,22 +221,32 @@ class TelegramChannelScraper:
                             break
                     except Exception:
                         continue
+
+                if len(items) >= self.limit:
+                    break
+
+                # اگر start_id داریم ولی هیچ پست واجد شرایطی در این راند پیدا نشد،
+                # یک شمارنده "اسکرول بی‌فایده" را جداگانه مدیریت کنیم.
+                # در اینجا فقط اسکرول می‌کنیم.
+                old_height = await page.evaluate("document.documentElement.scrollHeight")
+                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                await human_sleep(2.5, 0.5)
+                new_height = await page.evaluate("document.documentElement.scrollHeight")
+
+                if new_height == old_height:
+                    scroll_attempts += 1
+                else:
+                    scroll_attempts = 0
+
             except Exception as e:
                 self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
-
-            if len(items) >= self.limit:
-                break
-
-            # اسکرول به بالا مثل کاربر واقعی
-            old_height = await page.evaluate("document.documentElement.scrollHeight")
-            await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
-            await human_sleep(2.5, 0.5)
-            new_height = await page.evaluate("document.documentElement.scrollHeight")
-
-            if new_height == old_height:
                 scroll_attempts += 1
-            else:
-                scroll_attempts = 0
+
+        if start_id and len(items) == 0:
+            self.logger.warning(
+                f"⚠️ پست هدف با شناسهٔ {start_id} بعد از {self.max_scroll_attempts} تلاش اسکرول پیدا نشد."
+                " می‌توانید از ورودی 'max_scroll_attempts' برای افزایش تلاش استفاده کنید."
+            )
 
         items = items[:self.limit]
         self.logger.info(f"📊 {len(items)} پست جدیدترین جمع‌آوری شد.")
@@ -244,7 +254,6 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
-        # در حالت شروع تازه، به اولین پست اسکرول کن
         if items and not start_id:
             first_id = items[0]['id']
             try:
