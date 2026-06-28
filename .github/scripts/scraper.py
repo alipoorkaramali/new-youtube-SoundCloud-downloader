@@ -104,7 +104,7 @@ class TelegramChannelScraper:
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-    # ═══════════════════ استخراج پست‌ها ═══════════════════
+    # ═══════════════════ استخراج پست‌ها (جستجوی لینک در سرچ + کلیک روی Messages) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         from playwright.async_api import async_playwright
 
@@ -130,7 +130,7 @@ class TelegramChannelScraper:
                 return [], None, None
             start_id = path_parts[-1]
             include_start = True
-            self.logger.info(f"🎯 جستجوی مستقیم لینک و ورود به پست {start_id}")
+            self.logger.info(f"🎯 جستجوی لینک در سرچ و ورود به پست {start_id}")
 
             try:
                 await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
@@ -145,6 +145,7 @@ class TelegramChannelScraper:
                 await context.close()
                 return [], None, None
 
+            # تایپ دقیق لینک در نوار جستجو
             await search_input.click()
             await human_sleep(0.3, 0.2)
             await search_input.fill('')
@@ -156,9 +157,9 @@ class TelegramChannelScraper:
             await search_input.press("Enter")
 
             self.logger.info("⏳ منتظر نتیجهٔ جستجوی لینک...")
-            clicked = await self._click_link_search_result(page, self.channel, start_id)
+            clicked = await self._click_messages_search_result(page, start_id)
             if not clicked:
-                self.logger.error("❌ کلیک روی نتیجهٔ لینک موفق نبود.")
+                self.logger.error("❌ کلیک روی نتیجهٔ Messages موفق نبود.")
                 await context.close()
                 return [], None, None
 
@@ -193,7 +194,7 @@ class TelegramChannelScraper:
             await self._wait_for_channel_loaded(page, min_messages=10)
             await self._go_to_bottom(page)
 
-        # جمع‌آوری
+        # ─── جمع‌آوری پست‌ها ───
         items = []
         seen_ids = set()
         scroll_attempts = 0
@@ -291,6 +292,72 @@ class TelegramChannelScraper:
                 continue
         return None
 
+    async def _click_messages_search_result(self, page, msg_id: str) -> bool:
+        """
+        در نتایج جستجو، بخش Messages را پیدا می‌کند و اولین آیتم را کلیک می‌کند.
+        """
+        self.logger.info("🔎 یافتن بخش Messages در نتایج جستجو...")
+        try:
+            # صبر می‌کنیم تا کانتینر نتایج ظاهر شود (غالباً div با کلاس search-results یا لیست)
+            await page.wait_for_selector('div[class*="search-results"], div[class*="SearchResults"], div[class*="chatlist"]', timeout=15000)
+
+            # هدر Messages را با ساختار مناسب پیدا می‌کنیم (نه منو آیتم)
+            messages_header = page.locator(
+                'div:has-text("Messages"):not([role="menuitem"]):not([role="button"])'
+            ).first
+            await messages_header.wait_for(state="visible", timeout=10000)
+
+            # اولین آیتم زیرمجموعه: معمولاً sibling بعدی یا داخل یک container
+            # روش ۱: آیتم‌هایی که data-message-id یا href شامل msg_id دارند (مطمئن‌ترین)
+            item = page.locator(f'[data-message-id="{msg_id}"], a[href*="{self.channel}/{msg_id}"]').first
+            if await item.count() == 0:
+                # روش ۲: اولین div قابل کلیک بعد از هدر Messages
+                item = messages_header.locator(
+                    'xpath=ancestor::div[contains(@class, "search-group") or contains(@class, "group")]/following-sibling::div//div[@role="button" or contains(@class, "search-result") or contains(@class, "ListItem")]'
+                ).first
+            if await item.count() == 0:
+                # روش ۳: کلی‌ترین fallback
+                item = page.locator(
+                    'xpath=//div[contains(text(), "Messages")]/following::div[@role="button" or contains(@class, "search-result")][1]'
+                ).first
+
+            if await item.count() > 0 and await item.is_visible(timeout=5000):
+                await self._screenshot_with_cross(page, item, "search_result_before_click")
+                await item.click(timeout=8000, force=True)
+                await human_sleep(4, 0.5)
+                if await page.locator('div[data-message-id]').count() > 0:
+                    self.logger.info("✅ نتیجهٔ Messages کلیک شد و کانال باز شد.")
+                    await self._take_screenshot(page, "after_link_click")
+                    return True
+            else:
+                self.logger.warning("⚠️ نتیجه‌ای در بخش Messages یافت نشد.")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در یافتن بخش Messages: {e}")
+
+        # Fallback نهایی با JavaScript
+        self.logger.info("🔄 تلاش کلیک با JavaScript روی لینک...")
+        try:
+            await page.evaluate(
+                "(channel, msg_id) => {"
+                "  const url = 'https://t.me/' + channel + '/' + msg_id;"
+                "  const links = Array.from(document.querySelectorAll('a[href*=\"' + url + '\"]'));"
+                "  if (links.length) { links[0].click(); return; }"
+                "  const item = document.querySelector('div.chatlist-item, div.search-result, div[class*=\"ListItem\"]');"
+                "  if (item) item.click();"
+                "}",
+                self.channel,
+                msg_id
+            )
+            await human_sleep(5, 0.4)
+            if await page.locator('div[data-message-id]').count() > 0:
+                self.logger.info("✅ با JavaScript وارد پیام شدیم.")
+                await self._take_screenshot(page, "after_link_click_js")
+                return True
+        except Exception as e:
+            self.logger.debug(f"JavaScript click failed: {e}")
+
+        return False
+
     async def _screenshot_with_cross(self, page, locator, name: str):
         try:
             box = await locator.bounding_box()
@@ -330,70 +397,7 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"⚠️ اسکرین‌شات ضربدر ممکن نشد: {e}")
 
-    async def _click_link_search_result(self, page, channel, msg_id) -> bool:
-        """
-        کلیک بر روی اولین نتیجه در بخش Messages از نتایج جستجوی گلوبال.
-        """
-        self.logger.info("🔎 جستجوی بخش Messages در نتایج جستجو...")
-        try:
-            # صبر می‌کنیم تا حداقل یک بخش با متن "Messages" ظاهر شود که واقعاً هدر باشد
-            # از locator با has-text و فیلتر کلاس استفاده می‌کنیم
-            messages_header = page.locator('div:has-text("Messages"):not([role="menuitem"])').first
-            await messages_header.wait_for(state="visible", timeout=15000)
-
-            # حالا اولین آیتم زیرمجموعه را پیدا می‌کنیم.
-            # معمولاً آیتم‌ها div با role="button" یا کلاس‌های خاص هستند و بعد از هدر می‌آیند.
-            first_result = messages_header.locator(
-                'xpath=ancestor::div[contains(@class, "search-group") or contains(@class, "group")]/following-sibling::div//div[@role="button" or contains(@class, "search-result") or contains(@class, "ListItem")]'
-            ).first
-
-            if await first_result.count() == 0:
-                # اگر xpath جواب نداد، مستقیماً اولین عنصر قابل کلیک بعد از هدر را برمی‌گردانیم
-                first_result = page.locator(
-                    'div:has-text("Messages"):not([role="menuitem"]) ~ div div[role="button"], '
-                    'div:has-text("Messages"):not([role="menuitem"]) ~ div[contains(@class, "search-result")]'
-                ).first
-
-            if await first_result.count() > 0 and await first_result.is_visible(timeout=5000):
-                await self._screenshot_with_cross(page, first_result, "search_result_before_click")
-                await first_result.click(timeout=8000, force=True)
-                await human_sleep(4, 0.5)
-                if await page.locator('div[data-message-id]').count() > 0:
-                    self.logger.info("✅ نتیجهٔ لینک در بخش Messages کلیک شد و کانال باز شد.")
-                    await self._take_screenshot(page, "after_link_click")
-                    return True
-            else:
-                self.logger.warning("⚠️ نتیجه‌ای در بخش Messages یافت نشد.")
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در یافتن بخش Messages: {e}")
-
-        # Fallback با JavaScript (با فرمت صحیح)
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی نتیجهٔ لینک...")
-        try:
-            await page.evaluate(
-                "(channel, msg_id) => {"
-                "  const url = 'https://t.me/' + channel + '/' + msg_id;"
-                "  const links = Array.from(document.querySelectorAll('a[href*=\"' + url + '\"]'));"
-                "  if (links.length) {"
-                "    links[0].click();"
-                "    return;"
-                "  }"
-                "  const item = document.querySelector('div.chatlist-item, div.search-result, div[class*=\"ListItem\"]');"
-                "  if (item) item.click();"
-                "}",
-                channel,
-                msg_id
-            )
-            await human_sleep(5, 0.4)
-            if await page.locator('div[data-message-id]').count() > 0:
-                self.logger.info("✅ با JavaScript وارد پیام شدیم.")
-                await self._take_screenshot(page, "after_link_click_js")
-                return True
-        except Exception as e:
-            self.logger.debug(f"JavaScript click failed: {e}")
-
-        return False
-
+    # بقیهٔ متدها بدون تغییر (wait, go_to_bottom, search_and_enter, etc.)
     async def _wait_for_channel_loaded(self, page, min_messages: int = 10):
         self.logger.info("⏳ در حال منتظر ماندن برای لود کامل کانال...")
         try:
