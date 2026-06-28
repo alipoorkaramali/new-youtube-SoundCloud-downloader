@@ -1,441 +1,563 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import sys
+import asyncio
+import logging
+import random
 import json
-import csv
-import requests
-import time
-import zipfile
-import subprocess
-from datetime import datetime, timezone, timedelta
-from urllib.parse import urlparse, unquote
-from apify_client import ApifyClient
+from pathlib import Path
+from typing import List, Dict
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from urllib.parse import urlparse
 
-# ═══════════════════ تنظیمات ═══════════════════
-APIFY_TOKEN = os.environ.get('APIFY_TOKEN') or os.environ.get('APIFY_API_TOKEN', '')
-if not APIFY_TOKEN:
-    print("❌ APIFY_TOKEN is empty!")
-    sys.exit(1)
+from config_loader import Config
+from playwright_downloader import PlaywrightDownloader
+from output_generator import OutputGenerator
 
-CHANNEL = os.environ.get('CHANNEL', 'bbcpersian').lstrip('@')
-LIMIT = int(os.environ.get('POST_LIMIT', '10'))
-MAX_MEDIA_SIZE_MB = int(os.environ.get('MAX_MEDIA_SIZE_MB', '80'))
+# ═══════════════════ Constants ═══════════════════
+SCROLL_UP = -1200
+HOME_URL = "https://web.telegram.org/a/"
+OVERALL_TIMEOUT = 35 * 60
+IRAN_TZ = ZoneInfo("Asia/Tehran")
 
-ACTOR_ID = "ahaham_bytiz/telegram-channel-scraper"
+# ═══════════════════ Human-like sleep ═══════════════════
+async def human_sleep(base: float, jitter: float = 0.4):
+    time = base * (1 + random.uniform(-jitter, jitter))
+    await asyncio.sleep(max(0.1, time))
 
-BASE_DIR = os.path.join("Download", "telegram_downloads", CHANNEL)
-MEDIA_DIR = os.path.join(BASE_DIR, "media")
-os.makedirs(MEDIA_DIR, exist_ok=True)
 
-MAX_MEDIA_SIZE_BYTES = MAX_MEDIA_SIZE_MB * 1024 * 1024
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+class TelegramChannelScraper:
 
-# ═══════════════════ توابع کمکی ═══════════════════
+    def __init__(self, config: Config):
+        self.config = config
+        self.channel = config.channel.lstrip('@')
+        self.channel_name = getattr(config, 'channel_name', '') or ''
+        self.limit = config.limit
+        self.max_media_bytes = config.max_media_mb * 1024 * 1024
+        self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
+        self.media_dir = self.base_dir / "media"
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+        self.profile_dir = Path(config.profile_dir)
+        self.delay_between_posts = config.delay_between_posts
+        self.resume = getattr(config, 'resume', True)
+        self.start_from = getattr(config, 'start_from', '')
+        self.target_url = getattr(config, 'target_url', '').strip()
+        self.max_scroll_attempts = getattr(config, 'max_scroll_attempts', 30)
 
-def get_remote_file_size(url):
-    try:
-        resp = requests.head(url, timeout=10, allow_redirects=True, headers=HEADERS)
-        length = resp.headers.get('Content-Length')
-        if length and length.isdigit():
-            return int(length)
-    except:
-        pass
-    return None
+        self.screenshots_dir = self.base_dir / "post_screenshots"
+        self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-def download_file(url, save_path, max_bytes=None):
-    if max_bytes:
-        size = get_remote_file_size(url)
-        if size is not None and size > max_bytes:
-            print(f"⏩ Skipped (size {size/1024/1024:.1f} MB > {MAX_MEDIA_SIZE_MB} MB)")
-            return False, size
+        self.logger = logging.getLogger("TelegramScraper")
+        self.logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        fh = logging.FileHandler(self.base_dir / "scraper.log", encoding='utf-8')
+        fh.setFormatter(formatter)
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        if not self.logger.handlers:
+            self.logger.addHandler(fh)
+            self.logger.addHandler(ch)
 
-    for attempt in range(5):
+        self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
+        self.logger.info(f"🔢 حداکثر تلاش اسکرول: {self.max_scroll_attempts}")
+
+    # ═══════════════════ متد اصلی ═══════════════════
+    async def run(self):
         try:
-            r = requests.get(url, stream=True, timeout=60, headers=HEADERS)
-            if r.status_code == 200:
-                downloaded = 0
-                with open(save_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=16384):
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if max_bytes and downloaded > max_bytes:
-                            f.close()
-                            os.remove(save_path)
-                            print(f"⏩ Stopped: exceeded {MAX_MEDIA_SIZE_MB} MB during download")
-                            return False, downloaded
-                return True, downloaded
-            else:
-                print(f"   ⚠️ HTTP {r.status_code}")
+            await asyncio.wait_for(self._run_impl(), timeout=OVERALL_TIMEOUT)
+        except asyncio.TimeoutError:
+            self.logger.error("⏰ اسکریپت به دلیل محدودیت زمانی کلی متوقف شد.")
         except Exception as e:
-            print(f"   ⚠️ Download error (attempt {attempt+1}): {e}")
-            time.sleep(2 ** attempt)
-    print(f"   ❌ Failed: {url[:100]}...")
-    return False, 0
+            self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
 
-def format_iran_time(iso_date_str):
-    try:
-        dt = datetime.fromisoformat(iso_date_str.replace('Z', '+00:00'))
-        iran_dt = dt + timedelta(hours=3, minutes=30)
-        return iran_dt.strftime('%Y/%m/%d - %H:%M')
-    except:
-        return iso_date_str
+    async def _run_impl(self):
+        self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
 
-def generate_html(posts, channel_name, media_map):
-    current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
+        items, context, page = await self._fetch_posts_from_telegram()
+        if not items:
+            self.logger.warning("هیچ پستی دریافت نشد.")
+            if context:
+                await context.close()
+            return
+        self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
 
-    print(f"🔍 media_map keys: {list(media_map.keys())}")
-    for key, val in media_map.items():
-        print(f"   {key} -> {val}")
+        # بروزرسانی فایل State (لاگ ماندگار)
+        await self._update_state_file(items)
 
-    html = f'''<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@{channel_name} - آخرین پست‌ها</title>
-    <style>
-        * {{ box-sizing: border-box; }}
-        body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #1c1e21; direction: rtl; }}
-        .header {{ background: linear-gradient(135deg, #2a6df4, #1e4fcf); color: white; padding: 25px; border-radius: 16px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; }}
-        .header h1 {{ margin: 5px 0; font-size: 24px; }}
-        .stats {{ display: flex; justify-content: center; gap: 30px; margin: 15px 0; font-size: 14px; opacity: 0.9; }}
-        .post {{ background: white; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-right: 4px solid #2a6df4; }}
-        .post-header {{ display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }}
-        .post-body {{ font-size: 16px; line-height: 2; white-space: pre-wrap; word-break: break-word; }}
-        .meta {{ background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 13px; margin: 10px 0; }}
-        .meta span {{ margin-left: 15px; }}
-        .hashtag {{ color: #1e4fcf; background: #e7f0ff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }}
-        .media-container {{ margin-top: 15px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }}
-        .media-item {{ background: #fafafa; border-radius: 10px; padding: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); max-width: 100%; text-align: center; }}
-        .media-item img, .media-item video {{ max-width: 100%; max-height: 400px; border-radius: 8px; }}
-        .media-item audio {{ width: 100%; max-width: 300px; }}
-        .media-item a {{ display: inline-block; background: #2a6df4; color: white; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 13px; }}
-        .no-media {{ color: #999; font-size: 14px; padding: 10px; background: #f9f9f9; border-radius: 8px; }}
-        .post-url {{ display: inline-block; margin-top: 15px; background: #2a6df4; color: white !important; padding: 6px 14px; border-radius: 6px; font-size: 13px; text-decoration: none; }}
-        .footer {{ text-align: center; margin-top: 40px; color: #65676b; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px; }}
-    </style>
-</head>
-<body>
-<div class="header">
-    <h1>@{channel_name}</h1>
-    <div class="stats">
-        <span>📊 {len(posts)} پست</span>
-        <span>📅 بروزرسانی: {current_iran}</span>
-    </div>
-</div>
-'''
+        media_map, downloaded = await self._download_media(items, page, context)
+        self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
+        self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
-    for idx, post in enumerate(posts):
-        # استفاده از شناسه واقعی پست برای کلید media_map
-        post_id = str(post.get('id') or post.get('message_id') or f"post_{idx}")
-        date = format_iran_time(post.get('date') or post.get('Date', ''))
-        body = post.get('text') or post.get('Body', '')
-        url = post.get('url') or post.get('Url', '#')
-        mentions = post.get('mentions') or []
-        hashtags = post.get('hashtags') or []
-        outlinks = post.get('outlinks') or []
+        gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
+        gen.generate_json()
+        gen.generate_csv()
+        gen.generate_html()
+        gen.create_zip()
 
-        print(f"🔍 HTML post_id: {post_id} | in media_map? {post_id in media_map}")
+        if context:
+            await context.close()
 
-        html += f'''
-<div class="post">
-    <div class="post-header">
-        <span>#{idx+1}</span>
-        <span>📅 {date}</span>
-    </div>
-    <div class="post-body">{body}</div>
-'''
+        self.logger.info("✅ پایان موفقیت‌آمیز.")
 
-        if mentions or hashtags or outlinks:
-            html += '<div class="meta">'
-            if mentions:
-                html += f'<span>🔗 منشن‌ها: {", ".join(mentions)}</span>'
-            if hashtags:
-                html += '<span>🏷️ ' + ' '.join([f'<span class="hashtag">{h}</span>' for h in hashtags]) + '</span>'
-            if outlinks:
-                html += '<span>🌐 لینک‌های خروجی: ' + ', '.join([f'<a href="{l}">لینک</a>' for l in outlinks]) + '</span>'
-            html += '</div>'
+    # ═══════════════════ استخراج پست‌ها (انسانی + تشخیص لینک هدف) ═══════════════════
+    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
+        from playwright.async_api import async_playwright
 
-        html += '<div class="media-container">'
-        if post_id in media_map:
-            for m_path in media_map[post_id]:
-                ext = m_path.split('.')[-1].lower()
-                if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
-                    html += f'<div class="media-item"><img src="{m_path}" loading="lazy" alt="media"></div>'
-                elif ext in ['mp4', 'webm', 'mov']:
-                    html += f'<div class="media-item"><video controls><source src="{m_path}"></video></div>'
-                elif ext in ['mp3', 'ogg', 'wav']:
-                    html += f'<div class="media-item"><audio controls><source src="{m_path}"></audio></div>'
+        p = await async_playwright().start()
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=str(self.profile_dir),
+            headless=False,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+            viewport={"width": 1366, "height": 900},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
+
+        # ─── تعیین استراتژی شروع ───
+        start_id = None
+        include_start = False
+        target_url_normalized = None
+        target_msg_id_from_url = None
+
+        # اولویت با target_url (لینک کامل)
+        if self.target_url:
+            parsed = urlparse(self.target_url)
+            path_parts = parsed.path.strip('/').split('/')
+            if len(path_parts) >= 2 and path_parts[-2] == self.channel:
+                target_msg_id_from_url = path_parts[-1]
+                target_url_normalized = f"https://t.me/{self.channel}/{target_msg_id_from_url}"
+            else:
+                self.logger.error(f"❌ لینک وارد شده معتبر نیست یا مربوط به کانال @{self.channel} نمی‌باشد.")
+                await context.close()
+                return [], None, None
+            self.logger.info(f"🎯 جستجوی پست با لینک: {target_url_normalized}")
+
+        if self.start_from and not target_url_normalized:
+            start_id = str(self.start_from)
+            include_start = True
+            self.logger.info(f"🎯 شروع دستی از پست {start_id} (با اسکرول طبیعی)")
+        elif not target_url_normalized:
+            if self.resume:
+                oldest = self._get_oldest_state_id()
+                if oldest:
+                    start_id = oldest
+                    include_start = False
+                    self.logger.info(f"🔄 ادامه خودکار از بعد از پست {start_id} (با اسکرول طبیعی)")
                 else:
-                    html += f'<div class="media-item"><a href="{m_path}">📎 {ext.upper()}</a></div>'
-        else:
-            html += '<div class="no-media">⚠️ بدون مدیا</div>'
-        html += '</div>'
+                    self.logger.info("ℹ️ فایل State خالی است. شروع از جدیدترین‌ها.")
+            else:
+                self.logger.info("🆕 شروع تازه از جدیدترین پست‌ها.")
 
-        html += f'<a href="{url}" target="_blank" class="post-url">🔗 مشاهده در تلگرام</a>'
-        html += '</div>\n'
+        # ─── ورود به کانال و پرش به جدیدترین پست‌ها ───
+        try:
+            await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
+            await context.close()
+            return [], None, None
 
-    html += '''
-<div class="footer">
-    تولید شده توسط scraper در تاریخ ''' + current_iran + '''
-</div>
-</body>
-</html>'''
-    return html
+        entered = await self._search_and_enter_channel(page)
+        if not entered:
+            await context.close()
+            return [], None, None
 
-# ═══════════════════ تابع پاکسازی فایل‌های قدیمی ═══════════════════
+        await self._save_screenshot(page, "initial")
 
-def cleanup_old_media(base_dir, media_map):
-    """
-    حذف فایل‌های مدیایی که در آخرین scrape مورد نیاز نیستند.
-    """
-    media_dir = os.path.join(base_dir, "media")
-    if not os.path.exists(media_dir):
-        return
-
-    needed_files = set()
-    for media_list in media_map.values():
-        for rel_path in media_list:
-            filename = os.path.basename(rel_path)
-            needed_files.add(filename)
-
-    removed_count = 0
-    for filename in os.listdir(media_dir):
-        filepath = os.path.join(media_dir, filename)
-        if os.path.isfile(filepath):
-            if filename not in needed_files:
-                os.remove(filepath)
-                removed_count += 1
-                print(f"🗑️ Removed old media: {filename}")
-
-    if removed_count:
-        print(f"🧹 Cleaned up {removed_count} old media file(s).")
-    else:
-        print("✅ No old media files to clean up.")
-
-# ═══════════════════ تابع زیپ با تقسیم صحیح ═══════════════════
-
-def create_zip_archive(base_dir, channel):
-    zip_name = f"{channel}_full_archive.zip"
-    zip_path = os.path.join(base_dir, zip_name)
-
-    for f in os.listdir(base_dir):
-        if f.startswith(channel + "_full_archive") and (f.endswith(".zip") or f.endswith(".z01") or f.endswith(".z02") or f.endswith(".z03")):
-            os.remove(os.path.join(base_dir, f))
-
-    temp_zip = os.path.join(base_dir, "temp_full.zip")
-    with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, _, files in os.walk(base_dir):
-            for file in files:
-                if file == "temp_full.zip" or file == zip_name:
-                    continue
-                if file.endswith(('.html', '.json', '.csv')) or 'media' in root:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, base_dir)
-                    zipf.write(file_path, arcname)
-
-    size_mb = os.path.getsize(temp_zip) / (1024 * 1024)
-    print(f"✅ Temporary ZIP created: {size_mb:.1f} MB")
-
-    MAX_SPLIT_MB = 30
-
-    if size_mb > MAX_SPLIT_MB:
-        print(f"📦 Splitting into {MAX_SPLIT_MB} MB parts with WinRAR-compatible format...")
-        cmd = [
-            "zip",
-            "-s", f"{MAX_SPLIT_MB}m",
-            temp_zip,
-            "--out", zip_path
+        self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+        clicked = False
+        scroll_button_selectors = [
+            'button[title="Go to bottom"]',
+            'div[class*="scroll-to-bottom"]',
+            'div[class*="ScrollButton"]',
+            '[aria-label="Scroll to bottom"]',
+            'button:has(svg[class*="arrow-down"])',
         ]
-        subprocess.run(cmd, check=True)
-        os.remove(temp_zip)
-        print(f"✅ Split completed. Parts: {zip_path}, {zip_path}.z01, ...")
-    else:
-        os.rename(temp_zip, zip_path)
-        print(f"ℹ️ ZIP size is acceptable, no split needed.")
-
-    return zip_name
-
-# ═══════════════════ تابع اصلی ═══════════════════
-
-def main():
-    print(f"🚀 Starting scraper for @{CHANNEL} | Limit: {LIMIT}")
-
-    client = ApifyClient(APIFY_TOKEN)
-
-    run_input = {
-        "channels": [CHANNEL],
-        "maxMessagesPerChannel": LIMIT,
-        "includeMedia": True,
-        "enableReactions": False,
-        "enableViews": True
-    }
-
-    run = client.actor(ACTOR_ID).call(
-        run_input=run_input,
-        wait_duration=timedelta(minutes=5)
-    )
-
-    if run is None or run.status != 'SUCCEEDED':
-        print(f"❌ Run failed! Status: {run.status if run else 'None'}")
-        sys.exit(1)
-
-    print(f"✅ Run succeeded. Dataset ID: {run.default_dataset_id}")
-    dataset = client.dataset(run.default_dataset_id)
-    items = list(dataset.iterate_items())
-
-    if not items:
-        print("⚠️ No posts found!")
-        return
-
-    items.sort(key=lambda x: x.get('date') or x.get('Date', ''), reverse=True)
-    print(f"📥 Received {len(items)} posts")
-
-    # ─── دانلود مدیاها با استفاده از شناسه واقعی پست ───
-    media_map = {}
-    downloaded_count = 0
-
-    for idx, item in enumerate(items):
-        # استفاده از شناسه واقعی پست به جای اندیس
-        post_id = str(item.get('id') or item.get('message_id') or f"post_{idx}")
-        print(f"📌 Processing post index {idx} (post_id: {post_id})")
-        
-        media_list = []
-
-        # استخراج مدیاها از کلیدهای مختلف
-        for key in ['photos', 'videos', 'documents', 'audio']:
-            if key in item and item[key]:
-                if isinstance(item[key], list):
-                    for m in item[key]:
-                        if isinstance(m, dict) and m.get('url'):
-                            media_list.append(m)
-                        elif isinstance(m, str) and m.startswith('http'):
-                            media_list.append({'url': m})
-                elif isinstance(item[key], str) and item[key].startswith('http'):
-                    media_list.append({'url': item[key]})
-
-        if not media_list and 'media' in item:
-            if isinstance(item['media'], list):
-                media_list = item['media']
-            elif isinstance(item['media'], str) and item['media'].startswith('http'):
-                media_list = [{'url': item['media']}]
-
-        # ─── حذف مدیاهای تکراری بر اساس URL ───
-        unique_media = {}
-        for media in media_list:
-            if isinstance(media, str):
-                url = media
-            else:
-                url = media.get('url') or media.get('Url') or media.get('link') or ''
-            if url and url not in unique_media:
-                unique_media[url] = media
-
-        print(f"   📎 Found {len(media_list)} media items, {len(unique_media)} unique")
-
-        for mi, (url, media) in enumerate(unique_media.items()):
-            if not url:
+        for sel in scroll_button_selectors:
+            try:
+                btn = page.locator(sel).first
+                if await btn.count() > 0:
+                    await btn.click(timeout=5000)
+                    self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                    clicked = True
+                    await human_sleep(3.5, 0.4)
+                    break
+            except Exception:
                 continue
+        if not clicked:
+            self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
 
-            parsed = urlparse(url)
-            path_part = unquote(parsed.path).split('/')[-1]
-            if '.' in path_part and len(path_part.split('.')[-1]) <= 5:
-                ext = path_part.split('.')[-1].split('?')[0][:10].lower()
-            else:
-                media_type = media.get('type') or media.get('mediaType') or ''
-                if 'photo' in media_type.lower() or 'image' in media_type.lower():
-                    ext = 'jpg'
-                elif 'video' in media_type.lower():
-                    ext = 'mp4'
-                elif 'audio' in media_type.lower() or 'voice' in media_type.lower():
-                    ext = 'mp3'
-                elif 'document' in media_type.lower():
-                    ext = 'file'
+        # ─── جمع‌آوری پست‌ها (با تشخیص لینک هدف) ───
+        items = []
+        seen_ids = set()
+        scroll_attempts = 0
+        target_found = False
+
+        while len(items) < self.limit and scroll_attempts < self.max_scroll_attempts:
+            try:
+                messages = await page.locator('div[data-message-id]').all()
+                for msg in reversed(messages):
+                    try:
+                        msg_id = await msg.get_attribute('data-message-id')
+                        if not msg_id or msg_id in seen_ids:
+                            continue
+
+                        # ساخت لینک پست برای مقایسه
+                        post_url = f"https://t.me/{self.channel}/{msg_id}"
+
+                        # اگر به دنبال target_url هستیم و هنوز پیدا نشده
+                        if target_url_normalized and not target_found:
+                            if post_url == target_url_normalized:
+                                target_found = True
+                                start_id = msg_id
+                                include_start = True
+                                self.logger.info(f"✅ پست هدف با لینک {target_url_normalized} پیدا شد (msg_id={msg_id}). شروع جمع‌آوری از این پست.")
+                                # خود این پست هم جمع شود
+                            else:
+                                # هنوز به پست هدف نرسیده‌ایم، اسکرول ادامه دارد
+                                continue
+
+                        # اگر start_id مشخص شده (حتی از طریق target_url) فیلتر را اعمال کن
+                        if start_id:
+                            id_int = int(msg_id)
+                            start_int = int(start_id)
+                            if include_start:
+                                if id_int > start_int:
+                                    continue
+                            else:
+                                if id_int >= start_int:
+                                    continue
+
+                        # تضمین visible بودن قبل از استخراج متن
+                        await msg.scroll_into_view_if_needed()
+                        await msg.wait_for(state="visible", timeout=5000)
+
+                        text = (await msg.inner_text()).strip()[:1000]
+                        date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
+                        date = ""
+                        datetime_attr = None
+                        if await date_el.count() > 0:
+                            date = await date_el.inner_text() or ""
+                            datetime_attr = await date_el.get_attribute('datetime')
+                            if not date and datetime_attr:
+                                date = datetime_attr
+
+                        items.append({
+                            'id': msg_id,
+                            'text': text,
+                            'date': date,
+                            'url': post_url,
+                            'datetime_attr': datetime_attr
+                        })
+                        seen_ids.add(msg_id)
+
+                        if len(items) >= self.limit:
+                            break
+                    except Exception:
+                        continue
+
+                if len(items) >= self.limit:
+                    break
+
+                old_height = await page.evaluate("document.documentElement.scrollHeight")
+                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                await human_sleep(2.5, 0.5)
+                new_height = await page.evaluate("document.documentElement.scrollHeight")
+
+                if new_height == old_height:
+                    scroll_attempts += 1
                 else:
-                    ext = 'bin'
+                    scroll_attempts = 0
 
-            filename = f"{post_id}_{mi}.{ext}"
-            filepath = os.path.join(MEDIA_DIR, filename)
-            rel_path = f"media/{filename}"
+            except Exception as e:
+                self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
+                scroll_attempts += 1
 
-            if os.path.exists(filepath):
-                media_map.setdefault(post_id, []).append(rel_path)
-                print(f"   ⏩ Already exists: {filename}")
+        if target_url_normalized and not target_found:
+            self.logger.warning(
+                f"⚠️ پست با لینک '{target_url_normalized}' بعد از {self.max_scroll_attempts} تلاش اسکرول پیدا نشد."
+                " می‌توانید از ورودی 'max_scroll_attempts' برای افزایش تلاش استفاده کنید."
+            )
+
+        items = items[:self.limit]
+        self.logger.info(f"📊 {len(items)} پست جدیدترین جمع‌آوری شد.")
+
+        await self._save_screenshot(page, "final")
+        await self._capture_post_screenshots(page, items)
+
+        if items and not start_id:
+            first_id = items[0]['id']
+            try:
+                await page.locator(f'[data-message-id="{first_id}"]').scroll_into_view_if_needed()
+                await human_sleep(1, 0.3)
+            except Exception:
+                pass
+
+        return items, context, page
+
+    # ═══════════════════ جستجو و ورود به کانال (بدون تغییر) ═══════════════════
+    async def _search_and_enter_channel(self, page) -> bool:
+        search_input = None
+        for sel in [
+            'input[placeholder*="Search"]',
+            'input[role="textbox"]',
+            '[data-testid="search-input"]'
+        ]:
+            try:
+                search_input = await page.wait_for_selector(sel, timeout=10000)
+                if search_input:
+                    self.logger.info("🔍 نوار جستجو پیدا شد.")
+                    break
+            except Exception:
+                continue
+        if not search_input:
+            self.logger.error("❌ نوار جستجو پیدا نشد.")
+            return False
+
+        await search_input.click()
+        await human_sleep(0.3, 0.2)
+        await search_input.fill('')
+        await human_sleep(0.2, 0.1)
+        await search_input.type(self.channel, delay=random.randint(80, 150))
+        self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
+        await self._take_screenshot(page, "search_input_filled")
+        await human_sleep(1.5, 0.3)
+        await search_input.press("Enter")
+        self.logger.info("⏳ منتظر نتایج...")
+
+        search_term = self.channel_name if self.channel_name else self.channel
+        found = False
+
+        self.logger.info("   🕐 مرحلهٔ اول انتظار (۱۰ ثانیه)...")
+        await human_sleep(10, 0.5)
+        if await self._check_text_on_page(page, search_term):
+            found = True
+            self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ اول یافت شد.")
+
+        if not found:
+            self.logger.info("   🕑 مرحلهٔ دوم انتظار (۱۵ ثانیه)...")
+            await human_sleep(15, 0.5)
+            if await self._check_text_on_page(page, search_term):
+                found = True
+                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ دوم یافت شد.")
+
+        if not found:
+            self.logger.info("   🕒 مرحلهٔ سوم انتظار (۲۰ ثانیه)...")
+            await human_sleep(20, 0.5)
+            if await self._check_text_on_page(page, search_term):
+                found = True
+                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحلهٔ سوم یافت شد.")
+
+        if not found:
+            self.logger.info("   📑 کلیک روی تب Channels (در صورت وجود)...")
+            try:
+                channels_tab = page.get_by_role("tab", name="Channels").first
+                if await channels_tab.count() > 0:
+                    await channels_tab.click()
+                    await human_sleep(4, 0.4)
+                    self.logger.info("   📑 تب Channels انتخاب شد.")
+            except Exception:
+                pass
+
+            for attempt in range(15):
+                await human_sleep(2, 0.3)
+                if await self._check_text_on_page(page, search_term):
+                    found = True
+                    self.logger.info(f"   ✅ عبارت '{search_term}' بعد از کلیک Channels یافت شد (تلاش {attempt+1}).")
+                    break
+
+        if not found:
+            self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۴۵+ ثانیه).")
+            await self._take_screenshot(page, "search_failed")
+            return False
+
+        self.logger.info("✅ نتایج جستجو قطعاً ظاهر شدند.")
+        await self._take_screenshot(page, f"search_results_{self.channel}")
+        await human_sleep(2, 0.3)
+
+        return await self._click_search_result(page, search_term)
+
+    async def _check_text_on_page(self, page, term: str) -> bool:
+        try:
+            return await page.evaluate(f'''(t) => {{
+                const bodyText = document.body.innerText || '';
+                return bodyText.toLowerCase().includes(t.toLowerCase());
+            }}''', term)
+        except Exception:
+            return False
+
+    async def _click_search_result(self, page, search_term: str) -> bool:
+        click_selectors = [
+            'div.chatlist-item', 'div[role="button"]', 'div.search-result',
+            'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
+            'div[class*="ListItem"]', 'div[class*="search-result"]'
+        ]
+        for sel in click_selectors:
+            try:
+                loc = page.locator(sel).first
+                if await loc.count() == 0:
+                    continue
+                await loc.click(timeout=8000, force=True)
+                await human_sleep(5, 0.4)
+                if await page.locator('div.message, div[data-message-id]').count() > 0:
+                    self.logger.info("✅ کانال با موفقیت باز شد (سلکتور %s).", sel)
+                    return True
+            except Exception as e:
+                self.logger.debug("سلکتور %s ناموفق: %s", sel, e)
+
+        self.logger.info("🔄 تلاش کلیک با JavaScript روی عبارت جستجو...")
+        try:
+            await page.evaluate(f'''(term) => {{
+                const els = Array.from(document.querySelectorAll('h3, .fullName, [dir="auto"], div[class*="name"], span[class*="peer-title"]'));
+                const target = els.find(el => el.textContent.trim().toLowerCase() === term.toLowerCase());
+                if (target) {{
+                    target.closest('div[role="button"], div.chatlist-item, a')?.click();
+                }}
+            }}''', search_term)
+            await human_sleep(5, 0.4)
+            if await page.locator('div.message, div[data-message-id]').count() > 0:
+                self.logger.info("✅ با JavaScript (عبارت جستجو) وارد شدیم.")
+                return True
+        except Exception as e:
+            self.logger.debug("JavaScript name click: %s", e)
+
+        self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین نتیجه...")
+        try:
+            await page.evaluate('''() => {
+                const item = document.querySelector('div.chatlist-item, div[role="button"], div.search-result, a[data-peer-id]');
+                if (item) item.click();
+            }''')
+            await human_sleep(5, 0.4)
+            if await page.locator('div.message, div[data-message-id]').count() > 0:
+                self.logger.info("✅ با JavaScript (اولین نتیجه) وارد شدیم.")
+                return True
+        except Exception as e:
+            self.logger.debug("JavaScript generic click: %s", e)
+
+        self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
+        await self._take_screenshot(page, "click_failed")
+        return False
+
+    async def _capture_post_screenshots(self, page, items: List[Dict]):
+        self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
+        for idx, item in enumerate(items):
+            msg_id = item['id']
+            try:
+                locator = page.locator(f'[data-message-id="{msg_id}"]').first
+                if await locator.count() == 0:
+                    self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
+                    continue
+
+                await locator.scroll_into_view_if_needed()
+                await human_sleep(0.5, 0.2)
+
+                path = self.screenshots_dir / f"{self.channel}_post_{msg_id}.png"
+                await page.screenshot(path=path, full_page=False)
+                self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+
+                if (idx + 1) % 10 == 0:
+                    self.logger.info(f"   {idx+1}/{len(items)} اسکرین‌شات گرفته شد.")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {e}")
+                continue
+        self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
+
+    async def _save_screenshot(self, page, name: str):
+        try:
+            path = self.screenshots_dir / f"{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
+
+    async def _take_screenshot(self, page, name: str):
+        try:
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+            path = self.base_dir / f"debug_{self.channel}_{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ ذخیره اسکرین‌شات شکست: {e}")
+
+    async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
+        post_ids = [str(item['id']) for item in items]
+        media_map = {}
+        downloaded = 0
+        if post_ids:
+            downloader = PlaywrightDownloader(
+                self.profile_dir, self.media_dir, self.max_media_bytes,
+                self.delay_between_posts
+            )
+            await downloader.download_all(page, context, post_ids, media_map)
+            for files in media_map.values():
+                downloaded += len(files)
+        return media_map, downloaded
+
+    def _get_oldest_state_id(self) -> str | None:
+        file_path = Path("State") / f"@{self.channel}.jsonl"
+        if not file_path.exists():
+            return None
+        ids = []
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                    ids.append(int(record['id']))
+                except Exception:
+                    continue
+        return str(min(ids)) if ids else None
+
+    async def _update_state_file(self, items: List[Dict]):
+        state_dir = Path("State")
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = state_dir / f"@{self.channel}.jsonl"
+        self.logger.info(f"📌 در حال به‌روزرسانی State: {file_path} (تعداد آیتم‌ها: {len(items)})")
+
+        existing_ids = set()
+        if file_path.exists():
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        record = json.loads(line)
+                        existing_ids.add(record['id'])
+                    except Exception:
+                        continue
+            self.logger.info(f"   📋 {len(existing_ids)} شناسهٔ موجود در State یافت شد.")
+
+        new_records = []
+        for item in items:
+            if item['id'] in existing_ids:
                 continue
 
-            print(f"⬇️ Downloading: {filename} ...")
-            success, size = download_file(url, filepath, MAX_MEDIA_SIZE_BYTES)
-            if success:
-                downloaded_count += 1
-                media_map.setdefault(post_id, []).append(rel_path)
-                print(f"   ✅ Done ({size/1024/1024:.1f} MB)")
-            else:
-                print(f"   ⏩ Skipped/failed")
+            caption = item['text'][:200].strip()
+            if len(item['text']) > 200:
+                last_space = caption.rfind(' ')
+                if last_space > 0:
+                    caption = caption[:last_space]
 
-    # ─── پاکسازی فایل‌های مدیای قدیمی ───
-    cleanup_old_media(BASE_DIR, media_map)
+            date_iran = item.get('date', '')
+            raw_dt = item.get('datetime_attr')
+            if raw_dt:
+                try:
+                    dt = datetime.fromisoformat(raw_dt.replace('Z', '+00:00'))
+                    dt_iran = dt.astimezone(IRAN_TZ)
+                    date_iran = dt_iran.strftime('%Y/%m/%d %H:%M')
+                except Exception:
+                    pass
 
-    # ─── ذخیره خروجی‌ها ───
-    json_path = os.path.join(BASE_DIR, 'posts.json')
-    csv_path = os.path.join(BASE_DIR, 'posts.csv')
-    html_path = os.path.join(BASE_DIR, 'posts.html')
+            record = {
+                'id': item['id'],
+                'url': item['url'],
+                'date_iran': date_iran,
+                'caption': caption
+            }
+            new_records.append(record)
 
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(items, f, indent=2, ensure_ascii=False)
-
-    if items:
-        sample_keys = set()
-        for item in items:
-            sample_keys.update(item.keys())
-        important_fields = ['id', 'date', 'text', 'url', 'views', 'forwards', 'replies']
-        fieldnames = [f for f in important_fields if f in sample_keys]
-        for f in ['mentions', 'hashtags', 'outlinks']:
-            if f in sample_keys:
-                fieldnames.append(f)
-
-        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for item in items:
-                row = {}
-                for k in fieldnames:
-                    val = item.get(k)
-                    if isinstance(val, list):
-                        val = ', '.join(str(v) for v in val)
-                    row[k] = val
-                writer.writerow(row)
-
-    html_content = generate_html(items, CHANNEL, media_map)
-    with open(html_path, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-
-    # ─── ساخت زیپ ───
-    zip_name = create_zip_archive(BASE_DIR, CHANNEL)
-
-    # ─── گزارش نهایی ───
-    print(f"\n🎉 Finished @{CHANNEL}!")
-    print(f"   📊 Posts: {len(items)}")
-    print(f"   🖼️ Media downloaded: {downloaded_count}")
-    print(f"   📁 Output: {BASE_DIR}/")
-    print(f"      ├── posts.json  (همه اطلاعات خام)")
-    print(f"      ├── posts.csv   (خلاصه)")
-    print(f"      ├── posts.html  (نمایش کامل با مدیاها)")
-    print(f"      ├── media/      (فایل‌های دانلود شده)")
-
-    zip_full_path = os.path.join(BASE_DIR, zip_name)
-    if os.path.exists(zip_full_path):
-        size = os.path.getsize(zip_full_path)
-        if size < 1024 * 1024 and any(f.startswith(zip_name + ".z") for f in os.listdir(BASE_DIR)):
-            parts = sorted([f for f in os.listdir(BASE_DIR) if f.startswith(zip_name) and f != zip_name])
-            print(f"      └── {zip_name} (تقسیم شده به {len(parts)+1} قطعهٔ ۳۰ مگابایتی، قابل باز شدن با وین‌رر):")
-            print(f"           ├── {zip_name}")
-            for p in parts:
-                print(f"           ├── {p}")
+        if new_records:
+            with open(file_path, 'a', encoding='utf-8') as f:
+                for record in new_records:
+                    f.write(json.dumps(record, ensure_ascii=False) + '\n')
+            self.logger.info(f"📝 {len(new_records)} پست جدید به State اضافه شد: {file_path}")
         else:
-            print(f"      └── {zip_name} (حجم {size/1024/1024:.1f} MB)")
-    else:
-        print("      └── (هیچ فایل زیپی یافت نشد)")
-
-if __name__ == "__main__":
-    main()
+            self.logger.info("ℹ️ هیچ پست جدیدی برای State وجود نداشت (همه تکراری بودند).")
