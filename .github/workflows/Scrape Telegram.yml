@@ -24,10 +24,6 @@ on:
         type: boolean
         required: false
         default: false
-      resume:
-        description: 'ادامه از آخرین نقطه ذخیره‌شده؟ (yes/no)'
-        required: false
-        default: 'yes'
 
 permissions:
   contents: write
@@ -42,14 +38,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # ════════════════════════════════════════════
-      # ۱. دریافت کد از مخزن
+      # ۱. دریافت کد از مخزن (فقط آخرین commit)
       # ════════════════════════════════════════════
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
-          fetch-depth: 1
+          fetch-depth: 1   # فقط آخرین commit، نه کل تاریخچه
 
       # ════════════════════════════════════════════
       # ۲. تنظیم پایتون
@@ -60,7 +56,7 @@ jobs:
           python-version: '3.11'
 
       # ════════════════════════════════════════════
-      # ۳. کش بسته‌های pip
+      # ۳. کش بسته‌های pip (وابستگی‌های پایتون)
       # ════════════════════════════════════════════
       - name: 💾 Cache pip packages
         uses: actions/cache@v4
@@ -79,7 +75,7 @@ jobs:
           pip install -r requirements.txt
 
       # ════════════════════════════════════════════
-      # ۵. کش مرورگر Playwright
+      # ۵. کش مرورگر Playwright (کرومیوم)
       # ════════════════════════════════════════════
       - name: 💾 Cache Playwright browsers
         uses: actions/cache@v4
@@ -90,7 +86,7 @@ jobs:
             ${{ runner.os }}-playwright-
 
       # ════════════════════════════════════════════
-      # ۶. نصب Playwright و کرومیوم
+      # ۶. نصب Playwright و مرورگر کرومیوم
       # ════════════════════════════════════════════
       - name: 🎭 Install Playwright and Chromium
         run: |
@@ -105,7 +101,7 @@ jobs:
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
       # ════════════════════════════════════════════
-      # ۸. به‌روزرسانی config.yaml با ورودی‌ها
+      # ۸. به‌روزرسانی فایل تنظیمات با ورودی‌ها
       # ════════════════════════════════════════════
       - name: ⚙️ Update config.yaml with inputs
         run: |
@@ -117,17 +113,16 @@ jobs:
           c['channel_name'] = '${{ github.event.inputs.channel_name }}'
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
-          c['resume'] = '${{ github.event.inputs.resume }}' == 'yes'
           with open('config/config.yaml', 'w') as f:
               yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
           "
-
+          
       # ════════════════════════════════════════════
       # ۸.۵ پاکسازی خروجی قبلی همین کانال
       # ════════════════════════════════════════════
       - name: 🧹 Clean old output for this channel
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
-
+      
       # ════════════════════════════════════════════
       # ۹. اجرای اسکریپر (اصلی یا دیباگ)
       # ════════════════════════════════════════════
@@ -140,7 +135,7 @@ jobs:
         if: ${{ inputs.debug_mode }}
         run: python .github/scripts/debug_full.py
         timeout-minutes: 35
-
+        
       - name: 🧹 Delete old debug screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
@@ -150,7 +145,7 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          
       # ════════════════════════════════════════════
       # ۱۰. آپلود اسکرین‌شات‌های دیباگ
       # ════════════════════════════════════════════
@@ -192,16 +187,12 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
-          file_pattern: |
-            Download/telegram_downloads/${{ github.event.inputs.channel }}/**
-            State/*
+          file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
 
-      # ════════════════════════════════════════════
-      # پاکسازی آرتیفکت قدیمی اسکرین‌شات پست‌ها
-      # ════════════════════════════════════════════
+      # مرحلهٔ جدید پاکسازی آرتیفکت قدیمی
       - name: 🧹 Delete old post screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
