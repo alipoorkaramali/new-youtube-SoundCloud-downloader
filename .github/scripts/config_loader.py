@@ -17,8 +17,8 @@ class Config:
     channel_name: str = ''        # نام نمایشی کانال (اختیاری)
     resume: bool = True           # ادامه خودکار از آخرین نقطه
     start_from: str = ''          # شناسهٔ پست برای شروع دستی (message_id)
-    target_url: str = ''          # (جدید) لینک کامل پست برای شروع
-    max_scroll_attempts: int = 30 # (جدید) حداکثر تلاش اسکرول
+    target_url: str = ''          # لینک کامل پست برای شروع
+    max_scroll_attempts: int = 60 # حداکثر تلاش اسکرول (افزایش یافته)
 
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
@@ -45,10 +45,10 @@ def load_config(path: str = "config.yaml") -> Config:
         max_media_mb=data['max_media_mb'],
         output_dir=data.get('output_dir', 'Download'),
         profile_dir=data['profile_dir'],
-        delay_between_posts=data.get('delay_between_posts', 1.5),
+        delay_between_posts=data.get('delay_between_posts', 2.2),   # پیش‌فرض ۲.۲
         channel_name=data.get('channel_name', ''),
         resume=data.get('resume', True),
         start_from=data.get('start_from', ''),
-        target_url=data.get('target_url', ''),            # جدید
-        max_scroll_attempts=data.get('max_scroll_attempts', 30)  # جدید
+        target_url=data.get('target_url', ''),
+        max_scroll_attempts=data.get('max_scroll_attempts', 60)     # پیش‌فرض ۶۰
     )
