@@ -1,16 +1,18 @@
-2026-06-28 19:03:22,840 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-06-28 19:03:22,840 [INFO] 🔢 حداکثر تلاش اسکرول: 60
-2026-06-28 19:03:22,840 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=15)
-2026-06-28 19:03:24,677 [INFO] 🎯 جستجوی مستقیم لینک و ورود به پست 285221
-2026-06-28 19:03:32,195 [INFO] 🔍 در حال جستجوی لینک: https://t.me/bbcpersian/285221
-2026-06-28 19:03:32,343 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_link_input.png
-2026-06-28 19:03:33,670 [INFO] ⏳ منتظر نتیجهٔ جستجوی لینک...
-2026-06-28 19:03:33,670 [INFO] 🔎 جستجوی بخش Messages در نتایج جستجو...
-2026-06-28 19:03:48,673 [WARNING] ⚠️ خطا در یافتن بخش Messages: Page.wait_for_selector: Timeout 15000ms exceeded.
+2026-06-28 19:12:38,339 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-28 19:12:38,340 [INFO] 🔢 حداکثر تلاش اسکرول: 60
+2026-06-28 19:12:38,340 [INFO] 🔊 حالت Verbose فعال است – جزئیات بررسی هر پست نمایش داده می‌شود.
+2026-06-28 19:12:38,340 [INFO] 🚀 شروع اسکریپر مستقل برای @bbcpersian (limit=3)
+2026-06-28 19:12:41,435 [INFO] 🎯 جستجوی مستقیم لینک و ورود به پست 285221
+2026-06-28 19:12:48,740 [INFO] 🔍 در حال جستجوی لینک: https://t.me/bbcpersian/285221
+2026-06-28 19:12:48,887 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_link_input.png
+2026-06-28 19:12:50,831 [INFO] ⏳ منتظر نتیجهٔ جستجوی لینک...
+2026-06-28 19:12:50,831 [INFO] 🔎 جستجوی بخش Messages در نتایج جستجو...
+2026-06-28 19:13:05,834 [WARNING] ⚠️ خطا در یافتن بخش Messages: Page.wait_for_selector: Timeout 15000ms exceeded.
 Call log:
   - waiting for locator("text=Messages") to be visible
     33 × locator resolved to 14 elements. Proceeding with the first one: <div tabindex="0" role="menuitem" class="MenuItem compact">…</div>
 
-2026-06-28 19:03:48,673 [INFO] 🔄 تلاش کلیک با JavaScript روی نتیجهٔ لینک...
-2026-06-28 19:03:48,673 [ERROR] ❌ کلیک روی نتیجهٔ لینک موفق نبود.
-2026-06-28 19:03:48,804 [WARNING] هیچ پستی دریافت نشد.
+2026-06-28 19:13:05,834 [INFO] 🔄 تلاش کلیک با JavaScript روی نتیجهٔ لینک...
+2026-06-28 19:13:05,835 [DEBUG] JavaScript click failed: Page.evaluate() takes from 2 to 3 positional arguments but 4 were given
+2026-06-28 19:13:05,835 [ERROR] ❌ کلیک روی نتیجهٔ لینک موفق نبود.
+2026-06-28 19:13:06,014 [WARNING] هیچ پستی دریافت نشد.
