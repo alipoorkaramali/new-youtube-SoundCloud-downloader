@@ -45,6 +45,11 @@ on:
         description: 'حداکثر تلاش اسکرول (برای جستجوی پست هدف)'
         required: false
         default: '60'
+      verbose_mode:
+        description: 'نمایش جزئیات بررسی هر پست در لاگ (DEBUG)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -112,6 +117,7 @@ jobs:
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
           c['max_scroll_attempts'] = ${{ github.event.inputs.max_scroll_attempts }}
           c['target_url'] = '${{ github.event.inputs.target_url }}'
+          c['verbose'] = '${{ github.event.inputs.verbose_mode }}' == 'true'
           mode = '${{ github.event.inputs.resume_mode }}'
           if mode == 'auto':
               c['resume'] = True
