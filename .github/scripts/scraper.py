@@ -136,7 +136,7 @@ class TelegramChannelScraper:
             self.logger.info(f"📍 پرش مستقیم به پست {start_id} برای ادامه اسکرپ")
             await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
             await human_sleep(3, 0.5)
-            
+
             # 🔁 اسکرول کمکی اولیه برای تحریک بارگذاری پست‌های قدیمی‌تر
             self.logger.info("🔄 تحریک بارگذاری تاریخچه با اسکرول به بالا...")
             await page.evaluate("window.scrollBy(0, -800)")
@@ -497,6 +497,7 @@ class TelegramChannelScraper:
         state_dir = Path("State")
         state_dir.mkdir(exist_ok=True)
         file_path = state_dir / f"@{self.channel}.jsonl"
+        self.logger.info(f"📌 در حال به‌روزرسانی State: {file_path} (تعداد آیتم‌ها: {len(items)})")
 
         existing_ids = set()
         if file_path.exists():
@@ -507,40 +508,44 @@ class TelegramChannelScraper:
                         existing_ids.add(record['id'])
                     except Exception:
                         continue
+            self.logger.info(f"   📋 {len(existing_ids)} شناسهٔ موجود در State یافت شد.")
 
-        new_lines = 0
-        with open(file_path, 'a', encoding='utf-8') as f:
-            for item in items:
-                if item['id'] in existing_ids:
-                    continue
+        new_records = []
+        for item in items:
+            if item['id'] in existing_ids:
+                continue
 
-                # خلاصه کپشن (۲۰۰ کاراکتر اول بدون شکستن کلمه)
-                caption = item['text'][:200]
-                if len(item['text']) > 200:
-                    last_space = caption.rfind(' ')
-                    if last_space > 0:
-                        caption = caption[:last_space]
-                caption = caption.strip()
+            # خلاصه کپشن (۲۰۰ کاراکتر اول بدون شکستن کلمه)
+            caption = item['text'][:200]
+            if len(item['text']) > 200:
+                last_space = caption.rfind(' ')
+                if last_space > 0:
+                    caption = caption[:last_space]
+            caption = caption.strip()
 
-                # تبدیل تاریخ به وقت ایران
-                date_iran = item['date']  # fallback
-                raw_dt = item.get('datetime_attr')
-                if raw_dt:
-                    try:
-                        dt = datetime.fromisoformat(raw_dt.replace('Z', '+00:00'))
-                        dt_iran = dt.astimezone(IRAN_TZ)
-                        date_iran = dt_iran.strftime('%Y/%m/%d %H:%M')
-                    except Exception:
-                        pass  # از fallback استفاده می‌کند
+            # تبدیل تاریخ به وقت ایران
+            date_iran = item['date']  # fallback
+            raw_dt = item.get('datetime_attr')
+            if raw_dt:
+                try:
+                    dt = datetime.fromisoformat(raw_dt.replace('Z', '+00:00'))
+                    dt_iran = dt.astimezone(IRAN_TZ)
+                    date_iran = dt_iran.strftime('%Y/%m/%d %H:%M')
+                except Exception:
+                    pass  # از fallback استفاده می‌کند
 
-                record = {
-                    'id': item['id'],
-                    'url': item['url'],
-                    'date_iran': date_iran,
-                    'caption': caption
-                }
-                f.write(json.dumps(record, ensure_ascii=False) + '\n')
-                new_lines += 1
+            record = {
+                'id': item['id'],
+                'url': item['url'],
+                'date_iran': date_iran,
+                'caption': caption
+            }
+            new_records.append(record)
 
-        if new_lines:
-            self.logger.info(f"📝 {new_lines} پست جدید به State اضافه شد: {file_path}")
+        if new_records:
+            with open(file_path, 'a', encoding='utf-8') as f:
+                for record in new_records:
+                    f.write(json.dumps(record, ensure_ascii=False) + '\n')
+            self.logger.info(f"📝 {len(new_records)} پست جدید به State اضافه شد: {file_path}")
+        else:
+            self.logger.info("ℹ️ هیچ پست جدیدی برای State وجود نداشت (همه تکراری بودند).")
