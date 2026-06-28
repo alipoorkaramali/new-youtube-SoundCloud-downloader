@@ -275,7 +275,7 @@ class TelegramChannelScraper:
 
         return items, context, page
 
-    # ═══════════════ متدهای کمکی (بدون تغییر کلی) ═══════════════
+    # ═══════════════ متدهای کمکی ═══════════════
 
     async def _find_search_input(self, page):
         for sel in [
@@ -336,20 +336,22 @@ class TelegramChannelScraper:
         """
         self.logger.info("🔎 جستجوی بخش Messages در نتایج جستجو...")
         try:
-            # صبر می‌کنیم تا بخش‌های نتایج لود شوند (منتظر ظاهر شدن کلمه "Messages" می‌مانیم)
-            await page.wait_for_selector('text=Messages', timeout=15000)
+            # صبر می‌کنیم تا حداقل یک بخش با متن "Messages" ظاهر شود که واقعاً هدر باشد
+            # از locator با has-text و فیلتر کلاس استفاده می‌کنیم
+            messages_header = page.locator('div:has-text("Messages"):not([role="menuitem"])').first
+            await messages_header.wait_for(state="visible", timeout=15000)
 
-            # پیدا کردن اولین آیتم در بخش Messages:
-            # ساختار معمول: یک div یا section شامل header "Messages" و سپس آیتم‌ها.
-            # با XPath: از المان حاوی "Messages" به سمت والد می‌رویم و سپس اولین دکمه یا آیتم جستجو را درون آن والد می‌گیریم.
-            first_result = page.locator(
-                'xpath=//*[contains(text(), "Messages")]/ancestor::div[contains(@class, "search-group") or contains(@class, "group")]//div[@role="button" or contains(@class, "search-result") or contains(@class, "ListItem")]'
+            # حالا اولین آیتم زیرمجموعه را پیدا می‌کنیم.
+            # معمولاً آیتم‌ها div با role="button" یا کلاس‌های خاص هستند و بعد از هدر می‌آیند.
+            first_result = messages_header.locator(
+                'xpath=ancestor::div[contains(@class, "search-group") or contains(@class, "group")]/following-sibling::div//div[@role="button" or contains(@class, "search-result") or contains(@class, "ListItem")]'
             ).first
 
             if await first_result.count() == 0:
-                # روش ساده‌تر: از "Messages" به پایین برو و اولین div قابل کلیک را انتخاب کن
+                # اگر xpath جواب نداد، مستقیماً اولین عنصر قابل کلیک بعد از هدر را برمی‌گردانیم
                 first_result = page.locator(
-                    'xpath=//*[contains(text(), "Messages")]/following::div[@role="button" or contains(@class, "search-result") or contains(@class, "ListItem")][1]'
+                    'div:has-text("Messages"):not([role="menuitem"]) ~ div div[role="button"], '
+                    'div:has-text("Messages"):not([role="menuitem"]) ~ div[contains(@class, "search-result")]'
                 ).first
 
             if await first_result.count() > 0 and await first_result.is_visible(timeout=5000):
@@ -365,19 +367,23 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در یافتن بخش Messages: {e}")
 
-        # Fallback با JavaScript (به عنوان آخرین راه حل)
+        # Fallback با JavaScript (با فرمت صحیح)
         self.logger.info("🔄 تلاش کلیک با JavaScript روی نتیجهٔ لینک...")
         try:
-            await page.evaluate(f'''(channel, msg_id) => {{
-                const url = "https://t.me/" + channel + "/" + msg_id;
-                const links = Array.from(document.querySelectorAll('a[href*="' + url + '"]'));
-                if (links.length) {{
-                    links[0].click();
-                    return;
-                }}
-                const item = document.querySelector('div.chatlist-item, div.search-result, div[class*="ListItem"]');
-                if (item) item.click();
-            }}''', channel, msg_id)
+            await page.evaluate(
+                "(channel, msg_id) => {"
+                "  const url = 'https://t.me/' + channel + '/' + msg_id;"
+                "  const links = Array.from(document.querySelectorAll('a[href*=\"' + url + '\"]'));"
+                "  if (links.length) {"
+                "    links[0].click();"
+                "    return;"
+                "  }"
+                "  const item = document.querySelector('div.chatlist-item, div.search-result, div[class*=\"ListItem\"]');"
+                "  if (item) item.click();"
+                "}",
+                channel,
+                msg_id
+            )
             await human_sleep(5, 0.4)
             if await page.locator('div[data-message-id]').count() > 0:
                 self.logger.info("✅ با JavaScript وارد پیام شدیم.")
