@@ -170,7 +170,7 @@ jobs:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
           file_pattern: |
             Download/telegram_downloads/${{ github.event.inputs.channel }}/**
-            State/*
+            State/**
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
