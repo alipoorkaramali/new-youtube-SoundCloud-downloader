@@ -46,12 +46,17 @@ class TelegramChannelScraper:
         self.start_from = getattr(config, 'start_from', '')
         self.target_url = getattr(config, 'target_url', '').strip()
         self.max_scroll_attempts = getattr(config, 'max_scroll_attempts', 60)
+        self.verbose = getattr(config, 'verbose', False)
 
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         self.logger = logging.getLogger("TelegramScraper")
-        self.logger.setLevel(logging.INFO)
+        # اگر verbose فعال باشد، سطح لاگ روی DEBUG تنظیم می‌شود
+        if self.verbose:
+            self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
         fh = logging.FileHandler(self.base_dir / "scraper.log", encoding='utf-8')
         fh.setFormatter(formatter)
@@ -63,6 +68,8 @@ class TelegramChannelScraper:
 
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
         self.logger.info(f"🔢 حداکثر تلاش اسکرول: {self.max_scroll_attempts}")
+        if self.verbose:
+            self.logger.info("🔊 حالت Verbose فعال است – جزئیات بررسی هر پست نمایش داده می‌شود.")
 
     # ═══════════════════ متد اصلی ═══════════════════
     async def run(self):
@@ -177,7 +184,8 @@ class TelegramChannelScraper:
         seen_ids = set()
         scroll_attempts = 0
         target_found = False
-        fast_scroll_counter = 0   # شمارنده برای ترکیب گام بلند و کوتاه
+        fast_scroll_counter = 0
+        checked_total = 0
 
         while len(items) < self.limit and scroll_attempts < self.max_scroll_attempts:
             try:
@@ -188,10 +196,13 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # ساخت لینک پست برای مقایسه
                         post_url = f"https://t.me/{self.channel}/{msg_id}"
+                        checked_total += 1
 
-                        # اگر به دنبال target_url هستیم و هنوز پیدا نشده
+                        # لاگ سطح DEBUG همیشه (در صورت verbose نشان داده می‌شود)
+                        self.logger.debug(f"🔎 بررسی پست {msg_id} | لینک: {post_url}")
+
+                        # ─── منطق جستجوی target_url ───
                         if target_url_normalized and not target_found:
                             if post_url == target_url_normalized:
                                 target_found = True
@@ -199,20 +210,29 @@ class TelegramChannelScraper:
                                 include_start = True
                                 self.logger.info(f"✅ پست هدف با لینک {target_url_normalized} پیدا شد (msg_id={msg_id}). شروع جمع‌آوری از این پست.")
                             else:
-                                continue   # هنوز نرسیدیم، اسکرول ادامه دارد
+                                # در حالت verbose دلیل رد شدن را بنویسیم،
+                                # در غیر این صورت فقط هر 10 بررسی یک گزارش پیشرفت
+                                if self.verbose:
+                                    self.logger.debug(f"   ↳ هنوز تطابق ندارد (هدف: {target_url_normalized})")
+                                else:
+                                    if checked_total % 10 == 0:
+                                        self.logger.info(f"🔍 {checked_total} پست بررسی شد، آخرین: {msg_id} | هدف هنوز پیدا نشده.")
+                                continue
 
-                        # اگر start_id مشخص شده (حتی از طریق target_url) فیلتر را اعمال کن
+                        # ─── فیلتر start_id ───
                         if start_id:
                             id_int = int(msg_id)
                             start_int = int(start_id)
                             if include_start:
                                 if id_int > start_int:
+                                    self.logger.debug(f"   ↳ پست {msg_id} جدیدتر از start_id است – رد شد.")
                                     continue
                             else:
                                 if id_int >= start_int:
+                                    self.logger.debug(f"   ↳ پست {msg_id} جدیدتر یا مساوی start_id است – رد شد.")
                                     continue
 
-                        # تضمین visible بودن قبل از استخراج متن
+                        # ─── استخراج و ذخیره پست ───
                         await msg.scroll_into_view_if_needed()
                         await msg.wait_for(state="visible", timeout=5000)
 
@@ -234,6 +254,7 @@ class TelegramChannelScraper:
                             'datetime_attr': datetime_attr
                         })
                         seen_ids.add(msg_id)
+                        self.logger.debug(f"   ✅ ذخیره شد: {msg_id}")
 
                         if len(items) >= self.limit:
                             break
@@ -248,7 +269,7 @@ class TelegramChannelScraper:
                     # هر ۳ گام بلند، یک گام کوتاه برای اطمینان از عدم پرش
                     if fast_scroll_counter % 3 == 0 and fast_scroll_counter > 0:
                         step = SCROLL_UP_CHECK
-                        self.logger.debug("🐢 گام کوتاه برای بررسی نزدیک")
+                        self.logger.debug("🐢 گام کوتاه بررسی")
                     else:
                         step = SCROLL_UP_FAST
                         self.logger.debug("🐇 گام بلند جستجو")
