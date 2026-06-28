@@ -14,6 +14,9 @@ class Config:
     output_dir: str               # پوشهٔ اصلی خروجی
     profile_dir: str              # پوشهٔ پروفایل مرورگر
     delay_between_posts: float    # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
+    channel_name: str = ''        # نام نمایشی کانال (اختیاری)
+    resume: bool = True           # ادامه خودکار از آخرین نقطه
+    start_from: str = ''          # شناسهٔ پست برای شروع دستی
 
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
@@ -40,5 +43,8 @@ def load_config(path: str = "config.yaml") -> Config:
         max_media_mb=data['max_media_mb'],
         output_dir=data.get('output_dir', 'Download'),
         profile_dir=data['profile_dir'],
-        delay_between_posts=data.get('delay_between_posts', 1.5)
+        delay_between_posts=data.get('delay_between_posts', 1.5),
+        channel_name=data.get('channel_name', ''),
+        resume=data.get('resume', True),
+        start_from=data.get('start_from', '')
     )
