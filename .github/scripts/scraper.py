@@ -317,139 +317,139 @@ class TelegramChannelScraper:
 
         # ۵. کلیک روی اولین نتیجه (با استفاده از همان search_term)
         return await self._click_search_result(page, search_term)
-        
-#----------------- متد جستجو با لینک -----------------------------------
+
+    # ======================== متد جستجو با لینک ========================================
 
     async def _navigate_to_start_link(self, page) -> bool:
-    """
-    اگر start_link تعیین شده باشد، آن را در نوار جستجو تایپ کرده،
-    سپس اولین نتیجه (پیام) را در نتایج جستجو پیدا کرده و کلیک می‌کند.
-    (تب Messages فرضاً فعال است)
-    """
-    self.logger.info(f"🔗 تلاش برای رفتن به لینک: {self.start_link}")
+        """
+        اگر start_link تعیین شده باشد، آن را در نوار جستجو تایپ کرده،
+        سپس اولین نتیجه (پیام) را در نتایج جستجو پیدا کرده و کلیک می‌کند.
+        (تب Messages فرضاً فعال است)
+        """
+        self.logger.info(f"🔗 تلاش برای رفتن به لینک: {self.start_link}")
 
-    # ۱. پیدا کردن نوار جستجو
-    search_input = None
-    for sel in [
-        'input[placeholder*="Search"]',
-        'input[role="textbox"]',
-        '[data-testid="search-input"]'
-    ]:
-        try:
-            search_input = await page.wait_for_selector(sel, timeout=10000)
-            if search_input:
-                self.logger.info("🔍 نوار جستجو پیدا شد.")
-                break
-        except Exception:
-            continue
-    if not search_input:
-        self.logger.error("❌ نوار جستجو پیدا نشد.")
-        return False
+        # ۱. پیدا کردن نوار جستجو
+        search_input = None
+        for sel in [
+            'input[placeholder*="Search"]',
+            'input[role="textbox"]',
+            '[data-testid="search-input"]'
+        ]:
+            try:
+                search_input = await page.wait_for_selector(sel, timeout=10000)
+                if search_input:
+                    self.logger.info("🔍 نوار جستجو پیدا شد.")
+                    break
+            except Exception:
+                continue
+        if not search_input:
+            self.logger.error("❌ نوار جستجو پیدا نشد.")
+            return False
 
-    # ۲. تایپ لینک در نوار جستجو
-    await search_input.click()
-    await human_sleep(0.3, 0.2)
-    await search_input.fill('')
-    await human_sleep(0.2, 0.1)
-    await search_input.type(self.start_link, delay=random.randint(80, 150))
-    self.logger.info(f"🔍 لینک تایپ شد: {self.start_link}")
-    
-    # 📸 اسکرین‌شات بعد از تایپ لینک
-    await self._take_screenshot(page, "search_link_filled")
-    await human_sleep(1.5, 0.3)
-    
-    await search_input.press("Enter")
-    self.logger.info("⏳ منتظر نتایج جستجو...")
+        # ۲. تایپ لینک در نوار جستجو
+        await search_input.click()
+        await human_sleep(0.3, 0.2)
+        await search_input.fill('')
+        await human_sleep(0.2, 0.1)
+        await search_input.type(self.start_link, delay=random.randint(80, 150))
+        self.logger.info(f"🔍 لینک تایپ شد: {self.start_link}")
 
-    # ۳. انتظار برای بارگذاری نتایج (حداکثر ۱۵ ثانیه)
-    await human_sleep(5, 0.5)
+        # 📸 اسکرین‌شات بعد از تایپ لینک
+        await self._take_screenshot(page, "search_link_filled")
+        await human_sleep(1.5, 0.3)
 
-    # 📸 اسکرین‌شات از نتایج جستجو (قبل از کلیک)
-    await self._take_screenshot(page, "search_results_loaded")
+        await search_input.press("Enter")
+        self.logger.info("⏳ منتظر نتایج جستجو...")
 
-    # ۴. پیدا کردن اولین نتیجه (پیام) و کلیک روی آن
-    clicked_result = False
-    result_selectors = [
-        'div[data-message-id]',
-        'div[class*="search-result"] a',
-        'div[class*="message"] a',
-        'div[role="button"][class*="item"]',
-        'div.chatlist-item',
-        'a[data-peer-id]',
-    ]
-
-    for sel in result_selectors:
-        try:
-            await page.wait_for_selector(sel, timeout=5000)
-            first_result = page.locator(sel).first
-            if await first_result.count() > 0:
-                await first_result.scroll_into_view_if_needed()
-                
-                # 🎯 هایلایت کردن المان قبل از کلیک
-                try:
-                    await page.evaluate('''(element) => {
-                        element.style.outline = '3px solid red';
-                        element.style.outlineOffset = '2px';
-                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }''', await first_result.element_handle())
-                    await human_sleep(1, 0.3)
-                    await self._take_screenshot(page, "before_click_highlighted")
-                except Exception as e:
-                    self.logger.debug(f"خطا در هایلایت کردن: {e}")
-                
-                await first_result.click(timeout=5000, force=True)
-                self.logger.info(f"✅ روی اولین نتیجه با سلکتور '{sel}' کلیک شد.")
-                clicked_result = True
-                break
-        except Exception as e:
-            self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
-            continue
-
-    # اگر با سلکتورها نشد، با JavaScript
-    if not clicked_result:
-        self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین پیام...")
-        try:
-            await page.evaluate('''() => {
-                const firstMsg = document.querySelector('[data-message-id]');
-                if (firstMsg) {
-                    firstMsg.style.outline = '3px solid red';
-                    firstMsg.style.outlineOffset = '2px';
-                    firstMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    setTimeout(() => {
-                        firstMsg.click();
-                    }, 500);
-                }
-            }''')
-            await human_sleep(2, 0.3)
-            await self._take_screenshot(page, "after_js_click")
-            self.logger.info("✅ کلیک با JavaScript انجام شد.")
-            clicked_result = True
-        except Exception as e:
-            self.logger.error(f"❌ کلیک با JavaScript شکست خورد: {e}")
-
-    if not clicked_result:
-        self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
-        await self._take_screenshot(page, "click_result_failed")
-        return False
-
-    # ۵. پس از کلیک، منتظر بارگذاری صفحه پیام
-    self.logger.info("⏳ منتظر بارگذاری صفحه پیام...")
-    await human_sleep(5, 0.5)
-
-    if await page.locator('div[data-message-id]').count() > 0:
-        self.logger.info("✅ صفحه پیام‌ها با موفقیت بارگذاری شد.")
-        await self._take_screenshot(page, "messages_page_loaded")
-        return True
-    else:
+        # ۳. انتظار برای بارگذاری نتایج (حداکثر ۱۵ ثانیه)
         await human_sleep(5, 0.5)
+
+        # 📸 اسکرین‌شات از نتایج جستجو (قبل از کلیک)
+        await self._take_screenshot(page, "search_results_loaded")
+
+        # ۴. پیدا کردن اولین نتیجه (پیام) و کلیک روی آن
+        clicked_result = False
+        result_selectors = [
+            'div[data-message-id]',
+            'div[class*="search-result"] a',
+            'div[class*="message"] a',
+            'div[role="button"][class*="item"]',
+            'div.chatlist-item',
+            'a[data-peer-id]',
+        ]
+
+        for sel in result_selectors:
+            try:
+                await page.wait_for_selector(sel, timeout=5000)
+                first_result = page.locator(sel).first
+                if await first_result.count() > 0:
+                    await first_result.scroll_into_view_if_needed()
+
+                    # 🎯 هایلایت کردن المان قبل از کلیک
+                    try:
+                        await page.evaluate('''(element) => {
+                            element.style.outline = '3px solid red';
+                            element.style.outlineOffset = '2px';
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }''', await first_result.element_handle())
+                        await human_sleep(1, 0.3)
+                        await self._take_screenshot(page, "before_click_highlighted")
+                    except Exception as e:
+                        self.logger.debug(f"خطا در هایلایت کردن: {e}")
+
+                    await first_result.click(timeout=5000, force=True)
+                    self.logger.info(f"✅ روی اولین نتیجه با سلکتور '{sel}' کلیک شد.")
+                    clicked_result = True
+                    break
+            except Exception as e:
+                self.logger.debug(f"سلکتور {sel} ناموفق: {e}")
+                continue
+
+        # اگر با سلکتورها نشد، با JavaScript
+        if not clicked_result:
+            self.logger.info("🔄 تلاش کلیک با JavaScript روی اولین پیام...")
+            try:
+                await page.evaluate('''() => {
+                    const firstMsg = document.querySelector('[data-message-id]');
+                    if (firstMsg) {
+                        firstMsg.style.outline = '3px solid red';
+                        firstMsg.style.outlineOffset = '2px';
+                        firstMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => {
+                            firstMsg.click();
+                        }, 500);
+                    }
+                }''')
+                await human_sleep(2, 0.3)
+                await self._take_screenshot(page, "after_js_click")
+                self.logger.info("✅ کلیک با JavaScript انجام شد.")
+                clicked_result = True
+            except Exception as e:
+                self.logger.error(f"❌ کلیک با JavaScript شکست خورد: {e}")
+
+        if not clicked_result:
+            self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
+            await self._take_screenshot(page, "click_result_failed")
+            return False
+
+        # ۵. پس از کلیک، منتظر بارگذاری صفحه پیام
+        self.logger.info("⏳ منتظر بارگذاری صفحه پیام...")
+        await human_sleep(5, 0.5)
+
         if await page.locator('div[data-message-id]').count() > 0:
-            self.logger.info("✅ صفحه پیام‌ها با موفقیت بارگذاری شد (پس از انتظار مجدد).")
-            await self._take_screenshot(page, "messages_page_loaded_retry")
+            self.logger.info("✅ صفحه پیام‌ها با موفقیت بارگذاری شد.")
+            await self._take_screenshot(page, "messages_page_loaded")
             return True
         else:
-            self.logger.error("❌ پس از کلیک، پیام‌ها پیدا نشدند.")
-            await self._take_screenshot(page, "no_messages_after_click")
-            return False
+            await human_sleep(5, 0.5)
+            if await page.locator('div[data-message-id]').count() > 0:
+                self.logger.info("✅ صفحه پیام‌ها با موفقیت بارگذاری شد (پس از انتظار مجدد).")
+                await self._take_screenshot(page, "messages_page_loaded_retry")
+                return True
+            else:
+                self.logger.error("❌ پس از کلیک، پیام‌ها پیدا نشدند.")
+                await self._take_screenshot(page, "no_messages_after_click")
+                return False
 
     # ═══════════════════ متد کمکی: بررسی وجود عبارت در صفحه ═══════════════════
     async def _check_text_on_page(self, page, term: str) -> bool:
