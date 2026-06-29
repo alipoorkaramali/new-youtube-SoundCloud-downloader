@@ -194,10 +194,15 @@ jobs:
         run: |
           OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
           if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then
-            echo "❌ No output found"
-            exit 1
+            if [[ "${{ inputs.debug_mode }}" == "false" && "${{ inputs.save_to }}" == "repository" ]]; then
+              echo "❌ No output found in normal mode – this is an error"
+              exit 1
+            else
+              echo "⚠️ No output found (expected in debug or artifact-only mode)"
+            fi
+          else
+            echo "✅ Output directory is ready"
           fi
-          echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
       # ۱۲.۵ تنظیم Git LFS
