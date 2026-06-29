@@ -18,11 +18,16 @@ from markupsafe import Markup
 class OutputGenerator:
     """تولید فایل‌های خروجی JSON، CSV، HTML و ZIP (با قابلیت تقسیم خودکار)"""
 
-    def __init__(self, base_dir: Path, channel: str, posts: list, media_map: dict):
+    def __init__(self, base_dir: Path, channel: str, posts: list, media_map: dict, debug_mode: bool = False):
+        """
+        :param debug_mode: اگر True باشد، اسکرین‌شات‌های پست‌ها و دیباگ در ZIP قرار می‌گیرند.
+                           در حالت عادی (False) این پوشه‌ها از ZIP حذف می‌شوند.
+        """
         self.base_dir = base_dir
         self.channel = channel
         self.posts = posts
         self.media_map = media_map
+        self.debug_mode = debug_mode
         self.logger = logging.getLogger("TelegramScraper")
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,10 +102,22 @@ class OutputGenerator:
         with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, _, files in os.walk(self.base_dir):
                 for file in files:
+                    # حذف فایل‌های موقت و خود ZIPها
                     if file.startswith("temp_archive") or file.startswith(f"{self.channel}_archive"):
                         continue
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, self.base_dir)
+
+                    # ════════════════════════════════════════════════════
+                    # شرط حذف اسکرین‌شات‌ها در حالت عادی (غیر دیباگ)
+                    # ════════════════════════════════════════════════════
+                    if not self.debug_mode:
+                        # اگر فایل داخل پوشه‌های post_screenshots یا debug_screenshots باشد، از ZIP حذف شود
+                        if arcname.startswith("post_screenshots/") or arcname.startswith("debug_screenshots/"):
+                            self.logger.debug(f"⏭️ حذف اسکرین‌شات از ZIP: {arcname}")
+                            continue
+
+                    # در حالت دیباگ، همه چیز (از جمله اسکرین‌شات‌ها) اضافه می‌شوند
                     zipf.write(file_path, arcname)
 
         size_mb = os.path.getsize(temp_zip) / (1024 * 1024)
