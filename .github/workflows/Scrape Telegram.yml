@@ -49,7 +49,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
-          fetch-depth: 1   # فقط آخرین commit، نه کل تاریخچه
+          fetch-depth: 1
 
       # ════════════════════════════════════════════
       # ۲. تنظیم پایتون
@@ -60,7 +60,7 @@ jobs:
           python-version: '3.11'
 
       # ════════════════════════════════════════════
-      # ۳. کش بسته‌های pip (وابستگی‌های پایتون)
+      # ۳. کش بسته‌های pip
       # ════════════════════════════════════════════
       - name: 💾 Cache pip packages
         uses: actions/cache@v4
@@ -79,7 +79,7 @@ jobs:
           pip install -r requirements.txt
 
       # ════════════════════════════════════════════
-      # ۵. کش مرورگر Playwright (کرومیوم)
+      # ۵. کش مرورگر Playwright
       # ════════════════════════════════════════════
       - name: 💾 Cache Playwright browsers
         uses: actions/cache@v4
@@ -123,11 +123,11 @@ jobs:
           "
           
       # ════════════════════════════════════════════
-      # ۸.۵ پاکسازی خروجی قبلی همین کانال
+      # ۸.۵ پاکسازی خروجی قبلی
       # ════════════════════════════════════════════
       - name: 🧹 Clean old output for this channel
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
-      
+
       # ════════════════════════════════════════════
       # ۹. اجرای اسکریپر (اصلی یا دیباگ)
       # ════════════════════════════════════════════
@@ -138,9 +138,12 @@ jobs:
 
       - name: 🐞 Run debug script with screenshots
         if: ${{ inputs.debug_mode }}
-        run: python .github/scripts/debug_full.py
+        run: python .github/scripts/debug_scraper.py
         timeout-minutes: 35
-        
+
+      # ════════════════════════════════════════════
+      # ۹.۵ پاکسازی آرتیفکت‌های قدیمی دیباگ
+      # ════════════════════════════════════════════
       - name: 🧹 Delete old debug screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
@@ -150,7 +153,7 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       # ════════════════════════════════════════════
       # ۱۰. آپلود اسکرین‌شات‌های دیباگ
       # ════════════════════════════════════════════
@@ -159,10 +162,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots-${{ github.run_id }}
-          path: debug_output/
+          path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots/
 
       # ════════════════════════════════════════════
-      # ۱۱. بررسی خروجی (فقط در حالت عادی)
+      # ۱۱. بررسی خروجی (فقط حالت عادی)
       # ════════════════════════════════════════════
       - name: 📊 Verify output
         if: ${{ !inputs.debug_mode }}
@@ -175,7 +178,7 @@ jobs:
           echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
-      # ۱۱.۵ تنظیم Git LFS برای فایل‌های رسانه و ZIP
+      # ۱۱.۵ تنظیم Git LFS
       # ════════════════════════════════════════════
       - name: 🐘 Setup Git LFS track for media & zip
         if: ${{ !inputs.debug_mode }}
@@ -197,7 +200,9 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
 
-      # مرحلهٔ جدید پاکسازی آرتیفکت قدیمی
+      # ════════════════════════════════════════════
+      # ۱۲.۵ پاکسازی آرتیفکت‌های قدیمی پست‌ها
+      # ════════════════════════════════════════════
       - name: 🧹 Delete old post screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
