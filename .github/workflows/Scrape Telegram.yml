@@ -220,7 +220,7 @@ jobs:
       # ════════════════════════════════════════════
       - name: 💾 Commit and push results
         if: ${{ !inputs.debug_mode && inputs.save_to == 'repository' }}
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6   # ← تغییر این خط
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
           file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
