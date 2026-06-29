@@ -1,3 +1,4 @@
+```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -31,6 +32,7 @@ class TelegramChannelScraper:
         self.channel = config.channel.lstrip('@')
         self.channel_name = getattr(config, 'channel_name', '') or ''
         self.start_link = getattr(config, 'start_link', None)
+        self.target_msg_id = None  # برای ذخیره شناسه پیام هدف در حالت start_link
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
@@ -155,20 +157,39 @@ class TelegramChannelScraper:
         else:
             self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود (از همان پیام شروع می‌شود).")
 
-        # جمع‌آوری جدیدترین پست‌ها
+        # جمع‌آوری پست‌ها
         items = []
         seen_ids = set()
         scroll_attempts = 0
 
-        # اگر از لینک شروع کرده‌ایم، یک اسکرول کوچک به بالا برای اطمینان از دیدن اولین پیام
-        if self.start_link:
-            await page.evaluate("window.scrollBy(0, -200)")
-            await human_sleep(1, 0.3)
+        # اگر از لینک شروع کرده‌ایم، پیام هدف را به بالای صفحه بیاوریم
+        if self.start_link and self.target_msg_id:
+            self.logger.info(f"🎯 پیدا کردن پیام هدف با شناسه {self.target_msg_id} و بردن به بالای صفحه...")
+            try:
+                target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
+                if await target_locator.count() > 0:
+                    await target_locator.scroll_into_view_if_needed()
+                    # کمی بالاتر ببریم تا مطمئن شویم در بالای viewport است
+                    await page.evaluate("window.scrollBy(0, -150)")
+                    await human_sleep(1, 0.3)
+                    self.logger.info("✅ پیام هدف به بالای صفحه منتقل شد.")
+                else:
+                    self.logger.warning(f"⚠️ پیام هدف با شناسه {self.target_msg_id} پیدا نشد.")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در انتقال پیام هدف به بالای صفحه: {e}")
 
+        # حلقه جمع‌آوری
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
                 messages = await page.locator('div[data-message-id]').all()
-                for msg in reversed(messages):
+                # در حالت start_link از ترتیب عادی استفاده می‌کنیم (از قدیمی‌ترین به جدیدترین)
+                # تا از پیام هدف شروع کنیم و به سمت بالا برویم
+                if self.start_link:
+                    msg_iter = messages  # ترتیب عادی
+                else:
+                    msg_iter = reversed(messages)  # ترتیب معکوس برای جدیدترین‌ها
+
+                for msg in msg_iter:
                     try:
                         msg_id = await msg.get_attribute('data-message-id')
                         if not msg_id or msg_id in seen_ids:
@@ -213,7 +234,7 @@ class TelegramChannelScraper:
                 scroll_attempts = 0
 
         items = items[:self.limit]
-        self.logger.info(f"📊 {len(items)} پست جدیدترین جمع‌آوری شد.")
+        self.logger.info(f"📊 {len(items)} پست جمع‌آوری شد.")
 
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
@@ -328,8 +349,23 @@ class TelegramChannelScraper:
         اگر start_link تعیین شده باشد، آن را در نوار جستجو تایپ کرده،
         سپس اولین نتیجه (پیام) را در نتایج جستجو پیدا کرده و کلیک می‌کند.
         (تب Messages فرضاً فعال است)
+        همچنین شناسه پیام هدف را برای استفاده در حلقه جمع‌آوری استخراج می‌کند.
         """
         self.logger.info(f"🔗 تلاش برای رفتن به لینک: {self.start_link}")
+
+        # استخراج شناسه پیام از لینک
+        try:
+            # لینک به شکل https://t.me/username/123
+            parts = self.start_link.rstrip('/').split('/')
+            if parts and parts[-1].isdigit():
+                self.target_msg_id = parts[-1]
+                self.logger.info(f"🎯 شناسه پیام هدف: {self.target_msg_id}")
+            else:
+                self.logger.warning("⚠️ نمی‌توان شناسه پیام را از لینک استخراج کرد.")
+                self.target_msg_id = None
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در استخراج شناسه پیام: {e}")
+            self.target_msg_id = None
 
         # ۱. پیدا کردن نوار جستجو
         search_input = None
@@ -581,3 +617,4 @@ class TelegramChannelScraper:
                 downloaded += len(files)
 
         return media_map, downloaded
+```
