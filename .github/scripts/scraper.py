@@ -43,6 +43,10 @@ class TelegramChannelScraper:
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
+        # ═══════════════ پوشه دیباگ اسکرین‌شات‌ها ═══════════════
+        self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
+        # (پوشه در زمان نیاز ایجاد می‌شود، نه الان)
+
         # ═══════════════ حالت دیباگ (پیش‌فرض False) ═══════════════
         self.debug_mode = False
 
@@ -631,8 +635,8 @@ class TelegramChannelScraper:
 
     async def _take_screenshot(self, page, name: str):
         try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-            path = self.base_dir / f"debug_{self.channel}_{name}.png"
+            self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
+            path = self.debug_screenshots_dir / f"debug_{self.channel}_{name}.png"
             await page.screenshot(path=path, full_page=True)
             self.logger.info(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
         except Exception as e:
