@@ -43,6 +43,9 @@ class TelegramChannelScraper:
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
+        # ═══════════════ حالت دیباگ (پیش‌فرض False) ═══════════════
+        self.debug_mode = False
+
         self.logger = logging.getLogger("TelegramScraper")
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -83,7 +86,14 @@ class TelegramChannelScraper:
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
-        gen = OutputGenerator(self.base_dir, self.channel, items, media_map)
+        # ═══════════════ پاس دادن debug_mode به OutputGenerator ═══════════════
+        gen = OutputGenerator(
+            self.base_dir,
+            self.channel,
+            items,
+            media_map,
+            debug_mode=self.debug_mode
+        )
         gen.generate_json()
         gen.generate_csv()
         gen.generate_html()
