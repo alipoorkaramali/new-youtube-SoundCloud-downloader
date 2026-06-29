@@ -125,32 +125,35 @@ class TelegramChannelScraper:
             return [], None, None
         await self._save_screenshot(page, "initial")
 
-        # پرش به آخرین (جدیدترین) پست‌ها (بدون اخطارهای بیهوده)
-        self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
-        clicked = False
+        # ═══════════════ پرش به آخرین پست فقط در حالت عادی ═══════════════
+        if not self.start_link:
+            self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+            clicked = False
 
-        scroll_button_selectors = [
-            'button[title="Go to bottom"]',
-            'div[class*="scroll-to-bottom"]',
-            'div[class*="ScrollButton"]',
-            '[aria-label="Scroll to bottom"]',
-            'button:has(svg[class*="arrow-down"])',
-        ]
+            scroll_button_selectors = [
+                'button[title="Go to bottom"]',
+                'div[class*="scroll-to-bottom"]',
+                'div[class*="ScrollButton"]',
+                '[aria-label="Scroll to bottom"]',
+                'button:has(svg[class*="arrow-down"])',
+            ]
 
-        for sel in scroll_button_selectors:
-            try:
-                btn = page.locator(sel).first
-                if await btn.count() > 0:
-                    await btn.click(timeout=5000)
-                    self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                    clicked = True
-                    await human_sleep(3.5, 0.4)
-                    break
-            except Exception:
-                continue
+            for sel in scroll_button_selectors:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.count() > 0:
+                        await btn.click(timeout=5000)
+                        self.logger.info("   ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                        clicked = True
+                        await human_sleep(3.5, 0.4)
+                        break
+                except Exception:
+                    continue
 
-        if not clicked:
-            self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
+            if not clicked:
+                self.logger.info("   ℹ️ دکمهٔ پرش به پایین پیدا نشد یا کلیک نشد. ادامه با وضعیت فعلی صفحه.")
+        else:
+            self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود (از همان پیام شروع می‌شود).")
 
         # جمع‌آوری جدیدترین پست‌ها
         items = []
