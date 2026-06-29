@@ -650,8 +650,11 @@ class TelegramChannelScraper:
         downloaded = 0
         if post_ids:
             downloader = PlaywrightDownloader(
-                self.profile_dir, self.media_dir, self.max_media_bytes,
-                self.delay_between_posts
+                self.profile_dir,
+                self.media_dir,
+                self.max_media_bytes,
+                self.delay_between_posts,
+                debug_screenshots_dir=self.debug_screenshots_dir  # اضافه کنید
             )
             await downloader.download_all(page, context, post_ids, media_map)
 
