@@ -4,11 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: 'نام کاربری کانال بدون @'
-        required: true
+        description: 'نام کاربری کانال بدون @ (در صورت استفاده از start_link می‌تواند خالی باشد)'
+        required: false
         default: 'bbcpersian'
       channel_name:
         description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
+        required: false
+        default: ''
+      start_link:
+        description: 'لینک مستقیم به یک پست (اختیاری، مثال: https://t.me/example/123)'
         required: false
         default: ''
       limit:
@@ -111,6 +115,7 @@ jobs:
               c = yaml.safe_load(f)
           c['channel'] = '${{ github.event.inputs.channel }}'
           c['channel_name'] = '${{ github.event.inputs.channel_name }}'
+          c['start_link'] = '${{ github.event.inputs.start_link }}'
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
           with open('config/config.yaml', 'w') as f:
