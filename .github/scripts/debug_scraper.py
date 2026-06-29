@@ -34,7 +34,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.debug_screenshots = debug_screenshots
         self.debug_dir = self.base_dir / "debug_screenshots"
         self.debug_dir.mkdir(parents=True, exist_ok=True)
+        # ═══════════════ فعال‌سازی حالت دیباگ برای حذف اسکرین‌شات‌ها از ZIP ═══════════════
+        self.debug_mode = True  # این باعث می‌شود اسکرین‌شات‌ها داخل ZIP باقی بمانند
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
+        self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_dir}")
 
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
         """
@@ -63,9 +66,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         """
         همان متد اصلی اما با اسکرین‌شات‌های بیشتر برای دیباگ.
         """
-        self.logger.info("🐞 شروع مرحله‌ی استخراج پست‌ها (حالت دیباگ)...")
+        self.logger.info("🐞 شروع مرحله‌ی استخراج پست‌ها (حالت دیباگ با اسکرین‌شات‌های بیشتر)...")
 
-        # اسکرین‌شات قبل از شروع
         page = None
         context = None
         try:
@@ -76,6 +78,13 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             if page and items:
                 await self._save_debug_screenshot(page, "final_debug")
                 self.logger.info(f"🐞 {len(items)} پست در حالت دیباگ استخراج شد.")
+            elif page and not items:
+                self.logger.warning("🐞 هیچ پستی استخراج نشد. بررسی اسکرین‌شات‌ها...")
+                await self._save_debug_screenshot(page, "no_posts_debug")
+
+            # اسکرین‌شات از وضعیت نهایی صفحه
+            if page:
+                await self._save_debug_screenshot(page, "final_page_state")
 
             return result
         except Exception as e:
@@ -106,9 +115,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره خلاصه دیباگ: {e}")
 
-    # برای ذخیره‌ی آیتم‌های استخراج‌شده در run
+    # ═══════════════════ Override متد _run_impl برای دیباگ ═══════════════════
     async def _run_impl(self):
-        """Override برای ذخیره‌ی آیتم‌ها در متغیر کلاس"""
+        """
+        Override برای ذخیره‌ی آیتم‌ها در متغیر کلاس و ارسال debug_mode به OutputGenerator
+        """
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
         else:
@@ -125,13 +136,23 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"📥 {len(items)} پست استخراج شد (حالت دیباگ).")
 
-        # در حالت دیباگ، فقط فایل JSON تولید می‌کنیم (بدون دانلود)
+        # ═══════════════ ساخت OutputGenerator با debug_mode=True ═══════════════
         try:
-            gen = OutputGenerator(self.base_dir, self.channel, items, {})
+            # در حالت دیباگ، media_map خالی است (چون دانلود نشده)
+            gen = OutputGenerator(
+                self.base_dir,
+                self.channel,
+                items,
+                {},  # media_map خالی
+                debug_mode=self.debug_mode  # ارسال debug_mode به OutputGenerator
+            )
             gen.generate_json()
-            self.logger.info(f"🐞 فایل JSON دیباگ: {self.base_dir}/posts.json")
+            gen.generate_csv()
+            gen.generate_html()
+            gen.create_zip()
+            self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
         except Exception as e:
-            self.logger.warning(f"⚠️ خطا در تولید JSON دیباگ: {e}")
+            self.logger.warning(f"⚠️ خطا در تولید خروجی دیباگ: {e}", exc_info=True)
 
         if context:
             await context.close()
@@ -172,8 +193,11 @@ async def main():
         print("\n🐞 دیباگ با موفقیت کامل شد.")
         print(f"🐞 خروجی‌ها در پوشه: {scraper.base_dir}")
         print(f"🐞 اسکرین‌شات‌های دیباگ در: {scraper.debug_dir}")
+        print(f"🐞 اسکرین‌شات‌های پست‌ها در: {scraper.screenshots_dir}")
     except Exception as e:
         print(f"\n❌ خطا در اجرای دیباگ: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
