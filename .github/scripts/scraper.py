@@ -31,7 +31,7 @@ class TelegramChannelScraper:
         self.channel = config.channel.lstrip('@')
         self.channel_name = getattr(config, 'channel_name', '') or ''
         self.start_link = getattr(config, 'start_link', None)
-        self.target_msg_id = None  # برای ذخیره شناسه پیام هدف در حالت start_link
+        self.target_msg_id = None  # شناسه پیام هدف در حالت start_link
         self.limit = config.limit
         self.max_media_bytes = config.max_media_mb * 1024 * 1024
         self.base_dir = Path(config.output_dir) / "telegram_downloads" / self.channel
@@ -177,19 +177,24 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف به بالای صفحه: {e}")
 
-        # حلقه‌ی اصلی جمع‌آوری: همیشه از جدیدترین پست‌ها (آخرین المان‌های DOM) شروع می‌کنیم
-        # و با اسکرول به بالا (SCROLL_UP) پست‌های قدیمی‌تر را بارگذاری می‌کنیم.
+        # حلقه‌ی اصلی جمع‌آوری
+        # 🔑 نکته کلیدی: در حالت start_link باید از پیام هدف شروع کنیم، نه از جدیدترین پیام.
+        # برای این کار، از یک پرچم start_collecting استفاده می‌کنیم که تنها زمانی فعال می‌شود
+        # که به پیام هدف رسیده باشیم. سپس از آن نقطه به بالا (قدیمی‌تر) می‌رویم.
+        start_collecting = False
+
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
                 # دریافت همه پیام‌های موجود در DOM (ترتیب DOM معمولاً قدیمی→جدید است)
                 messages = await page.locator('div[data-message-id]').all()
 
-                # ⚠️ نکته مهم: برای هر دو حالت (عادی و start_link) از reversed استفاده می‌کنیم
-                # تا از جدیدترین پیام شروع کنیم. این کار باعث می‌شود:
-                # - در حالت عادی: جدیدترین پیام‌ها را بگیریم (همان رفتار قبلی).
-                # - در حالت start_link: از پیام هدف (که جدیدترین است) شروع کنیم و با اسکرول به بالا
-                #   پست‌های قبل از آن را جمع کنیم. این دقیقاً همان چیزی است که می‌خواهیم.
-                msg_iter = reversed(messages)
+                # برای حالت start_link، از ترتیب عادی (قدیمی به جدید) استفاده می‌کنیم
+                # تا بتوانیم پیام هدف را پیدا کرده و از آن شروع کنیم.
+                # برای حالت عادی، از reversed استفاده می‌کنیم تا از جدیدترین شروع کنیم.
+                if self.start_link:
+                    msg_iter = messages  # ترتیب عادی: قدیمی‌ترین → جدیدترین
+                else:
+                    msg_iter = reversed(messages)  # ترتیب معکوس: جدیدترین → قدیمی‌ترین
 
                 for msg in msg_iter:
                     try:
@@ -197,7 +202,17 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # اطمینان از visibility برای استخراج متن
+                        # اگر در حالت start_link هستیم و هنوز شروع به جمع‌آوری نکرده‌ایم
+                        if self.start_link and not start_collecting:
+                            # اگر به پیام هدف رسیدیم، پرچم را فعال کن
+                            if msg_id == self.target_msg_id:
+                                start_collecting = True
+                                self.logger.info(f"🎯 به پیام هدف رسیدیم (ID: {msg_id})، شروع جمع‌آوری...")
+                            else:
+                                # اگر به پیام هدف نرسیده‌ایم، این پیام را نادیده بگیر
+                                continue
+
+                        # 🌟 تضمین visible بودن قبل از استخراج متن
                         await msg.scroll_into_view_if_needed()
                         await msg.wait_for(state="visible", timeout=5000)
 
@@ -236,6 +251,15 @@ class TelegramChannelScraper:
                 scroll_attempts += 1
             else:
                 scroll_attempts = 0
+
+            # اگر در حالت start_link هستیم و هنوز به پیام هدف نرسیده‌ایم،
+            # احتمالاً پیام هدف در DOM نیست یا اسکرول به اندازه کافی نرفته است.
+            # در این حالت، یک بار دیگر اسکرول می‌کنیم تا پیام‌های قدیمی‌تر بارگذاری شوند.
+            if self.start_link and not start_collecting:
+                self.logger.info("🔄 هنوز به پیام هدف نرسیدیم، اسکرول بیشتر به بالا...")
+                # اسکرول اضافی به بالا
+                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP // 2})")
+                await human_sleep(1.5, 0.3)
 
         items = items[:self.limit]
         self.logger.info(f"📊 {len(items)} پست جمع‌آوری شد.")
