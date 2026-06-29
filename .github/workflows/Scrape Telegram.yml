@@ -29,7 +29,7 @@ on:
         required: false
         default: false
       save_to:
-        description: 'محل ذخیره‌سازی خروجی‌ها'
+        description: 'محل ذخیره‌سازی خروجی‌ها (در حالت عادی)'
         required: true
         type: choice
         default: 'artifact'
@@ -167,7 +167,7 @@ jobs:
       # ۱۰. پاکسازی آرتیفکت‌های قدیمی دیباگ
       # ════════════════════════════════════════════
       - name: 🧹 Delete old debug screenshots artifacts
-        if: ${{ inputs.save_to == 'artifact' }}
+        if: ${{ inputs.debug_mode || inputs.save_to == 'artifact' }}
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
             --jq '.artifacts[] | select(.name | startswith("debug-screenshots-")) | .id')
@@ -181,11 +181,12 @@ jobs:
       # ۱۱. آپلود اسکرین‌شات‌های دیباگ
       # ════════════════════════════════════════════
       - name: 📤 Upload debug screenshots
-        if: ${{ inputs.save_to == 'artifact' && inputs.debug_mode }}
+        if: ${{ inputs.debug_mode || inputs.save_to == 'artifact' }}
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots-${{ github.run_id }}
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots/
+
       # ════════════════════════════════════════════
       # ۱۲. بررسی خروجی (همیشه)
       # ════════════════════════════════════════════
@@ -195,7 +196,7 @@ jobs:
           OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
           if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then
             if [[ "${{ inputs.debug_mode }}" == "false" && "${{ inputs.save_to }}" == "repository" ]]; then
-              echo "❌ No output found in normal mode – this is an error"
+              echo "❌ No output found in normal mode with repository save – this is an error"
               exit 1
             else
               echo "⚠️ No output found (expected in debug or artifact-only mode)"
@@ -215,11 +216,10 @@ jobs:
           git add .gitattributes
 
       # ════════════════════════════════════════════
-      # ۱۳. ذخیره نتایج در مخزن (در صورت انتخاب repository)
+      # ۱۳. ذخیره نتایج در مخزن (فقط حالت عادی + انتخاب repository)
       # ════════════════════════════════════════════
-
       - name: 💾 Commit and push results
-        if: ${{ inputs.save_to == 'repository' }}
+        if: ${{ !inputs.debug_mode && inputs.save_to == 'repository' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
@@ -232,7 +232,7 @@ jobs:
       # ۱۴. پاکسازی آرتیفکت‌های قدیمی پست‌ها
       # ════════════════════════════════════════════
       - name: 🧹 Delete old post screenshots artifacts
-        if: ${{ inputs.save_to == 'artifact' }}
+        if: ${{ inputs.debug_mode || inputs.save_to == 'artifact' }}
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
             --jq '.artifacts[] | select(.name | startswith("post-screenshots-${{ github.event.inputs.channel }}-")) | .id')
@@ -247,7 +247,7 @@ jobs:
       # ════════════════════════════════════════════
       - name: 📸 Upload post screenshots
         uses: actions/upload-artifact@v4
-        if: ${{ inputs.save_to == 'artifact' && always() }}
+        if: ${{ inputs.debug_mode || inputs.save_to == 'artifact' }}
         with:
           name: post-screenshots-${{ github.event.inputs.channel }}-${{ github.run_id }}
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/post_screenshots/
