@@ -41,19 +41,27 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
+      # ──────────────────────────────────────────────
+      # ۱. دریافت کد از مخزن
+      # ──────────────────────────────────────────────
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
           fetch-depth: 1
-          # persist-credentials: false  # حذف شد تا git-auto-commit کار کند
 
+      # ──────────────────────────────────────────────
+      # ۲. تنظیم پایتون
+      # ──────────────────────────────────────────────
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # ──────────────────────────────────────────────
+      # ۳. کش بسته‌های pip
+      # ──────────────────────────────────────────────
       - name: 💾 Cache pip packages
         uses: actions/cache@v4
         with:
@@ -62,11 +70,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # ──────────────────────────────────────────────
+      # ۴. نصب وابستگی‌های پایتون
+      # ──────────────────────────────────────────────
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ──────────────────────────────────────────────
+      # ۵. کش Playwright
+      # ──────────────────────────────────────────────
       - name: 💾 Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -75,15 +89,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
+      # ──────────────────────────────────────────────
+      # ۶. نصب Playwright + Chromium
+      # ──────────────────────────────────────────────
       - name: 🎭 Install Playwright and Chromium
         run: |
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
+      # ──────────────────────────────────────────────
+      # ۷. استخراج پروفایل مرورگر
+      # ──────────────────────────────────────────────
       - name: 📂 Extract browser profile
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
+      # ──────────────────────────────────────────────
+      # ۸. اعتبارسنجی ورودی‌ها
+      # ──────────────────────────────────────────────
       - name: 🔍 Validate inputs
         run: |
           if [[ -z "${{ github.event.inputs.channel }}" ]]; then
@@ -92,6 +115,9 @@ jobs:
           fi
           echo "✅ Channel: ${{ github.event.inputs.channel }} | Limit: ${{ github.event.inputs.limit }}"
 
+      # ──────────────────────────────────────────────
+      # ۹. به‌روزرسانی config.yaml
+      # ──────────────────────────────────────────────
       - name: ⚙️ Update config.yaml with inputs
         run: |
           python -c '
@@ -116,9 +142,15 @@ jobs:
           INPUT_LIMIT: ${{ github.event.inputs.limit }}
           INPUT_MAX_MEDIA_MB: ${{ github.event.inputs.max_media_mb }}
 
+      # ──────────────────────────────────────────────
+      # ۱۰. پاکسازی خروجی قبلی
+      # ──────────────────────────────────────────────
       - name: 🧹 Clean old output for this channel
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
 
+      # ──────────────────────────────────────────────
+      # ۱۱. اجرای اسکریپر (عادی یا دیباگ)
+      # ──────────────────────────────────────────────
       - name: 🚀 Run Telegram Scraper
         if: ${{ !inputs.debug_mode }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
@@ -129,6 +161,9 @@ jobs:
         run: xvfb-run python .github/scripts/debug_scraper.py
         timeout-minutes: 35
 
+      # ──────────────────────────────────────────────
+      # ۱۲. پاکسازی آرتیفکت‌های قدیمی دیباگ
+      # ──────────────────────────────────────────────
       - name: 🧹 Delete old debug screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
@@ -139,6 +174,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ──────────────────────────────────────────────
+      # ۱۳. آپلود اسکرین‌شات‌های دیباگ (مسیر صحیح)
+      # ──────────────────────────────────────────────
       - name: 📤 Upload debug screenshots
         if: ${{ inputs.debug_mode }}
         uses: actions/upload-artifact@v4
@@ -146,6 +184,9 @@ jobs:
           name: debug-screenshots-${{ github.run_id }}
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots/
 
+      # ──────────────────────────────────────────────
+      # ۱۴. بررسی خروجی (فقط حالت عادی)
+      # ──────────────────────────────────────────────
       - name: 📊 Verify output
         if: ${{ !inputs.debug_mode }}
         run: |
@@ -156,6 +197,9 @@ jobs:
           fi
           echo "✅ Output directory is ready"
 
+      # ──────────────────────────────────────────────
+      # ۱۵. تنظیم Git LFS
+      # ──────────────────────────────────────────────
       - name: 🐘 Setup Git LFS track for media
         if: ${{ !inputs.debug_mode }}
         run: |
@@ -163,6 +207,9 @@ jobs:
           git lfs track "Download/telegram_downloads/**/media/*"
           git add .gitattributes
 
+      # ──────────────────────────────────────────────
+      # ۱۶. ذخیره نتایج در مخزن (فقط حالت عادی)
+      # ──────────────────────────────────────────────
       - name: 💾 Commit and push results
         if: ${{ !inputs.debug_mode }}
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -173,6 +220,9 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           branch: ${{ github.ref_name }}
 
+      # ──────────────────────────────────────────────
+      # ۱۷. پاکسازی آرتیفکت‌های قدیمی پست‌ها
+      # ──────────────────────────────────────────────
       - name: 🧹 Delete old post screenshots artifacts
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
@@ -183,6 +233,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ──────────────────────────────────────────────
+      # ۱۸. آپلود اسکرین‌شات‌های هر پست (همیشه)
+      # ──────────────────────────────────────────────
       - name: 📸 Upload post screenshots
         if: always()
         uses: actions/upload-artifact@v4
