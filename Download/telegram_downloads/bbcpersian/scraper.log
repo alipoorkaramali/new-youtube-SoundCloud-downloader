@@ -1,0 +1,39 @@
+2026-06-29 19:38:50,906 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-06-29 19:38:50,906 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-06-29 19:38:50,906 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-06-29 19:38:50,906 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=20)
+2026-06-29 19:38:50,906 [INFO] 🐞 شروع مرحله‌ی استخراج پست‌ها (حالت دیباگ با اسکرین‌شات‌های بیشتر)...
+2026-06-29 19:38:56,785 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-06-29 19:38:58,595 [INFO] 🔍 در حال جستجوی: @bbcpersian
+2026-06-29 19:38:58,780 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_input_filled.png
+2026-06-29 19:39:00,687 [INFO] ⏳ منتظر نتایج...
+2026-06-29 19:39:00,687 [INFO]    🕐 مرحلهٔ اول انتظار (۱۰ ثانیه)...
+2026-06-29 19:39:14,320 [INFO]    ✅ عبارت 'bbcpersian' در مرحلهٔ اول یافت شد.
+2026-06-29 19:39:14,320 [INFO] ✅ نتایج جستجو قطعاً ظاهر شدند.
+2026-06-29 19:39:14,458 [INFO] 📸 اسکرین‌شات ذخیره شد: debug_bbcpersian_search_results_bbcpersian.png
+2026-06-29 19:39:22,223 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-06-29 19:39:22,400 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
+2026-06-29 19:39:22,446 [INFO]    ✅ روی دکمهٔ فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
+2026-06-29 19:41:07,328 [INFO] 📊 20 پست جمع‌آوری شد.
+2026-06-29 19:41:07,511 [INFO] 📸 گرفتن اسکرین‌شات از 20 پست...
+2026-06-29 19:41:14,704 [INFO]    10/20 اسکرین‌شات گرفته شد.
+2026-06-29 19:41:21,913 [INFO]    20/20 اسکرین‌شات گرفته شد.
+2026-06-29 19:41:21,913 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 20
+2026-06-29 19:41:22,133 [INFO] 🐞 20 پست در حالت دیباگ استخراج شد.
+2026-06-29 19:41:22,283 [INFO] 📥 20 پست استخراج شد (حالت دیباگ).
+2026-06-29 19:41:22,283 [INFO] 📄 JSON: Download/telegram_downloads/bbcpersian/posts.json
+2026-06-29 19:41:22,284 [INFO] 📊 CSV: Download/telegram_downloads/bbcpersian/posts.csv
+2026-06-29 19:41:22,284 [WARNING] ⚠️ خطا در تولید خروجی دیباگ: پوشهٔ templates پیدا نشد: /home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/templates
+لطفاً فایل post_template.html را در مسیر <ریشه>/templates/ قرار دهید.
+Traceback (most recent call last):
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 150, in _run_impl
+    gen.generate_html()
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/output_generator.py", line 55, in generate_html
+    html = self._build_html_content(current_iran)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/output_generator.py", line 70, in _build_html_content
+    raise FileNotFoundError(
+FileNotFoundError: پوشهٔ templates پیدا نشد: /home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/templates
+لطفاً فایل post_template.html را در مسیر <ریشه>/templates/ قرار دهید.
+2026-06-29 19:41:22,458 [INFO] ✅ پایان موفقیت‌آمیز دیباگ.
+2026-06-29 19:41:22,459 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
