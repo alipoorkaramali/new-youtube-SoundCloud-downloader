@@ -1,4 +1,3 @@
-```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -617,4 +616,3 @@ class TelegramChannelScraper:
                 downloaded += len(files)
 
         return media_map, downloaded
-```
