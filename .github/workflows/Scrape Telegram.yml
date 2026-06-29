@@ -5,7 +5,7 @@ on:
     inputs:
       channel:
         description: 'نام کاربری کانال بدون @ (در صورت استفاده از start_link می‌تواند خالی باشد)'
-        required: false
+        required: true
         default: 'bbcpersian'
       channel_name:
         description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
@@ -113,7 +113,7 @@ jobs:
           import yaml
           with open('config/config.yaml', 'r') as f:
               c = yaml.safe_load(f)
-          c['channel'] = '${{ github.event.inputs.channel }}' or ''
+          c['channel'] = '${{ github.event.inputs.channel }}' or 'unknown'
           c['channel_name'] = '${{ github.event.inputs.channel_name }}'
           c['start_link'] = '${{ github.event.inputs.start_link }}'
           c['limit'] = ${{ github.event.inputs.limit }}
