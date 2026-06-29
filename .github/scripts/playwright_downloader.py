@@ -35,7 +35,8 @@ class PlaywrightDownloader:
     }
 
     def __init__(self, profile_dir: Path, media_dir: Path, max_bytes: int,
-                 delay: float = 5.0, max_retries: int = 2):
+                 delay: float = 5.0, max_retries: int = 2,
+                 debug_screenshots_dir: Path = None):
         self.profile_dir = profile_dir
         self.media_dir = media_dir
         self.max_bytes = max_bytes
@@ -43,7 +44,11 @@ class PlaywrightDownloader:
         self.max_retries = max_retries
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
-        self.debug_dir = self.media_dir.parent / "debug_rightclick"
+        # ✅ استفاده از مسیر پاس‌داده‌شده یا ساخت مسیر پیش‌فرض
+        if debug_screenshots_dir:
+            self.debug_dir = debug_screenshots_dir
+        else:
+            self.debug_dir = self.media_dir.parent / "debug_rightclick"
         self.debug_dir.mkdir(parents=True, exist_ok=True)
 
     async def download_all(self, page: Page, context, post_ids: List[str],
