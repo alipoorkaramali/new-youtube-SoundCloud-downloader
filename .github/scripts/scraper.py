@@ -451,7 +451,6 @@ class TelegramChannelScraper:
             await self._take_screenshot(page, "no_messages_after_click")
             return False
 
-
     # ═══════════════════ متد کمکی: بررسی وجود عبارت در صفحه ═══════════════════
     async def _check_text_on_page(self, page, term: str) -> bool:
         """با JavaScript بررسی می‌کند که آیا عبارت term در innerText کل صفحه وجود دارد"""
