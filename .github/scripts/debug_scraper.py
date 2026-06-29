@@ -32,12 +32,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     def __init__(self, config, debug_screenshots: bool = True):
         super().__init__(config)
         self.debug_screenshots = debug_screenshots
-        self.debug_dir = self.base_dir / "debug_screenshots"
-        self.debug_dir.mkdir(parents=True, exist_ok=True)
-        # ═══════════════ فعال‌سازی حالت دیباگ برای حذف اسکرین‌شات‌ها از ZIP ═══════════════
-        self.debug_mode = True  # این باعث می‌شود اسکرین‌شات‌ها داخل ZIP باقی بمانند
+        # استفاده از self.debug_screenshots_dir که در کلاس پایه تعریف شده
+        self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
+        self.debug_mode = True  # فعال‌سازی دیباگ برای OutputGenerator
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
-        self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_dir}")
+        self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
 
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
         """
@@ -52,11 +51,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return media_map, 0
 
     async def _save_debug_screenshot(self, page, name: str):
-        """ذخیره اسکرین‌شات دیباگ در پوشه‌ی جداگانه"""
         if not self.debug_screenshots:
             return
         try:
-            path = self.debug_dir / f"{name}.png"
+            self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
+            path = self.debug_screenshots_dir / f"{name}.png"
             await page.screenshot(path=path, full_page=True)
             self.logger.debug(f"🐞 اسکرین‌شات دیباگ ذخیره شد: {path.name}")
         except Exception as e:
@@ -192,7 +191,7 @@ async def main():
         await scraper.run()
         print("\n🐞 دیباگ با موفقیت کامل شد.")
         print(f"🐞 خروجی‌ها در پوشه: {scraper.base_dir}")
-        print(f"🐞 اسکرین‌شات‌های دیباگ در: {scraper.debug_dir}")
+        print(f"🐞 اسکرین‌شات‌های دیباگ در: {scraper.debug_screenshots_dir}")
         print(f"🐞 اسکرین‌شات‌های پست‌ها در: {scraper.screenshots_dir}")
     except Exception as e:
         print(f"\n❌ خطا در اجرای دیباگ: {e}")
