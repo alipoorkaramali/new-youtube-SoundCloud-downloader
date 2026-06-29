@@ -32,7 +32,7 @@ on:
         description: 'محل ذخیره‌سازی خروجی‌ها (در حالت عادی)'
         required: true
         type: choice
-        default: 'artifact'
+        default: 'repository'
         options:
           - 'artifact'
           - 'repository'
