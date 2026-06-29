@@ -28,8 +28,9 @@ def load_config(path: str = "config.yaml") -> Config:
         data = yaml.safe_load(f)
 
     # اعتبارسنجی
-    if not data.get('channel'):
-        raise ValueError("❌ نام کانال در config.yaml تنظیم نشده است.")
+    # اگر start_link وجود نداشته باشد، channel الزامی است
+    if not data.get('channel') and not data.get('start_link'):
+        raise ValueError("❌ یا نام کانال (channel) یا لینک شروع (start_link) باید در config.yaml تنظیم شود.")
     if data.get('limit', 0) <= 0:
         raise ValueError("❌ limit باید بزرگ‌تر از صفر باشد.")
     if data.get('max_media_mb', 0) <= 0:
