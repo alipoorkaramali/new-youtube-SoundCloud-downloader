@@ -156,7 +156,7 @@ class TelegramChannelScraper:
         else:
             self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود (از همان پیام شروع می‌شود).")
 
-        # جمع‌آوری پست‌ها
+        # ═══════════════ جمع‌آوری پست‌ها ═══════════════
         items = []
         seen_ids = set()
         scroll_attempts = 0
@@ -177,16 +177,19 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف به بالای صفحه: {e}")
 
-        # حلقه جمع‌آوری
+        # حلقه‌ی اصلی جمع‌آوری: همیشه از جدیدترین پست‌ها (آخرین المان‌های DOM) شروع می‌کنیم
+        # و با اسکرول به بالا (SCROLL_UP) پست‌های قدیمی‌تر را بارگذاری می‌کنیم.
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
+                # دریافت همه پیام‌های موجود در DOM (ترتیب DOM معمولاً قدیمی→جدید است)
                 messages = await page.locator('div[data-message-id]').all()
-                # در حالت start_link از ترتیب عادی استفاده می‌کنیم (از قدیمی‌ترین به جدیدترین)
-                # تا از پیام هدف شروع کنیم و به سمت بالا برویم
-                if self.start_link:
-                    msg_iter = messages  # ترتیب عادی
-                else:
-                    msg_iter = reversed(messages)  # ترتیب معکوس برای جدیدترین‌ها
+
+                # ⚠️ نکته مهم: برای هر دو حالت (عادی و start_link) از reversed استفاده می‌کنیم
+                # تا از جدیدترین پیام شروع کنیم. این کار باعث می‌شود:
+                # - در حالت عادی: جدیدترین پیام‌ها را بگیریم (همان رفتار قبلی).
+                # - در حالت start_link: از پیام هدف (که جدیدترین است) شروع کنیم و با اسکرول به بالا
+                #   پست‌های قبل از آن را جمع کنیم. این دقیقاً همان چیزی است که می‌خواهیم.
+                msg_iter = reversed(messages)
 
                 for msg in msg_iter:
                     try:
@@ -194,7 +197,7 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # 🌟 تضمین visible بودن قبل از استخراج متن
+                        # اطمینان از visibility برای استخراج متن
                         await msg.scroll_into_view_if_needed()
                         await msg.wait_for(state="visible", timeout=5000)
 
@@ -215,6 +218,7 @@ class TelegramChannelScraper:
                         if len(items) >= self.limit:
                             break
                     except Exception:
+                        # اگر خطا در پردازش یک پیام خاص رخ داد، آن را نادیده می‌گیریم و ادامه می‌دهیم
                         continue
             except Exception as e:
                 self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
@@ -222,6 +226,7 @@ class TelegramChannelScraper:
             if len(items) >= self.limit:
                 break
 
+            # اسکرول به بالا برای بارگذاری پست‌های قدیمی‌تر
             old_height = await page.evaluate("document.documentElement.scrollHeight")
             await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
             await human_sleep(2.5, 0.5)
