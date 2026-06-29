@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: 'نام کاربری کانال بدون @ (در صورت استفاده از start_link می‌تواند خالی باشد)'
+        description: 'نام کاربری کانال (برای مسیر خروجی، حتی اگر start_link دارید)'
         required: true
         default: 'bbcpersian'
       channel_name:
