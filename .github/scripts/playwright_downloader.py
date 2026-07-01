@@ -36,15 +36,16 @@ class PlaywrightDownloader:
 
     def __init__(self, profile_dir: Path, media_dir: Path, max_bytes: int,
                  delay: float = 5.0, max_retries: int = 2,
-                 debug_screenshots_dir: Path = None):
+                 debug_screenshots_dir: Path = None,
+                 quiet_base: float = 1.0):   # ← پارامتر جدید
         self.profile_dir = profile_dir
         self.media_dir = media_dir
         self.max_bytes = max_bytes
         self.delay = delay
         self.max_retries = max_retries
+        self.quiet_base = quiet_base   # ← ذخیره می‌شود
         self.media_dir.mkdir(parents=True, exist_ok=True)
 
-        # ✅ استفاده از مسیر پاس‌داده‌شده یا ساخت مسیر پیش‌فرض
         if debug_screenshots_dir:
             self.debug_dir = debug_screenshots_dir
         else:
@@ -74,8 +75,10 @@ class PlaywrightDownloader:
                 logger.warning(f"⏰ پست {post_id} تایم‌اوت کلی شد، رد می‌شود.")
             except Exception as e:
                 logger.error(f"❌ خطا در پست {post_id}: {e}")
+
             if idx < len(post_ids):
-                await human_sleep(self.delay, 0.5)
+                # استفاده از quiet_base برای تاخیر بین پست‌ها (می‌تواند با delay ترکیب شود)
+                await human_sleep(self.delay * self.quiet_base, 0.5)
 
     async def _process_post(self, page: Page, post_id: str,
                             media_map: Dict[str, List[str]]) -> None:
@@ -302,8 +305,10 @@ class PlaywrightDownloader:
                 if menu_success:
                     await human_sleep(2.5 if visible_count > 4 else 1.5)
 
-                    quiet_threshold = 20 + (visible_count * 4)
-                    logger.info(f"   ⏳ آستانه سکوت برای این پست: {quiet_threshold} ثانیه")
+                    # ─── استفاده از quiet_base برای آستانه سکوت ───
+                    base_wait = int(self.quiet_base * 20)
+                    quiet_threshold = base_wait + (visible_count * 4)
+                    logger.info(f"   ⏳ آستانه سکوت برای این پست: {quiet_threshold} ثانیه (base={base_wait})")
 
                     absolute_timeout = 600
                     check_interval = 2
