@@ -232,18 +232,14 @@ jobs:
       # ════════════════════════════════════════════
       # ۱۳. کامیت و آپلود نتایج (با منطق هوشمند و لاگ اضافی)
       # ════════════════════════════════════════════
-      # ════════════════════════════════════════════
-      # ۱۳. کامیت و آپلود نتایج
-      # ════════════════════════════════════════════
-
       # ─────────────────────────────────────────────
-      # ۱۳-الف: Pull latest changes (قبل از stage)
+      # ۱۳-الف: Pull latest changes (قبل از stage) با autostash
       # ─────────────────────────────────────────────
       - name: 🔄 Pull latest changes before staging
         if: ${{ inputs.save_to == 'repository' }}
         run: |
-          git config pull.rebase true
-          git pull origin ${{ github.ref_name }}
+         git config pull.rebase true
+         git pull --rebase --autostash origin ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
