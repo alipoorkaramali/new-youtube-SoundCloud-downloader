@@ -29,7 +29,7 @@ on:
         required: false
         default: false
       save_to:
-        description: 'محل ذخیره‌سازی خروجی‌ها (فقط در حالت دیباگ)'
+        description: 'محل ذخیره‌سازی خروجی‌ها (در صورت انتخاب دستی، override می‌شود)'
         required: true
         type: choice
         default: 'artifact'
@@ -49,6 +49,9 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
+      # ════════════════════════════════════════════
+      # ۱. دریافت کد از مخزن (فقط آخرین commit)
+      # ════════════════════════════════════════════
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
@@ -56,11 +59,17 @@ jobs:
           lfs: true
           fetch-depth: 1
 
+      # ════════════════════════════════════════════
+      # ۲. تنظیم پایتون
+      # ════════════════════════════════════════════
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # ════════════════════════════════════════════
+      # ۳. کش بسته‌های pip
+      # ════════════════════════════════════════════
       - name: 💾 Cache pip packages
         uses: actions/cache@v4
         with:
@@ -69,11 +78,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # ════════════════════════════════════════════
+      # ۴. نصب وابستگی‌های پایتون
+      # ════════════════════════════════════════════
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ════════════════════════════════════════════
+      # ۵. کش مرورگر Playwright
+      # ════════════════════════════════════════════
       - name: 💾 Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -82,29 +97,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
+      # ════════════════════════════════════════════
+      # ۶. نصب Playwright و کرومیوم
+      # ════════════════════════════════════════════
       - name: 🎭 Install Playwright and Chromium
         run: |
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
-      - name: 🔓 Decrypt browser profile
-        run: |
-          if [ ! -f config/browser_profile.tar.gz.gpg ]; then
-            echo "❌ فایل config/browser_profile.tar.gz.gpg یافت نشد!"
-            exit 1
-          fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
-              --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
-          if [ ! -s config/browser_profile.tar.gz ]; then
-            echo "❌ رمزگشایی پروفایل ناموفق بود یا فایل خالی است"
-            exit 1
-          fi
-          echo "✅ پروفایل با موفقیت رمزگشایی شد"
-
+      # ════════════════════════════════════════════
+      # ۷. استخراج پروفایل مرورگر
+      # ════════════════════════════════════════════
       - name: 📂 Extract browser profile
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
+      # ════════════════════════════════════════════
+      # ۸. به‌روزرسانی فایل تنظیمات با ورودی‌ها
+      # ════════════════════════════════════════════
       - name: ⚙️ Update config.yaml with inputs
         run: |
           python -c "
@@ -120,9 +130,31 @@ jobs:
               yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
           "
 
+      # ════════════════════════════════════════════
+      # ۸.۵ پاکسازی خروجی قبلی
+      # ════════════════════════════════════════════
       - name: 🧹 Clean old output for this channel
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
 
+      # ════════════════════════════════════════════
+      # ۸.۶ تعیین حالت ذخیره‌سازی هوشمند (پیش‌فرض بر اساس debug_mode) با لاگ واضح
+      # ════════════════════════════════════════════
+      - name: 🤖 Smart Save Mode (Default based on debug_mode)
+        id: save_mode
+        run: |
+          if [[ "${{ inputs.debug_mode }}" == "true" ]]; then
+            DEFAULT_SAVE="artifact"
+            MODE_MSG="Debug Mode ON → Default: Artifact"
+          else
+            DEFAULT_SAVE="repository"
+            MODE_MSG="Normal Mode → Default: Repository"
+          fi
+          echo "DEFAULT_SAVE=$DEFAULT_SAVE" >> $GITHUB_OUTPUT
+          echo "::notice title=📌 Smart Save Mode::$MODE_MSG | Debug=${{ inputs.debug_mode }} | Default=$DEFAULT_SAVE"
+
+      # ════════════════════════════════════════════
+      # ۹. اجرای اسکریپر (عادی یا دیباگ)
+      # ════════════════════════════════════════════
       - name: 🚀 Run Telegram Scraper
         if: ${{ !inputs.debug_mode }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
@@ -134,10 +166,10 @@ jobs:
         timeout-minutes: 35
 
       # ════════════════════════════════════════════
-      # پاکسازی و آپلود فقط در حالت دیباگ و انتخاب artifact
+      # ۱۰. پاکسازی آرتیفکت‌های قدیمی دیباگ
       # ════════════════════════════════════════════
       - name: 🧹 Delete old debug screenshots artifacts
-        if: ${{ inputs.debug_mode && inputs.save_to == 'artifact' }}
+        if: ${{ inputs.save_to == 'artifact' }}
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
             --jq '.artifacts[] | select(.name | startswith("debug-screenshots-")) | .id')
@@ -147,33 +179,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ════════════════════════════════════════════
+      # ۱۱. آپلود اسکرین‌شات‌های دیباگ
+      # ════════════════════════════════════════════
       - name: 📤 Upload debug screenshots
-        if: ${{ inputs.debug_mode && inputs.save_to == 'artifact' }}
+        if: ${{ inputs.save_to == 'artifact' && inputs.debug_mode }}
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots-${{ github.run_id }}
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots/
 
       # ════════════════════════════════════════════
-      # بررسی خروجی (همیشه)
+      # ۱۲. بررسی خروجی (همیشه)
       # ════════════════════════════════════════════
       - name: 📊 Verify output
         if: ${{ always() }}
         run: |
           OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
           if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then
-            if [[ "${{ inputs.debug_mode }}" == "false" ]]; then
-              echo "❌ No output found in normal mode – this is an error"
-              exit 1
-            else
-              echo "⚠️ No output found in debug mode (may be expected)"
-            fi
-          else
-            echo "✅ Output directory is ready"
+            echo "❌ No output found"
+            exit 1
           fi
+          echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
-      # تنظیم Git LFS فقط در حالت عادی
+      # ۱۲.۵ تنظیم Git LFS
       # ════════════════════════════════════════════
       - name: 🐘 Setup Git LFS track for media & zip
         if: ${{ !inputs.debug_mode }}
@@ -183,23 +213,49 @@ jobs:
           git add .gitattributes
 
       # ════════════════════════════════════════════
-      # Commit به مخزن: در حالت عادی همیشه، در دیباگ فقط اگر repository انتخاب شده باشد
+      # ۱۳. کامیت و آپلود نتایج (با منطق هوشمند و لاگ اضافی)
       # ════════════════════════════════════════════
+
+      # ─────────────────────────────────────────────
+      # ۱۳-الف: Stage کردن فایل‌ها با git add صریح
+      # ─────────────────────────────────────────────
+      - name: 🗃 Stage all generated files for commit
+        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        run: |
+          echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
+          ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
+          git add -f "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
+          git add -f .gitattributes
+          echo "📋 وضعیت فایل‌های staged:"
+          git status --short
+
+      # ─────────────────────────────────────────────
+      # ۱۳-ب: Commit و Push با git-auto-commit-action
+      # ─────────────────────────────────────────────
       - name: 💾 Commit and push results
-        if: ${{ !inputs.debug_mode || (inputs.debug_mode && inputs.save_to == 'repository') }}
-        uses: stefanzweifel/git-auto-commit-action@v6
+        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
-          file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
+          file_pattern: "Download/telegram_downloads/**"
+          branch: ${{ github.ref_name }}
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          branch: ${{ github.ref_name }}
+          add_options: "--force"
+
+      # ─────────────────────────────────────────────
+      # ۱۳-ج: لاگ تأیید فعال شدن Commit (اختیاری)
+      # ─────────────────────────────────────────────
+      - name: 📝 Commit mode status
+        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        run: |
+          echo "::notice title=📤 Commit Mode Activated::save_to=${{ inputs.save_to }}, default=${{ steps.save_mode.outputs.DEFAULT_SAVE }}"
 
       # ════════════════════════════════════════════
-      # پاکسازی و آپلود اسکرین‌شات‌های پست‌ها (فقط در دیباگ + artifact)
+      # ۱۴. پاکسازی آرتیفکت‌های قدیمی پست‌ها
       # ════════════════════════════════════════════
       - name: 🧹 Delete old post screenshots artifacts
-        if: ${{ inputs.debug_mode && inputs.save_to == 'artifact' }}
+        if: ${{ inputs.save_to == 'artifact' }}
         run: |
           ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
             --jq '.artifacts[] | select(.name | startswith("post-screenshots-${{ github.event.inputs.channel }}-")) | .id')
@@ -209,9 +265,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ════════════════════════════════════════════
+      # ۱۵. آپلود اسکرین‌شات‌های هر پست (همیشه)
+      # ════════════════════════════════════════════
       - name: 📸 Upload post screenshots
         uses: actions/upload-artifact@v4
-        if: ${{ inputs.debug_mode && inputs.save_to == 'artifact' }}
+        if: ${{ inputs.save_to == 'artifact' && always() }}
         with:
           name: post-screenshots-${{ github.event.inputs.channel }}-${{ github.run_id }}
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/post_screenshots/
