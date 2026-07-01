@@ -105,6 +105,23 @@ jobs:
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
+          
+     # ════════════════════════════════════════════
+      # ۷. استخراج پروفایل مرورگر
+      # ════════════════════════════════════════════       
+      - name: 🔓 Decrypt browser profile
+        run: |
+          if [ ! -f config/browser_profile.tar.gz.gpg ]; then
+            echo "❌ فایل config/browser_profile.tar.gz.gpg یافت نشد!"
+            exit 1
+          fi
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
+              --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
+          if [ ! -s config/browser_profile.tar.gz ]; then
+            echo "❌ رمزگشایی پروفایل ناموفق بود یا فایل خالی است"
+            exit 1
+          fi
+          echo "✅ پروفایل با موفقیت رمزگشایی شد"
 
       # ════════════════════════════════════════════
       # ۷. استخراج پروفایل مرورگر
