@@ -30,13 +30,15 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
 
     def __init__(self, config, debug_screenshots: bool = True):
+        # تنظیم debug_mode در config قبل از فراخوانی super
+        config.debug_mode = True
         super().__init__(config)
         self.debug_screenshots = debug_screenshots
-        # استفاده از self.debug_screenshots_dir که در کلاس پایه تعریف شده
+        # اطمینان از وجود پوشه debug_screenshots
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
-        self.debug_mode = True  # فعال‌سازی دیباگ برای OutputGenerator
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
+        self._last_items = []  # برای ذخیره خلاصه
 
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
         """
@@ -55,9 +57,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             return
         try:
             self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
-            path = self.debug_screenshots_dir / f"{name}.png"
-            await page.screenshot(path=path, full_page=True)
-            self.logger.debug(f"🐞 اسکرین‌شات دیباگ ذخیره شد: {path.name}")
+            # استفاده از متد _screenshot کلاس پایه برای هماهنگی
+            await self._screenshot(page, name, full_page=True)
+            self.logger.debug(f"🐞 اسکرین‌شات دیباگ ذخیره شد: {name}")
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
@@ -117,7 +119,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     # ═══════════════════ Override متد _run_impl برای دیباگ ═══════════════════
     async def _run_impl(self):
         """
-        Override برای ذخیره‌ی آیتم‌ها در متغیر کلاس و ارسال debug_mode به OutputGenerator
+        Override برای ذخیره‌ی آیتم‌ها در متغیر کلاس و استفاده از run_all در OutputGenerator
         """
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
@@ -135,7 +137,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"📥 {len(items)} پست استخراج شد (حالت دیباگ).")
 
-        # ═══════════════ ساخت OutputGenerator با debug_mode=True ═══════════════
+        # ═══════════════ استفاده از OutputGenerator با debug_mode=True و run_all ═══════════════
         try:
             # در حالت دیباگ، media_map خالی است (چون دانلود نشده)
             gen = OutputGenerator(
@@ -145,10 +147,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 {},  # media_map خالی
                 debug_mode=self.debug_mode  # ارسال debug_mode به OutputGenerator
             )
-            gen.generate_json()
-            gen.generate_csv()
-            gen.generate_html()
-            gen.create_zip()
+            # استفاده از run_all به جای چهار فراخوانی جداگانه
+            gen.run_all()
             self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در تولید خروجی دیباگ: {e}", exc_info=True)
