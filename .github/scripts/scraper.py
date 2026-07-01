@@ -46,7 +46,8 @@ class TelegramChannelScraper:
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
-        self.debug_mode = False
+        # دریافت حالت دیباگ از config (با fallback False)
+        self.debug_mode = getattr(config, 'debug_mode', False)
 
         # ═══════════════ Resume State ═══════════════════
         self.resume_file = self.base_dir / RESUME_FILE
@@ -64,6 +65,7 @@ class TelegramChannelScraper:
             self.logger.addHandler(ch)
 
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
+        self.logger.info(f"🐞 حالت دیباگ: {'فعال' if self.debug_mode else 'غیرفعال'}")
 
     # ═══════════════════ Resume State Methods ═══════════════════
     def _load_resume_state(self) -> dict:
@@ -116,6 +118,7 @@ class TelegramChannelScraper:
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
+        # ─── استفاده از run_all برای تولید همه خروجی‌ها ───
         gen = OutputGenerator(
             self.base_dir,
             self.channel,
@@ -123,10 +126,7 @@ class TelegramChannelScraper:
             media_map,
             debug_mode=self.debug_mode
         )
-        gen.generate_json()
-        gen.generate_csv()
-        gen.generate_html()
-        gen.create_zip()
+        gen.run_all()  # ← جایگزین چهار فراخوانی جداگانه
 
         if context:
             await context.close()
