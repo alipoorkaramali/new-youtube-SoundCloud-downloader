@@ -172,6 +172,7 @@ jobs:
         with:
           name: debug-screenshots-${{ github.run_id }}
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots/
+
       # ════════════════════════════════════════════
       # ۱۲. بررسی خروجی (همیشه)
       # ════════════════════════════════════════════
@@ -196,18 +197,35 @@ jobs:
           git add .gitattributes
 
       # ════════════════════════════════════════════
-      # ۱۳. ذخیره نتایج در مخزن (در صورت انتخاب repository)
+      # ۱۳. کامیت و آپلود نتایج (مرحله جدید و قوی‌تر)
       # ════════════════════════════════════════════
 
+      # ─────────────────────────────────────────────
+      # ۱۳-الف: Stage کردن فایل‌ها با git add صریح
+      # ─────────────────────────────────────────────
+      - name: 🗃 Stage all generated files for commit
+        if: ${{ inputs.save_to == 'repository' }}
+        run: |
+          echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
+          ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
+          git add -f "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
+          git add -f .gitattributes
+          echo "📋 وضعیت فایل‌های staged:"
+          git status --short
+
+      # ─────────────────────────────────────────────
+      # ۱۳-ب: Commit و Push با git-auto-commit-action
+      # ─────────────────────────────────────────────
       - name: 💾 Commit and push results
         if: ${{ inputs.save_to == 'repository' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
-          file_pattern: "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
+          file_pattern: "Download/telegram_downloads/**"
+          branch: ${{ github.ref_name }}
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          branch: ${{ github.ref_name }}
+          add_options: "--force"
 
       # ════════════════════════════════════════════
       # ۱۴. پاکسازی آرتیفکت‌های قدیمی پست‌ها
