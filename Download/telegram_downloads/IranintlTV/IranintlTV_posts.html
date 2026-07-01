@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@IranintlTV - آرشیو تلگرام</title>
+
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #f0f2f5; --card-bg: #ffffff; --text: #1c1e21;
+            --text-secondary: #65676b; --primary: #2a6df4; --primary-dark: #1e4fcf;
+            --border: #e4e6eb; --shadow: 0 2px 10px rgba(0,0,0,0.08);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.12); --glass: rgba(255,255,255,0.75);
+            --tag-bg: #e7f0ff; --tag-text: #1e4fcf; --footer-bg: #ffffff;
+            --lightbox-bg: rgba(0,0,0,0.9); --highlight-bg: #ffeb3b; --highlight-text: #000;
+        }
+        .dark {
+            --bg: #18191a; --card-bg: #242526; --text: #e4e6eb;
+            --text-secondary: #b0b3b8; --primary: #4d8bf7; --primary-dark: #2a6df4;
+            --border: #3e4042; --shadow: 0 2px 10px rgba(0,0,0,0.3);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.5); --glass: rgba(36,37,38,0.8);
+            --tag-bg: #1e3a5f; --tag-text: #8ab4f8; --footer-bg: #242526;
+            --lightbox-bg: rgba(0,0,0,0.95); --highlight-bg: #f9a825; --highlight-text: #000;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--bg); color: var(--text); direction: rtl;
+            line-height: 1.8; transition: background 0.3s, color 0.3s;
+            min-height: 100vh; padding-bottom: 60px; position: relative; overflow-x: hidden;
+        }
+        .bg-animation {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.15;
+            background: linear-gradient(45deg, #2a6df4, #8b5cf6, #ec4899, #f59e0b);
+            background-size: 400% 400%; animation: gradientShift 15s ease infinite;
+        }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        #progress-bar {
+            position: fixed; top: 0; right: 0; height: 4px;
+            background: linear-gradient(to left, var(--primary), #8b5cf6);
+            width: 0%; z-index: 10000; transition: width 0.1s ease; border-radius: 0 0 4px 0;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
+        .header {
+            position: sticky; top: 20px; z-index: 100; backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px); background: var(--glass);
+            border: 1px solid var(--border); border-radius: 20px; padding: 25px 30px;
+            margin: 20px auto; max-width: 880px; box-shadow: var(--shadow);
+            text-align: center; transition: all 0.3s;
+        }
+        .header:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+        .header h1 {
+            font-size: 28px; font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; margin-bottom: 5px;
+        }
+        .header .stats {
+            display: flex; justify-content: center; align-items: center;
+            gap: 25px; flex-wrap: wrap; margin: 12px 0 0;
+            font-size: 14px; color: var(--text-secondary);
+        }
+        .header .stats i { margin-left: 5px; color: var(--primary); }
+        .theme-toggle {
+            position: absolute; left: 25px; top: 28px; cursor: pointer;
+            font-size: 20px; color: var(--text-secondary);
+            background: none; border: none; transition: 0.3s;
+        }
+        .theme-toggle:hover { color: var(--primary); transform: rotate(30deg) scale(1.1); }
+        .search-box { margin: 15px auto 0; max-width: 400px; position: relative; }
+        .search-box input {
+            width: 100%; padding: 12px 45px 12px 15px; border-radius: 30px;
+            border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+            font-family: 'Vazirmatn', sans-serif; font-size: 14px; transition: 0.3s; outline: none;
+        }
+        .search-box input:focus {
+            border-color: var(--primary); box-shadow: 0 0 0 3px rgba(42,109,244,0.2);
+        }
+        .search-box i {
+            position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+            color: var(--text-secondary); font-size: 16px;
+        }
+        .container { max-width: 880px; margin: 0 auto; padding: 0 15px; }
+        .post {
+            background: var(--card-bg); border-radius: 16px; padding: 24px;
+            margin-bottom: 22px; box-shadow: var(--shadow);
+            border-right: 4px solid var(--primary); transition: all 0.3s ease;
+            animation: fadeInUp 0.5s ease forwards; opacity: 0;
+            position: relative; overflow: hidden;
+        }
+        .post:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+        .post::before {
+            content: ''; position: absolute; top: 0; right: 0; width: 4px; height: 100%;
+            background: linear-gradient(180deg, var(--primary), #8b5cf6);
+            border-radius: 0 16px 16px 0;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .post-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 12px;
+            border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px;
+        }
+        .post-number {
+            background: var(--primary); color: white; padding: 4px 12px;
+            border-radius: 20px; font-size: 13px; font-weight: 700;
+        }
+        .post-date {
+            color: var(--text-secondary); font-size: 13px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .post-body {
+            font-size: 16px; line-height: 2.2; white-space: pre-wrap;
+            word-break: break-word; margin-bottom: 16px; position: relative;
+        }
+        .hashtag {
+            display: inline-block; color: var(--tag-text); background: var(--tag-bg);
+            padding: 3px 10px; border-radius: 15px; font-size: 13px;
+            margin: 2px 4px; transition: all 0.2s;
+        }
+        .hashtag:hover { background: var(--primary); color: white; cursor: pointer; }
+        .copy-btn {
+            position: absolute; top: 0; left: 0; background: var(--primary); color: white;
+            border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px;
+            cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;
+            font-family: 'Vazirmatn';
+        }
+        .copy-btn:hover { background: var(--primary-dark); }
+        .media-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            justify-content: center;
+            margin: 18px 0;
+        }
+        .media-item {
+            background: var(--bg);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+            text-align: center;
+            transition: all 0.3s;
+            border: 1px solid var(--border);
+        }
+        .media-item:hover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+        .media-item img, .media-item video {
+            max-width: 100%; max-height: 400px; border-radius: 8px;
+            display: block; transition: transform 0.3s;
+        }
+        .media-item:hover img { transform: scale(1.02); }
+        .media-item audio {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 12px 0;
+            display: block !important;
+            border-radius: 8px;
+            background: var(--card-bg);
+            padding: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            border: 1px solid var(--border);
+        }
+        .media-item .file-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--primary); color: white !important;
+            padding: 10px 18px; border-radius: 10px; text-decoration: none;
+            font-size: 14px; transition: background 0.3s, transform 0.3s;
+        }
+        .media-item .file-link:hover { background: var(--primary-dark); transform: translateY(-2px); }
+        .no-media {
+            color: var(--text-secondary); font-size: 14px; padding: 14px;
+            background: var(--bg); border-radius: 10px; text-align: center; width: 100%;
+        }
+        .post-url {
+            display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
+            background: var(--primary); color: white !important; padding: 8px 16px;
+            border-radius: 10px; font-size: 13px; text-decoration: none;
+            transition: all 0.3s; font-weight: 500;
+        }
+        .post-url:hover {
+            background: var(--primary-dark); transform: translateX(-4px);
+            box-shadow: 0 4px 15px rgba(42,109,244,0.3);
+        }
+        .extra-meta { display: flex; gap: 15px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+        .lightbox {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--lightbox-bg); z-index: 9999;
+            align-items: center; justify-content: center; flex-direction: column; cursor: pointer;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 90vw; max-height: 80vh; border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); animation: zoomIn 0.3s ease;
+        }
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .lightbox-close {
+            position: absolute; top: 20px; left: 30px; color: white;
+            font-size: 36px; cursor: pointer; transition: transform 0.3s; z-index: 10000;
+        }
+        .lightbox-close:hover { transform: rotate(90deg); }
+        .back-to-top {
+            position: fixed; bottom: 25px; left: 25px; background: var(--primary);
+            color: white; width: 45px; height: 45px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 20px;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(42,109,244,0.4);
+            transition: all 0.3s; opacity: 0; visibility: hidden; z-index: 999; border: none;
+        }
+        .back-to-top.visible { opacity: 1; visibility: visible; }
+        .back-to-top:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(42,109,244,0.5); }
+        .footer {
+            text-align: center; margin-top: 40px; padding: 20px;
+            color: var(--text-secondary); font-size: 13px;
+            border-top: 1px solid var(--border); background: var(--footer-bg);
+        }
+        .highlight {
+            background-color: var(--highlight-bg); color: var(--highlight-text);
+            font-weight: bold; border-radius: 3px; padding: 0 2px;
+        }
+        @media (max-width: 768px) {
+            .header { margin: 10px; padding: 18px 15px; border-radius: 14px; }
+            .header h1 { font-size: 22px; }
+            .post { padding: 16px; margin-bottom: 16px; border-radius: 12px; }
+            .media-item img, .media-item video { max-height: 280px; }
+            .theme-toggle { left: 15px; top: 20px; font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+<div class="bg-animation"></div>
+<div id="progress-bar"></div>
+
+<div class="header">
+    <button class="theme-toggle" onclick="toggleTheme()" title="تغییر حالت تاریک/روشن">
+        <i id="theme-icon" class="fas fa-moon"></i>
+    </button>
+    <h1>@IranintlTV</h1>
+    <div class="stats">
+        <span><i class="fas fa-file-alt"></i> 3 پست</span>
+        <span><i class="fas fa-clock"></i> بروزرسانی: 2026/07/01 - 16:14</span>
+    </div>
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="جستجو در پست‌ها..." oninput="filterPosts()">
+    </div>
+</div>
+
+<div class="container" id="postsContainer">
+    
+    
+    <div class="post" data-text="اخبار نیمروزی | چهارشنبه ۱۰ تیر 41:39 نسخه صوتی اخبار نیمروزی | چهارشنبه ۱۰ تیر @iranintlTV 9.5K 12:26 PM" style="animation-delay: 0.0s;">
+        <div class="post-header">
+            <span class="post-number">#1</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="اخبار نیمروزی | چهارشنبه ۱۰ تیر 41:39 نسخه صوتی اخبار نیمروزی | چهارشنبه ۱۰ تیر @iranintlTV 9.5K 12:26 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            اخبار نیمروزی | چهارشنبه ۱۰ تیر 41:39 نسخه صوتی اخبار نیمروزی | چهارشنبه ۱۰ تیر @iranintlTV 9.5K 12:26 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <audio controls preload="metadata" style="width: 100% !important;">
+                                <source src="media/345261_اخبار نیمروزی- چهارشنبه ۱۰ تیر.mp3">
+                                <div style="padding: 12px; background: #f8f9fa; border-radius: 8px; text-align: center; color: #666; font-size: 14px;">
+                                    <i class="fas fa-download"></i><br>
+                                    <a href="media/345261_اخبار نیمروزی- چهارشنبه ۱۰ تیر.mp3" download style="color: var(--primary); text-decoration: none;">
+                                        دانلود فایل صوتی
+                                    </a>
+                                </div>
+                            </audio>
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/345261" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="روایت شما از زندگی در دوران پس از انقلاب ملی و جنگ - چهارشنبه ۱۰ تیر در این شرایط بد اقتصادی قرار نیست مستاجران پاسخ‌گوی کمبود مالی صاحبخانه باشند که هر کدام به دلخواه اجاره‌بها تعیین می‌کنند. به‌زودی شاهد کوچ اجباری قشر متوسط به حاشیه شهر خواهیم بود. من یه بازنشسته نظامی هستم. امروز برد کولر گازی خونه سوخت. تعمیرکار می‌گه ۱۸ میلیون تومان هزینه تعمیرش می‌شه و علت خرابیش هم نوسان برقه. حالا من تا آخر تابستون باید چیکار کنم؟ چطور با حقوق ۲۵ میلیونی این رو تعمیر کنم؟ طهماسبی می‌گه مهم‌ترین دغدغه مردم پوشش و حجاب است، اما این بهانه حکومت برای سرکوب مردم است. مهم‌ترین دغدغه مردم آزادی، رفاه و آینده است که به‌زودی با رفتن شما میسر خواهد شد. نوع حکومت‌کردن در ایران این‌گونه است که مردم باید در خدمت حکومت باشند، در صورتی که در تمام جهان حکومت‌ها در خدمت مردم هستند. عصر چهلم موشعلی، آدم‌هایی که مشخص بود از مراسم می‌اومدن و پرچم جمهوری اسلامی دستشون بود، بیشتر از نصفشون از کشورهای همسایه بودن. شک نکنید اکثر کسانی هم که برای تشییع جنازه موشعلی میان، ایرانی نیستن. حکومت در حال فروپاشی است." style="animation-delay: 0.05s;">
+        <div class="post-header">
+            <span class="post-number">#2</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="روایت شما از زندگی در دوران پس از انقلاب ملی و جنگ - چهارشنبه ۱۰ تیر در این شرایط بد اقتصادی قرار نیست مستاجران پاسخ‌گوی کمبود مالی صاحبخانه باشند که هر کدام به دلخواه اجاره‌بها تعیین می‌کنند. به‌زودی شاهد کوچ اجباری قشر متوسط به حاشیه شهر خواهیم بود. من یه بازنشسته نظامی هستم. امروز برد کولر گازی خونه سوخت. تعمیرکار می‌گه ۱۸ میلیون تومان هزینه تعمیرش می‌شه و علت خرابیش هم نوسان برقه. حالا من تا آخر تابستون باید چیکار کنم؟ چطور با حقوق ۲۵ میلیونی این رو تعمیر کنم؟ طهماسبی می‌گه مهم‌ترین دغدغه مردم پوشش و حجاب است، اما این بهانه حکومت برای سرکوب مردم است. مهم‌ترین دغدغه مردم آزادی، رفاه و آینده است که به‌زودی با رفتن شما میسر خواهد شد. نوع حکومت‌کردن در ایران این‌گونه است که مردم باید در خدمت حکومت باشند، در صورتی که در تمام جهان حکومت‌ها در خدمت مردم هستند. عصر چهلم موشعلی، آدم‌هایی که مشخص بود از مراسم می‌اومدن و پرچم جمهوری اسلامی دستشون بود، بیشتر از نصفشون از کشورهای همسایه بودن. شک نکنید اکثر کسانی هم که برای تشییع جنازه موشعلی میان، ایرانی نیستن. حکومت در حال فروپاشی است.">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            روایت شما از زندگی در دوران پس از انقلاب ملی و جنگ - چهارشنبه ۱۰ تیر در این شرایط بد اقتصادی قرار نیست مستاجران پاسخ‌گوی کمبود مالی صاحبخانه باشند که هر کدام به دلخواه اجاره‌بها تعیین می‌کنند. به‌زودی شاهد کوچ اجباری قشر متوسط به حاشیه شهر خواهیم بود. من یه بازنشسته نظامی هستم. امروز برد کولر گازی خونه سوخت. تعمیرکار می‌گه ۱۸ میلیون تومان هزینه تعمیرش می‌شه و علت خرابیش هم نوسان برقه. حالا من تا آخر تابستون باید چیکار کنم؟ چطور با حقوق ۲۵ میلیونی این رو تعمیر کنم؟ طهماسبی می‌گه مهم‌ترین دغدغه مردم پوشش و حجاب است، اما این بهانه حکومت برای سرکوب مردم است. مهم‌ترین دغدغه مردم آزادی، رفاه و آینده است که به‌زودی با رفتن شما میسر خواهد شد. نوع حکومت‌کردن در ایران این‌گونه است که مردم باید در خدمت حکومت باشند، در صورتی که در تمام جهان حکومت‌ها در خدمت مردم هستند. عصر چهلم موشعلی، آدم‌هایی که مشخص بود از مراسم می‌اومدن و پرچم جمهوری اسلامی دستشون بود، بیشتر از نصفشون از کشورهای همسایه بودن. شک نکنید اکثر کسانی هم که برای تشییع جنازه موشعلی میان، ایرانی نیستن. حکومت در حال فروپاشی است.
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/345260_0.png" loading="lazy" alt="تصویر" onclick="openLightbox('media/345260_0.png')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/345260_1.png" loading="lazy" alt="تصویر" onclick="openLightbox('media/345260_1.png')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/345260" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="Forwarded from ایران اینترنشنال ورزشی اورلاندو گیل، دروازه‌بان تیم ملی پاراگوئه، با مهار دو ضربه پنالتی مقابل آلمان، نقش اصلی را در صعود تاریخی تیمش به مرحله یک‌هشتم نهایی جام جهانی ۲۰۲۶ ایفا کرد؛ اما ستاره امروز پاراگوئه، چند سال پیش برای تأمین هزینه‌های زندگی خانواده‌اش مجبور بود لباس‌ها و وسایل ورزشی خود را بفروشد. دروازه‌بان ۲۶ ساله که قدی ۱۹۸ سانتی‌متری دارد، تا ژانویه ۲۰۲۵ تنها سه بازی در سطح بزرگسالان انجام داده بود، اما حالا یکی از آماده‌ترین گلرهای جام جهانی به شمار می‌رود. داستان سخت زندگی او از سال ۲۰۲۲ آغاز شد؛ زمانی که همسرش «ملیسا آوالوس» با مشکلات جدی در دوران بارداری روبه‌رو شد. فرزند آنها زودتر از موعد و پس از زایمانی دشوار به دنیا آمد، مادر تحت عمل جراحی اورژانسی قرار گرفت و نوزاد نیز مدتی در بخش مراقبت‌های ویژه بستری بود. همسر گیل بعدها در اینستاگرام نوشت: «ما هیچ‌چیز نداشتیم. اورلاندو برای تأمین هزینه‌های زندگی همه وسایلش را فروخت؛ لباس‌های باشگاهی، کفش‌هایش و حتی پیراهن تیم ملی زیر ۲۰ سال پاراگوئه را که دوست داشت به یادگار نگه دارد.» جزییات بیشتر را در سایت بخو" style="animation-delay: 0.1s;">
+        <div class="post-header">
+            <span class="post-number">#3</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="Forwarded from ایران اینترنشنال ورزشی اورلاندو گیل، دروازه‌بان تیم ملی پاراگوئه، با مهار دو ضربه پنالتی مقابل آلمان، نقش اصلی را در صعود تاریخی تیمش به مرحله یک‌هشتم نهایی جام جهانی ۲۰۲۶ ایفا کرد؛ اما ستاره امروز پاراگوئه، چند سال پیش برای تأمین هزینه‌های زندگی خانواده‌اش مجبور بود لباس‌ها و وسایل ورزشی خود را بفروشد. دروازه‌بان ۲۶ ساله که قدی ۱۹۸ سانتی‌متری دارد، تا ژانویه ۲۰۲۵ تنها سه بازی در سطح بزرگسالان انجام داده بود، اما حالا یکی از آماده‌ترین گلرهای جام جهانی به شمار می‌رود. داستان سخت زندگی او از سال ۲۰۲۲ آغاز شد؛ زمانی که همسرش «ملیسا آوالوس» با مشکلات جدی در دوران بارداری روبه‌رو شد. فرزند آنها زودتر از موعد و پس از زایمانی دشوار به دنیا آمد، مادر تحت عمل جراحی اورژانسی قرار گرفت و نوزاد نیز مدتی در بخش مراقبت‌های ویژه بستری بود. همسر گیل بعدها در اینستاگرام نوشت: «ما هیچ‌چیز نداشتیم. اورلاندو برای تأمین هزینه‌های زندگی همه وسایلش را فروخت؛ لباس‌های باشگاهی، کفش‌هایش و حتی پیراهن تیم ملی زیر ۲۰ سال پاراگوئه را که دوست داشت به یادگار نگه دارد.» جزییات بیشتر را در سایت بخو">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            Forwarded from ایران اینترنشنال ورزشی اورلاندو گیل، دروازه‌بان تیم ملی پاراگوئه، با مهار دو ضربه پنالتی مقابل آلمان، نقش اصلی را در صعود تاریخی تیمش به مرحله یک‌هشتم نهایی جام جهانی ۲۰۲۶ ایفا کرد؛ اما ستاره امروز پاراگوئه، چند سال پیش برای تأمین هزینه‌های زندگی خانواده‌اش مجبور بود لباس‌ها و وسایل ورزشی خود را بفروشد. دروازه‌بان ۲۶ ساله که قدی ۱۹۸ سانتی‌متری دارد، تا ژانویه ۲۰۲۵ تنها سه بازی در سطح بزرگسالان انجام داده بود، اما حالا یکی از آماده‌ترین گلرهای جام جهانی به شمار می‌رود. داستان سخت زندگی او از سال ۲۰۲۲ آغاز شد؛ زمانی که همسرش «ملیسا آوالوس» با مشکلات جدی در دوران بارداری روبه‌رو شد. فرزند آنها زودتر از موعد و پس از زایمانی دشوار به دنیا آمد، مادر تحت عمل جراحی اورژانسی قرار گرفت و نوزاد نیز مدتی در بخش مراقبت‌های ویژه بستری بود. همسر گیل بعدها در اینستاگرام نوشت: «ما هیچ‌چیز نداشتیم. اورلاندو برای تأمین هزینه‌های زندگی همه وسایلش را فروخت؛ لباس‌های باشگاهی، کفش‌هایش و حتی پیراهن تیم ملی زیر ۲۰ سال پاراگوئه را که دوست داشت به یادگار نگه دارد.» جزییات بیشتر را در سایت بخو
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/345259_5921228947666439595.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/345259_5921228947666439595.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/IranintlTV/345259" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <img id="lightbox-img" src="" alt="پیش‌نمایش">
+</div>
+
+<button id="backToTop" class="back-to-top" onclick="scrollToTop()" title="بازگشت به بالا">
+    <i class="fas fa-chevron-up"></i>
+</button>
+
+<div class="footer">
+    تولید شده توسط <strong>Telegram Channel Scraper</strong> &copy; 2026/07/01 - 16:14
+</div>
+
+<script>
+    function openLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+    function toggleTheme() {
+        const body = document.body;
+        const icon = document.getElementById('theme-icon');
+        body.classList.toggle('dark');
+        const isDark = body.classList.contains('dark');
+        icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+    (function () {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (saved === 'dark' || (!saved && prefersDark)) {
+            document.body.classList.add('dark');
+            document.getElementById('theme-icon').className = 'fas fa-sun';
+        }
+    })();
+
+    const backBtn = document.getElementById('backToTop');
+    window.addEventListener('scroll', () => {
+        backBtn.classList.toggle('visible', window.scrollY > 400);
+        const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const scrolled = (winScroll / height) * 100;
+        document.getElementById('progress-bar').style.width = scrolled + '%';
+    });
+    function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+    function copyText(btn) {
+        const text = btn.getAttribute('data-fulltext');
+        navigator.clipboard.writeText(text).then(() => {
+            btn.innerHTML = '<i class="fas fa-check"></i> کپی شد';
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> کپی'; }, 2000);
+        }).catch(() => alert('خطا در کپی متن'));
+    }
+
+    function filterPosts() {
+        const query = document.getElementById('searchInput').value.trim().toLowerCase();
+        const posts = document.querySelectorAll('.post');
+        
+        posts.forEach(post => {
+            const text = post.getAttribute('data-text').toLowerCase();
+            const shouldShow = !query || text.includes(query);
+            post.style.display = shouldShow ? '' : 'none';
+            
+            if (shouldShow && query) {
+                const bodyDiv = post.querySelector('.post-body');
+                if (bodyDiv) {
+                    let html = bodyDiv.innerHTML;
+                    // حذف کامل تگ‌های highlight قبلی
+                    html = html.replace(/<span class="highlight">|<\/span>/g, '');
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    bodyDiv.innerHTML = html.replace(regex, '<span class="highlight">$1</span>');
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
