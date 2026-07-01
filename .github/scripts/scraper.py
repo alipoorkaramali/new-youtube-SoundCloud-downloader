@@ -300,6 +300,11 @@ class TelegramChannelScraper:
                     self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد.")
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف: {e}")
+        # ⬅️⬅️⬅️ اینجا کد جدید را اضافه کن ⬅️⬅️⬅️
+        # ═══════════════ حالت عادی (بدون resume و بدون start_link) ═══════════════
+        if not resume_last_id and not self.start_link:
+            start_collecting = True
+            self.logger.info("ℹ️ حالت عادی: شروع جمع‌آوری از جدیدترین پست‌ها.")
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
@@ -426,8 +431,9 @@ class TelegramChannelScraper:
                 scroll_attempts += 1
             else:
                 scroll_attempts = 0
-
-            if not start_collecting:
+            # ─── مدیریت اسکرول اضافی فقط در حالت start_link یا resume ───
+            # ⬅️⬅️⬅️ این شرط را اصلاح کن ⬅️⬅️⬅️
+            if not start_collecting and (self.start_link or resume_last_id):
                 extra_scroll_count += 1
                 if extra_scroll_count <= max_extra_scrolls:
                     self.logger.info(f"🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره {extra_scroll_count}...")
