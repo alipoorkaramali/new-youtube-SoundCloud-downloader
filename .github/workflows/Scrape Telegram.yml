@@ -29,7 +29,7 @@ on:
         required: false
         default: false
       save_to:
-        description: 'محل ذخیره‌سازی خروجی‌ها'
+        description: 'محل ذخیره‌سازی خروجی‌ها (در صورت انتخاب دستی، override می‌شود)'
         required: true
         type: choice
         default: 'artifact'
@@ -137,6 +137,22 @@ jobs:
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
 
       # ════════════════════════════════════════════
+      # ۸.۶ تعیین حالت ذخیره‌سازی هوشمند (پیش‌فرض بر اساس debug_mode) با لاگ واضح
+      # ════════════════════════════════════════════
+      - name: 🤖 Smart Save Mode (Default based on debug_mode)
+        id: save_mode
+        run: |
+          if [[ "${{ inputs.debug_mode }}" == "true" ]]; then
+            DEFAULT_SAVE="artifact"
+            MODE_MSG="Debug Mode ON → Default: Artifact"
+          else
+            DEFAULT_SAVE="repository"
+            MODE_MSG="Normal Mode → Default: Repository"
+          fi
+          echo "DEFAULT_SAVE=$DEFAULT_SAVE" >> $GITHUB_OUTPUT
+          echo "::notice title=📌 Smart Save Mode::$MODE_MSG | Debug=${{ inputs.debug_mode }} | Default=$DEFAULT_SAVE"
+
+      # ════════════════════════════════════════════
       # ۹. اجرای اسکریپر (عادی یا دیباگ)
       # ════════════════════════════════════════════
       - name: 🚀 Run Telegram Scraper
@@ -197,14 +213,14 @@ jobs:
           git add .gitattributes
 
       # ════════════════════════════════════════════
-      # ۱۳. کامیت و آپلود نتایج (مرحله جدید و قوی‌تر)
+      # ۱۳. کامیت و آپلود نتایج (با منطق هوشمند و لاگ اضافی)
       # ════════════════════════════════════════════
 
       # ─────────────────────────────────────────────
       # ۱۳-الف: Stage کردن فایل‌ها با git add صریح
       # ─────────────────────────────────────────────
       - name: 🗃 Stage all generated files for commit
-        if: ${{ inputs.save_to == 'repository' }}
+        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
         run: |
           echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
           ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
@@ -217,7 +233,7 @@ jobs:
       # ۱۳-ب: Commit و Push با git-auto-commit-action
       # ─────────────────────────────────────────────
       - name: 💾 Commit and push results
-        if: ${{ inputs.save_to == 'repository' }}
+        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
@@ -226,6 +242,14 @@ jobs:
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           add_options: "--force"
+
+      # ─────────────────────────────────────────────
+      # ۱۳-ج: لاگ تأیید فعال شدن Commit (اختیاری)
+      # ─────────────────────────────────────────────
+      - name: 📝 Commit mode status
+        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        run: |
+          echo "::notice title=📤 Commit Mode Activated::save_to=${{ inputs.save_to }}, default=${{ steps.save_mode.outputs.DEFAULT_SAVE }}"
 
       # ════════════════════════════════════════════
       # ۱۴. پاکسازی آرتیفکت‌های قدیمی پست‌ها
