@@ -232,12 +232,15 @@ jobs:
       # ════════════════════════════════════════════
       # ۱۳. کامیت و آپلود نتایج (با منطق هوشمند و لاگ اضافی)
       # ════════════════════════════════════════════
+      # ════════════════════════════════════════════
+      # ۱۳. کامیت و آپلود نتایج
+      # ════════════════════════════════════════════
 
       # ─────────────────────────────────────────────
       # ۱۳-الف: Stage کردن فایل‌ها با git add صریح
       # ─────────────────────────────────────────────
       - name: 🗃 Stage all generated files for commit
-        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        if: ${{ inputs.save_to == 'repository' }}
         run: |
           echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
           ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
@@ -247,10 +250,20 @@ jobs:
           git status --short
 
       # ─────────────────────────────────────────────
-      # ۱۳-ب: Commit و Push با git-auto-commit-action
+      # ۱۳-ب: Pull latest changes (برای جلوگیری از non-fast-forward)
+      # ─────────────────────────────────────────────
+      - name: 🔄 Pull latest changes before commit
+        if: ${{ inputs.save_to == 'repository' }}
+        run: |
+         git pull --rebase origin ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─────────────────────────────────────────────
+      # ۱۳-ج: Commit و Push با git-auto-commit-action
       # ─────────────────────────────────────────────
       - name: 💾 Commit and push results
-        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        if: ${{ inputs.save_to == 'repository' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
@@ -259,15 +272,7 @@ jobs:
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           add_options: "--force"
-
-      # ─────────────────────────────────────────────
-      # ۱۳-ج: لاگ تأیید فعال شدن Commit (اختیاری)
-      # ─────────────────────────────────────────────
-      - name: 📝 Commit mode status
-        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
-        run: |
-          echo "::notice title=📤 Commit Mode Activated::save_to=${{ inputs.save_to }}, default=${{ steps.save_mode.outputs.DEFAULT_SAVE }}"
-
+          push_options: "--force-with-lease"
       # ════════════════════════════════════════════
       # ۱۴. پاکسازی آرتیفکت‌های قدیمی پست‌ها
       # ════════════════════════════════════════════
