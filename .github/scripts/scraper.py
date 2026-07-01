@@ -46,7 +46,6 @@ class TelegramChannelScraper:
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
-        # دریافت حالت دیباگ از config (با fallback False)
         self.debug_mode = getattr(config, 'debug_mode', False)
 
         # ═══════════════ Resume State ═══════════════════
@@ -118,7 +117,6 @@ class TelegramChannelScraper:
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
-        # ─── استفاده از run_all برای تولید همه خروجی‌ها ───
         gen = OutputGenerator(
             self.base_dir,
             self.channel,
@@ -126,7 +124,7 @@ class TelegramChannelScraper:
             media_map,
             debug_mode=self.debug_mode
         )
-        gen.run_all()  # ← جایگزین چهار فراخوانی جداگانه
+        gen.run_all()
 
         if context:
             await context.close()
@@ -139,16 +137,13 @@ class TelegramChannelScraper:
     def _sanitize_filename(name: str) -> str:
         return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
-    # ═══════════════════ متد واحد برای اسکرین‌شات (با تبدیل به ElementHandle) ═══════════════════
+    # ═══════════════════ متد واحد برای اسکرین‌شات ═══════════════════
     async def _screenshot(self, page, name: str, full_page: bool = True, element=None):
         try:
-            # اگر element داده شده، آن را به ElementHandle تبدیل می‌کنیم
             if element is not None:
-                # اگر Locator است، آن را به ElementHandle تبدیل کن
                 if hasattr(element, 'element_handle'):
                     element = await element.element_handle()
                 if element:
-                    # اعمال sanitize روی نام فایل
                     safe_name = self._sanitize_filename(name)
                     path = self.debug_screenshots_dir / f"debug_{self.channel}_{safe_name}.png"
                     await element.screenshot(path=path)
@@ -171,7 +166,7 @@ class TelegramChannelScraper:
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
         await self._screenshot(page, name, full_page=True)
 
-    # ═══════════════════ رسم صلیب روی المنت (دیباگ قوی) ═══════════════════
+    # ═══════════════════ رسم صلیب روی المنت ═══════════════════
     async def _draw_debug_cross(self, page, element_handle):
         try:
             if not element_handle:
@@ -282,12 +277,11 @@ class TelegramChannelScraper:
                     await human_sleep(1, 0.3)
                     self.logger.info("✅ پیام resume پیدا شد. جمع‌آوری از این نقطه به بالا شروع می‌شود.")
                     start_collecting = True
-                    # برای جلوگیری از جمع‌آوری خود پیام resume، آن را به seen_ids اضافه می‌کنیم
                     seen_ids.add(resume_last_id)
                 else:
                     self.logger.warning("⚠️ پیام resume پیدا نشد. از جدیدترین پست‌ها شروع می‌کنیم.")
                     start_collecting = True
-                    resume_last_id = None  # غیرفعال کردن resume
+                    resume_last_id = None
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در یافتن پیام resume: {e}")
                 start_collecting = True
@@ -311,7 +305,6 @@ class TelegramChannelScraper:
             try:
                 messages = await page.locator('div[data-message-id]').all()
                 
-                # تعیین ترتیب: اگر resume یا start_link داریم، از قدیمی به جدید
                 if self.start_link or resume_last_id:
                     msg_iter = messages
                 else:
@@ -323,42 +316,53 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # مدیریت start_collecting
                         if self.start_link and not start_collecting:
                             if msg_id == self.target_msg_id:
                                 start_collecting = True
                                 self.logger.info(f"🎯 به پیام هدف رسیدیم (ID: {msg_id})، شروع جمع‌آوری...")
-                                # خود پیام هدف را جمع نمی‌کنیم (چون نقطه شروع است)
                                 seen_ids.add(msg_id)
                             else:
                                 continue
                         elif resume_last_id and not start_collecting:
-                            # اگر resume_last_id تنظیم شده باشد، به آن رسیده‌ایم اما قبلاً seen_ids اضافه شده
-                            # بنابراین این حالت هرگز رخ نمی‌دهد چون resume_last_id در seen_ids است
                             pass
 
                         if not start_collecting:
                             continue
 
-                        # ═══════════════ استخراج هوشمند متن ═══════════════
+                        # ═══════════════ استخراج هوشمند متن پست (نسخه نهایی بهینه‌شده) ═══════════════
                         text = ""
                         try:
+                            # روش ۱: selectorهای خاص (اولویت)
                             content_selectors = [
                                 'div.message-content',
                                 'div.text-content',
                                 'div[class*="message-text"]',
-                                'div[class*="text"]'
+                                'div[class*="text"]',
+                                'div[class*="body"]'
                             ]
                             for sel in content_selectors:
                                 content = msg.locator(sel).first
                                 if await content.count() > 0:
                                     text = (await content.inner_text()).strip()[:1000]
-                                    break
-                            if not text:
+                                    if text and len(text) > 3:  # حداقل طول منطقی
+                                        break
+
+                            # روش ۲: fallback به inner_text کل پیام
+                            if not text or len(text) < 5:
                                 text = (await msg.inner_text()).strip()[:1000]
-                        except Exception:
+
+                            # روش ۳: JavaScript textContent (قوی‌ترین fallback)
+                            if not text or len(text) < 5:
+                                text = (await msg.evaluate("el => el.textContent || ''")).strip()[:1000]
+
+                            # تمیز کردن نهایی متن (فاصله‌های اضافی)
+                            text = re.sub(r'\s+', ' ', text).strip()[:1000]
+
+                        except Exception as e:
+                            self.logger.debug(f"خطا در استخراج متن پست {msg_id}: {e}")
                             text = ""
 
+                        # استخراج تاریخ
                         date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
                         date = ""
                         if await date_el.count() > 0:
@@ -373,7 +377,6 @@ class TelegramChannelScraper:
                         seen_ids.add(msg_id)
                         collected_count += 1
 
-                        # ذخیره resume هر ۳ پست (فقط وقتی start_collecting فعال است)
                         if start_collecting and collected_count % 3 == 0:
                             self._save_resume_state(msg_id, collected_count)
 
@@ -388,7 +391,6 @@ class TelegramChannelScraper:
             if len(items) >= self.limit:
                 break
 
-            # اسکرول به بالا
             old_height = await page.evaluate("document.documentElement.scrollHeight")
             await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
             await human_sleep(2.5, 0.5)
@@ -399,7 +401,6 @@ class TelegramChannelScraper:
             else:
                 scroll_attempts = 0
 
-            # مدیریت عدم پیدا شدن نقطه شروع (fallback)
             if not start_collecting:
                 extra_scroll_count += 1
                 if extra_scroll_count <= max_extra_scrolls:
@@ -413,9 +414,8 @@ class TelegramChannelScraper:
                 else:
                     self.logger.warning(f"⚠️ پس از {max_extra_scrolls} اسکرول اضافی، نقطه شروع پیدا نشد. ادامه با پست‌های موجود...")
                     start_collecting = True
-                    resume_last_id = None  # غیرفعال کردن resume
+                    resume_last_id = None
 
-            # توقف هر ۵ پست (بهینه‌سازی)
             if len(items) % 5 == 0 and len(items) > 0:
                 await human_sleep(1.5, 0.3)
 
@@ -435,7 +435,7 @@ class TelegramChannelScraper:
 
         return items, context, page
 
-    # ═══════════════════ جستجو و ورود به کانال (با keyboard.press) ═══════════════════
+    # ═══════════════════ جستجو و ورود به کانال ═══════════════════
     async def _search_and_enter_channel(self, page) -> bool:
         search_input = None
         for sel in [
@@ -518,7 +518,7 @@ class TelegramChannelScraper:
 
         return await self._click_search_result(page, search_term)
 
-    # ═══════════════════ متد جستجو با لینک (با retry و keyboard.press) ═══════════════════
+    # ═══════════════════ متد جستجو با لینک ═══════════════════
     async def _navigate_to_start_link(self, page) -> bool:
         self.logger.info(f"🔗 تلاش برای رفتن به لینک: {self.start_link}")
 
@@ -704,7 +704,7 @@ class TelegramChannelScraper:
         await self._take_screenshot(page, "click_failed")
         return False
 
-    # ═══════════════════ اسکرین‌شات از تکتک پست‌ها (با locator.screenshot و sanitize) ═══════════════════
+    # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
     async def _capture_post_screenshots(self, page, items: List[Dict]):
         self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
         for idx, item in enumerate(items):
@@ -718,7 +718,6 @@ class TelegramChannelScraper:
                 await locator.scroll_into_view_if_needed()
                 await human_sleep(0.5, 0.2)
 
-                # اعمال sanitize روی نام فایل
                 safe_channel = self._sanitize_filename(self.channel)
                 safe_msg_id = self._sanitize_filename(str(msg_id))
                 path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
