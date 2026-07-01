@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@bbcpersian - آرشیو تلگرام</title>
+
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #f0f2f5; --card-bg: #ffffff; --text: #1c1e21;
+            --text-secondary: #65676b; --primary: #2a6df4; --primary-dark: #1e4fcf;
+            --border: #e4e6eb; --shadow: 0 2px 10px rgba(0,0,0,0.08);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.12); --glass: rgba(255,255,255,0.75);
+            --tag-bg: #e7f0ff; --tag-text: #1e4fcf; --footer-bg: #ffffff;
+            --lightbox-bg: rgba(0,0,0,0.9); --highlight-bg: #ffeb3b; --highlight-text: #000;
+        }
+        .dark {
+            --bg: #18191a; --card-bg: #242526; --text: #e4e6eb;
+            --text-secondary: #b0b3b8; --primary: #4d8bf7; --primary-dark: #2a6df4;
+            --border: #3e4042; --shadow: 0 2px 10px rgba(0,0,0,0.3);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.5); --glass: rgba(36,37,38,0.8);
+            --tag-bg: #1e3a5f; --tag-text: #8ab4f8; --footer-bg: #242526;
+            --lightbox-bg: rgba(0,0,0,0.95); --highlight-bg: #f9a825; --highlight-text: #000;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--bg); color: var(--text); direction: rtl;
+            line-height: 1.8; transition: background 0.3s, color 0.3s;
+            min-height: 100vh; padding-bottom: 60px; position: relative; overflow-x: hidden;
+        }
+        .bg-animation {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.15;
+            background: linear-gradient(45deg, #2a6df4, #8b5cf6, #ec4899, #f59e0b);
+            background-size: 400% 400%; animation: gradientShift 15s ease infinite;
+        }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        #progress-bar {
+            position: fixed; top: 0; right: 0; height: 4px;
+            background: linear-gradient(to left, var(--primary), #8b5cf6);
+            width: 0%; z-index: 10000; transition: width 0.1s ease; border-radius: 0 0 4px 0;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
+        .header {
+            position: sticky; top: 20px; z-index: 100; backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px); background: var(--glass);
+            border: 1px solid var(--border); border-radius: 20px; padding: 25px 30px;
+            margin: 20px auto; max-width: 880px; box-shadow: var(--shadow);
+            text-align: center; transition: all 0.3s;
+        }
+        .header:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+        .header h1 {
+            font-size: 28px; font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; margin-bottom: 5px;
+        }
+        .header .stats {
+            display: flex; justify-content: center; align-items: center;
+            gap: 25px; flex-wrap: wrap; margin: 12px 0 0;
+            font-size: 14px; color: var(--text-secondary);
+        }
+        .header .stats i { margin-left: 5px; color: var(--primary); }
+        .theme-toggle {
+            position: absolute; left: 25px; top: 28px; cursor: pointer;
+            font-size: 20px; color: var(--text-secondary);
+            background: none; border: none; transition: 0.3s;
+        }
+        .theme-toggle:hover { color: var(--primary); transform: rotate(30deg) scale(1.1); }
+        .search-box { margin: 15px auto 0; max-width: 400px; position: relative; }
+        .search-box input {
+            width: 100%; padding: 12px 45px 12px 15px; border-radius: 30px;
+            border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+            font-family: 'Vazirmatn', sans-serif; font-size: 14px; transition: 0.3s; outline: none;
+        }
+        .search-box input:focus {
+            border-color: var(--primary); box-shadow: 0 0 0 3px rgba(42,109,244,0.2);
+        }
+        .search-box i {
+            position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+            color: var(--text-secondary); font-size: 16px;
+        }
+        .container { max-width: 880px; margin: 0 auto; padding: 0 15px; }
+        .post {
+            background: var(--card-bg); border-radius: 16px; padding: 24px;
+            margin-bottom: 22px; box-shadow: var(--shadow);
+            border-right: 4px solid var(--primary); transition: all 0.3s ease;
+            animation: fadeInUp 0.5s ease forwards; opacity: 0;
+            position: relative; overflow: hidden;
+        }
+        .post:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+        .post::before {
+            content: ''; position: absolute; top: 0; right: 0; width: 4px; height: 100%;
+            background: linear-gradient(180deg, var(--primary), #8b5cf6);
+            border-radius: 0 16px 16px 0;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .post-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 12px;
+            border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px;
+        }
+        .post-number {
+            background: var(--primary); color: white; padding: 4px 12px;
+            border-radius: 20px; font-size: 13px; font-weight: 700;
+        }
+        .post-date {
+            color: var(--text-secondary); font-size: 13px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .post-body {
+            font-size: 16px; line-height: 2.2; white-space: pre-wrap;
+            word-break: break-word; margin-bottom: 16px; position: relative;
+        }
+        .hashtag {
+            display: inline-block; color: var(--tag-text); background: var(--tag-bg);
+            padding: 3px 10px; border-radius: 15px; font-size: 13px;
+            margin: 2px 4px; transition: all 0.2s;
+        }
+        .hashtag:hover { background: var(--primary); color: white; cursor: pointer; }
+        .copy-btn {
+            position: absolute; top: 0; left: 0; background: var(--primary); color: white;
+            border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px;
+            cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;
+            font-family: 'Vazirmatn';
+        }
+        .copy-btn:hover { background: var(--primary-dark); }
+        .media-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            justify-content: center;
+            margin: 18px 0;
+        }
+        .media-item {
+            background: var(--bg);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+            text-align: center;
+            transition: all 0.3s;
+            border: 1px solid var(--border);
+        }
+        .media-item:hover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+        .media-item img, .media-item video {
+            max-width: 100%; max-height: 400px; border-radius: 8px;
+            display: block; transition: transform 0.3s;
+        }
+        .media-item:hover img { transform: scale(1.02); }
+        .media-item audio {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 12px 0;
+            display: block !important;
+            border-radius: 8px;
+            background: var(--card-bg);
+            padding: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            border: 1px solid var(--border);
+        }
+        .media-item .file-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--primary); color: white !important;
+            padding: 10px 18px; border-radius: 10px; text-decoration: none;
+            font-size: 14px; transition: background 0.3s, transform 0.3s;
+        }
+        .media-item .file-link:hover { background: var(--primary-dark); transform: translateY(-2px); }
+        .no-media {
+            color: var(--text-secondary); font-size: 14px; padding: 14px;
+            background: var(--bg); border-radius: 10px; text-align: center; width: 100%;
+        }
+        .post-url {
+            display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
+            background: var(--primary); color: white !important; padding: 8px 16px;
+            border-radius: 10px; font-size: 13px; text-decoration: none;
+            transition: all 0.3s; font-weight: 500;
+        }
+        .post-url:hover {
+            background: var(--primary-dark); transform: translateX(-4px);
+            box-shadow: 0 4px 15px rgba(42,109,244,0.3);
+        }
+        .extra-meta { display: flex; gap: 15px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+        .lightbox {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--lightbox-bg); z-index: 9999;
+            align-items: center; justify-content: center; flex-direction: column; cursor: pointer;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 90vw; max-height: 80vh; border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); animation: zoomIn 0.3s ease;
+        }
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .lightbox-close {
+            position: absolute; top: 20px; left: 30px; color: white;
+            font-size: 36px; cursor: pointer; transition: transform 0.3s; z-index: 10000;
+        }
+        .lightbox-close:hover { transform: rotate(90deg); }
+        .back-to-top {
+            position: fixed; bottom: 25px; left: 25px; background: var(--primary);
+            color: white; width: 45px; height: 45px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 20px;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(42,109,244,0.4);
+            transition: all 0.3s; opacity: 0; visibility: hidden; z-index: 999; border: none;
+        }
+        .back-to-top.visible { opacity: 1; visibility: visible; }
+        .back-to-top:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(42,109,244,0.5); }
+        .footer {
+            text-align: center; margin-top: 40px; padding: 20px;
+            color: var(--text-secondary); font-size: 13px;
+            border-top: 1px solid var(--border); background: var(--footer-bg);
+        }
+        .highlight {
+            background-color: var(--highlight-bg); color: var(--highlight-text);
+            font-weight: bold; border-radius: 3px; padding: 0 2px;
+        }
+        @media (max-width: 768px) {
+            .header { margin: 10px; padding: 18px 15px; border-radius: 14px; }
+            .header h1 { font-size: 22px; }
+            .post { padding: 16px; margin-bottom: 16px; border-radius: 12px; }
+            .media-item img, .media-item video { max-height: 280px; }
+            .theme-toggle { left: 15px; top: 20px; font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+<div class="bg-animation"></div>
+<div id="progress-bar"></div>
+
+<div class="header">
+    <button class="theme-toggle" onclick="toggleTheme()" title="تغییر حالت تاریک/روشن">
+        <i id="theme-icon" class="fas fa-moon"></i>
+    </button>
+    <h1>@bbcpersian</h1>
+    <div class="stats">
+        <span><i class="fas fa-file-alt"></i> 15 پست</span>
+        <span><i class="fas fa-clock"></i> بروزرسانی: 2026/07/01 - 16:44</span>
+    </div>
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="جستجو در پست‌ها..." oninput="filterPosts()">
+    </div>
+</div>
+
+<div class="container" id="postsContainer">
+    
+    
+    <div class="post" data-text="شورای عالی امنیت ملی ایران در شبکه اجتماعی ایکس نوشت که «انتقام خون» آیت‌‌الله علی خامنه‌ای از «آمرین و عاملین» کشتن او گرفته خواهد شد. علی خامنه‌ای، رهبر سابق جمهوری اسلامی ایران، روز نهم اسفند در اولین روز حمله آمریکا و اسرائیل به ایران، به همراه تعدادی دیگر از مقامات جمهوری اسلامی و برخی از اعضای خانواده‌اش کشته شد. قرار است که مراسم تشییع و تدفین او از ۱۳ تا ۱۸ تیرماه در تهران و قم و مشهد برگزار شود. همچنین مراسمی هم در شهرهای «بغداد، کاظمین، کربلا و نجف» در عراق برگزار خواهد شد. EPA @BBCPersian 5.2K 12:53 PM" style="animation-delay: 0.0s;">
+        <div class="post-header">
+            <span class="post-number">#1</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="شورای عالی امنیت ملی ایران در شبکه اجتماعی ایکس نوشت که «انتقام خون» آیت‌‌الله علی خامنه‌ای از «آمرین و عاملین» کشتن او گرفته خواهد شد. علی خامنه‌ای، رهبر سابق جمهوری اسلامی ایران، روز نهم اسفند در اولین روز حمله آمریکا و اسرائیل به ایران، به همراه تعدادی دیگر از مقامات جمهوری اسلامی و برخی از اعضای خانواده‌اش کشته شد. قرار است که مراسم تشییع و تدفین او از ۱۳ تا ۱۸ تیرماه در تهران و قم و مشهد برگزار شود. همچنین مراسمی هم در شهرهای «بغداد، کاظمین، کربلا و نجف» در عراق برگزار خواهد شد. EPA @BBCPersian 5.2K 12:53 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            شورای عالی امنیت ملی ایران در شبکه اجتماعی ایکس نوشت که «انتقام خون» آیت‌‌الله علی خامنه‌ای از «آمرین و عاملین» کشتن او گرفته خواهد شد. علی خامنه‌ای، رهبر سابق جمهوری اسلامی ایران، روز نهم اسفند در اولین روز حمله آمریکا و اسرائیل به ایران، به همراه تعدادی دیگر از مقامات جمهوری اسلامی و برخی از اعضای خانواده‌اش کشته شد. قرار است که مراسم تشییع و تدفین او از ۱۳ تا ۱۸ تیرماه در تهران و قم و مشهد برگزار شود. همچنین مراسمی هم در شهرهای «بغداد، کاظمین، کربلا و نجف» در عراق برگزار خواهد شد. EPA @BBCPersian 5.2K 12:53 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285508_5920369662149463666.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285508_5920369662149463666.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285508" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="سیما کوتچا, بی‌بی‌سی: بر اساس طرح‌های دولت بریتانیا، افرادی که در این کشور پناهندگی دریافت می‌کنند، پس از آنکه شروع به کسب درآمد کنند، باید حدود ۱۰ هزار پوند از هزینه اسکان و حمایت‌های دریافتی خود را بازپرداخت کنند. این اقدامات جدید که بخشی از لایحه مهاجرت و پناهندگی است، با هدف بازپس‌گیری هزینه‌ها از همه بزرگسالانی که توانایی مالی کافی دارند، ارائه شده است. پناهجویانی که حق کار در بریتانیا را دارند، باید این مبلغ ثابت را بپردازند تا واجد شرایط دریافت اقامت دائم شوند. افرادی که درخواست پناهندگی آن‌ها رد شده و کشور را ترک می‌کنند، پیش از آنکه بتوانند دوباره به بریتانیا بازگردند، باید این هزینه‌ها را بازپرداخت کنند. شبانه محمود، وزیر کشور بریتانیا گفت این تغییرات نشان خواهد داد که «حمایت از پناهجویان یک حق است، اما در عین حال یک مسئولیت نیز هست». GettyImages/ In Pictures via Getty Images/ AFP via Getty Images/ NurPhoto via Getty Images/ Bloomberg via Getty Images/ Anadolu via Getty Images https://bbc.in/4aPGEYT @BBCPersian 8.5K 12:31 PM" style="animation-delay: 0.05s;">
+        <div class="post-header">
+            <span class="post-number">#2</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="سیما کوتچا, بی‌بی‌سی: بر اساس طرح‌های دولت بریتانیا، افرادی که در این کشور پناهندگی دریافت می‌کنند، پس از آنکه شروع به کسب درآمد کنند، باید حدود ۱۰ هزار پوند از هزینه اسکان و حمایت‌های دریافتی خود را بازپرداخت کنند. این اقدامات جدید که بخشی از لایحه مهاجرت و پناهندگی است، با هدف بازپس‌گیری هزینه‌ها از همه بزرگسالانی که توانایی مالی کافی دارند، ارائه شده است. پناهجویانی که حق کار در بریتانیا را دارند، باید این مبلغ ثابت را بپردازند تا واجد شرایط دریافت اقامت دائم شوند. افرادی که درخواست پناهندگی آن‌ها رد شده و کشور را ترک می‌کنند، پیش از آنکه بتوانند دوباره به بریتانیا بازگردند، باید این هزینه‌ها را بازپرداخت کنند. شبانه محمود، وزیر کشور بریتانیا گفت این تغییرات نشان خواهد داد که «حمایت از پناهجویان یک حق است، اما در عین حال یک مسئولیت نیز هست». GettyImages/ In Pictures via Getty Images/ AFP via Getty Images/ NurPhoto via Getty Images/ Bloomberg via Getty Images/ Anadolu via Getty Images https://bbc.in/4aPGEYT @BBCPersian 8.5K 12:31 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            سیما کوتچا, بی‌بی‌سی: بر اساس طرح‌های دولت بریتانیا، افرادی که در این کشور پناهندگی دریافت می‌کنند، پس از آنکه شروع به کسب درآمد کنند، باید حدود ۱۰ هزار پوند از هزینه اسکان و حمایت‌های دریافتی خود را بازپرداخت کنند. این اقدامات جدید که بخشی از لایحه مهاجرت و پناهندگی است، با هدف بازپس‌گیری هزینه‌ها از همه بزرگسالانی که توانایی مالی کافی دارند، ارائه شده است. پناهجویانی که حق کار در بریتانیا را دارند، باید این مبلغ ثابت را بپردازند تا واجد شرایط دریافت اقامت دائم شوند. افرادی که درخواست پناهندگی آن‌ها رد شده و کشور را ترک می‌کنند، پیش از آنکه بتوانند دوباره به بریتانیا بازگردند، باید این هزینه‌ها را بازپرداخت کنند. شبانه محمود، وزیر کشور بریتانیا گفت این تغییرات نشان خواهد داد که «حمایت از پناهجویان یک حق است، اما در عین حال یک مسئولیت نیز هست». GettyImages/ In Pictures via Getty Images/ AFP via Getty Images/ NurPhoto via Getty Images/ Bloomberg via Getty Images/ Anadolu via Getty Images https://bbc.in/4aPGEYT @BBCPersian 8.5K 12:31 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463660.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463660.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463659.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463659.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463661.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463661.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463658.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463658.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463657.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463657.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463656.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463656.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463655.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463655.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463654.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463654.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463653.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463653.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285498_5920369662149463652.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285498_5920369662149463652.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285498" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="غریب‌آبادی با نخست‌وزیر قطر درباره اجرای تفاهم‌نامه و مذاکرات بعدی گفت‌وگو کرد کاظم غریب‌آبادی، معاون حقوقی و بین‌المللی وزارت خارجه ایران و مذاکره‌کننده ارشد آن کشور، در دوحه با شیخ محمد بن عبدالرحمن آل ثانی، نخست‌وزیر و وزیر خارجه قطر، دیدار کرد. او در رأس هیئتی از مقام‌های وزارت خارجه، بانک مرکزی و وزارت جهاد کشاورزی ایران به قطر سفر کرده است. بر اساس گزارش وزارت خارجه ایران، دو طرف درباره روند اجرای تفاهم‌نامه پایان جنگ، موانع موجود و راه‌های تسریع در اجرای آن گفت‌وگو کردند. مسائل مرتبط با لبنان و گسترش همکاری‌های دوجانبه نیز از دیگر محورهای این دیدار اعلام شده است. پس از این دیدار، مذاکره‌کنندگان ارشد ایران، قطر و پاکستان در نشستی سه‌جانبه روند اجرای این تفاهمنامه را بررسی کردند. آقای غریب‌آبادی پس از این نشست گفت که مذاکرات بر پیگیری اجرای مفاد تفاهم‌نامه متمرکز بوده است. او همچنین گفت که کارگروه‌هایی برای پیگیری اجرای تفاهمنامه و مذاکره درباره توافق نهایی تشکیل شده، اما مذاکرات در این چارچوب هنوز آغاز نشده است. به گفته غریب‌آبادی، رایزنی‌ها از طریق میانجی‌ها برای تعیین زم" style="animation-delay: 0.1s;">
+        <div class="post-header">
+            <span class="post-number">#3</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="غریب‌آبادی با نخست‌وزیر قطر درباره اجرای تفاهم‌نامه و مذاکرات بعدی گفت‌وگو کرد کاظم غریب‌آبادی، معاون حقوقی و بین‌المللی وزارت خارجه ایران و مذاکره‌کننده ارشد آن کشور، در دوحه با شیخ محمد بن عبدالرحمن آل ثانی، نخست‌وزیر و وزیر خارجه قطر، دیدار کرد. او در رأس هیئتی از مقام‌های وزارت خارجه، بانک مرکزی و وزارت جهاد کشاورزی ایران به قطر سفر کرده است. بر اساس گزارش وزارت خارجه ایران، دو طرف درباره روند اجرای تفاهم‌نامه پایان جنگ، موانع موجود و راه‌های تسریع در اجرای آن گفت‌وگو کردند. مسائل مرتبط با لبنان و گسترش همکاری‌های دوجانبه نیز از دیگر محورهای این دیدار اعلام شده است. پس از این دیدار، مذاکره‌کنندگان ارشد ایران، قطر و پاکستان در نشستی سه‌جانبه روند اجرای این تفاهمنامه را بررسی کردند. آقای غریب‌آبادی پس از این نشست گفت که مذاکرات بر پیگیری اجرای مفاد تفاهم‌نامه متمرکز بوده است. او همچنین گفت که کارگروه‌هایی برای پیگیری اجرای تفاهمنامه و مذاکره درباره توافق نهایی تشکیل شده، اما مذاکرات در این چارچوب هنوز آغاز نشده است. به گفته غریب‌آبادی، رایزنی‌ها از طریق میانجی‌ها برای تعیین زم">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            غریب‌آبادی با نخست‌وزیر قطر درباره اجرای تفاهم‌نامه و مذاکرات بعدی گفت‌وگو کرد کاظم غریب‌آبادی، معاون حقوقی و بین‌المللی وزارت خارجه ایران و مذاکره‌کننده ارشد آن کشور، در دوحه با شیخ محمد بن عبدالرحمن آل ثانی، نخست‌وزیر و وزیر خارجه قطر، دیدار کرد. او در رأس هیئتی از مقام‌های وزارت خارجه، بانک مرکزی و وزارت جهاد کشاورزی ایران به قطر سفر کرده است. بر اساس گزارش وزارت خارجه ایران، دو طرف درباره روند اجرای تفاهم‌نامه پایان جنگ، موانع موجود و راه‌های تسریع در اجرای آن گفت‌وگو کردند. مسائل مرتبط با لبنان و گسترش همکاری‌های دوجانبه نیز از دیگر محورهای این دیدار اعلام شده است. پس از این دیدار، مذاکره‌کنندگان ارشد ایران، قطر و پاکستان در نشستی سه‌جانبه روند اجرای این تفاهمنامه را بررسی کردند. آقای غریب‌آبادی پس از این نشست گفت که مذاکرات بر پیگیری اجرای مفاد تفاهم‌نامه متمرکز بوده است. او همچنین گفت که کارگروه‌هایی برای پیگیری اجرای تفاهمنامه و مذاکره درباره توافق نهایی تشکیل شده، اما مذاکرات در این چارچوب هنوز آغاز نشده است. به گفته غریب‌آبادی، رایزنی‌ها از طریق میانجی‌ها برای تعیین زم
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285497_0.png" loading="lazy" alt="تصویر" onclick="openLightbox('media/285497_0.png')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285497" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="آژانس ایمنی هوانوردی اتحادیه اروپا اعتبار توصیه‌های پروازی خود درباره آسمان شماری از کشورهای خاورمیانه و حوزه خلیج فارس را تا ۱۷ تیرماه تمدید کرد. این آژانس روز چهارشنبه اعلام کرد که اعتبار توصیه پروازی دراین مناطق تمدید شده و محتوای آن و توصیه‌های پیشین تغییری نکرده است. این توصیه پروازی، شامل حریم هوایی بحرین، ایران، عراق، اردن، کویت، لبنان، عمان، قطر، امارات متحده عربی و عربستان سعودی می‌شود. پیش از این، آژانس ایمنی هوانوردی اتحادیه اروپا گفته بود که ارزیابی‌ها نشان می‌دهد که با وجود کاهش نسبی سطح درگیری پس از تفاهم آمریکا و ایران، خطر برای پروازهای غیرنظامی در آسمان ایران، عراق و لبنان همچنان در حدی است که پرهیز کامل از پرواز را توجیه می‌کند. Getty https://bbc.in/442nc7p @BBCPersian 9.1K edited 12:24 PM" style="animation-delay: 0.15000000000000002s;">
+        <div class="post-header">
+            <span class="post-number">#4</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="آژانس ایمنی هوانوردی اتحادیه اروپا اعتبار توصیه‌های پروازی خود درباره آسمان شماری از کشورهای خاورمیانه و حوزه خلیج فارس را تا ۱۷ تیرماه تمدید کرد. این آژانس روز چهارشنبه اعلام کرد که اعتبار توصیه پروازی دراین مناطق تمدید شده و محتوای آن و توصیه‌های پیشین تغییری نکرده است. این توصیه پروازی، شامل حریم هوایی بحرین، ایران، عراق، اردن، کویت، لبنان، عمان، قطر، امارات متحده عربی و عربستان سعودی می‌شود. پیش از این، آژانس ایمنی هوانوردی اتحادیه اروپا گفته بود که ارزیابی‌ها نشان می‌دهد که با وجود کاهش نسبی سطح درگیری پس از تفاهم آمریکا و ایران، خطر برای پروازهای غیرنظامی در آسمان ایران، عراق و لبنان همچنان در حدی است که پرهیز کامل از پرواز را توجیه می‌کند. Getty https://bbc.in/442nc7p @BBCPersian 9.1K edited 12:24 PM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            آژانس ایمنی هوانوردی اتحادیه اروپا اعتبار توصیه‌های پروازی خود درباره آسمان شماری از کشورهای خاورمیانه و حوزه خلیج فارس را تا ۱۷ تیرماه تمدید کرد. این آژانس روز چهارشنبه اعلام کرد که اعتبار توصیه پروازی دراین مناطق تمدید شده و محتوای آن و توصیه‌های پیشین تغییری نکرده است. این توصیه پروازی، شامل حریم هوایی بحرین، ایران، عراق، اردن، کویت، لبنان، عمان، قطر، امارات متحده عربی و عربستان سعودی می‌شود. پیش از این، آژانس ایمنی هوانوردی اتحادیه اروپا گفته بود که ارزیابی‌ها نشان می‌دهد که با وجود کاهش نسبی سطح درگیری پس از تفاهم آمریکا و ایران، خطر برای پروازهای غیرنظامی در آسمان ایران، عراق و لبنان همچنان در حدی است که پرهیز کامل از پرواز را توجیه می‌کند. Getty https://bbc.in/442nc7p @BBCPersian 9.1K edited 12:24 PM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285496_5920369662149463649.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285496_5920369662149463649.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285496" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="عباس عراقچی، وزیر خارجه ایران، در واکنش به اظهارات یسرائیل کاتز، وزیر دفاع اسرائیل، گفت هرگونه تهدید علیه مردم و رهبران ایران با «پاسخی فوری و قدرتمند» روبه‌رو خواهد شد. وزیر دفاع اسرائیل پیش‌تر گفته بود اگر ایران به اسرائیل موشک شلیک کند، اسرائیل «با قدرت» به ایران حمله خواهد کرد. او همچنین گفته بود ارتش اسرائیل برای انجام عملیاتی مستقل علیه ایران آماده می‌شود. آقای عراقچی گفت که مفاد تفاهمنامه اسلام‌آباد «کاملا روشن» است و همگان می‌توانند آن را بررسی کنند. او افزود رئیس‌جمهور آمریکا، ایالات متحده را متعهد کرده است که اسرائیل را مهار کند و گفت اگر اسرائیل از این چارچوب عدول کند، ایران واکنش نشان خواهد داد. Reuters https://bbc.in/442nc7p @BBCPersian 17.6K edited 11:49 AM" style="animation-delay: 0.2s;">
+        <div class="post-header">
+            <span class="post-number">#5</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="عباس عراقچی، وزیر خارجه ایران، در واکنش به اظهارات یسرائیل کاتز، وزیر دفاع اسرائیل، گفت هرگونه تهدید علیه مردم و رهبران ایران با «پاسخی فوری و قدرتمند» روبه‌رو خواهد شد. وزیر دفاع اسرائیل پیش‌تر گفته بود اگر ایران به اسرائیل موشک شلیک کند، اسرائیل «با قدرت» به ایران حمله خواهد کرد. او همچنین گفته بود ارتش اسرائیل برای انجام عملیاتی مستقل علیه ایران آماده می‌شود. آقای عراقچی گفت که مفاد تفاهمنامه اسلام‌آباد «کاملا روشن» است و همگان می‌توانند آن را بررسی کنند. او افزود رئیس‌جمهور آمریکا، ایالات متحده را متعهد کرده است که اسرائیل را مهار کند و گفت اگر اسرائیل از این چارچوب عدول کند، ایران واکنش نشان خواهد داد. Reuters https://bbc.in/442nc7p @BBCPersian 17.6K edited 11:49 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            عباس عراقچی، وزیر خارجه ایران، در واکنش به اظهارات یسرائیل کاتز، وزیر دفاع اسرائیل، گفت هرگونه تهدید علیه مردم و رهبران ایران با «پاسخی فوری و قدرتمند» روبه‌رو خواهد شد. وزیر دفاع اسرائیل پیش‌تر گفته بود اگر ایران به اسرائیل موشک شلیک کند، اسرائیل «با قدرت» به ایران حمله خواهد کرد. او همچنین گفته بود ارتش اسرائیل برای انجام عملیاتی مستقل علیه ایران آماده می‌شود. آقای عراقچی گفت که مفاد تفاهمنامه اسلام‌آباد «کاملا روشن» است و همگان می‌توانند آن را بررسی کنند. او افزود رئیس‌جمهور آمریکا، ایالات متحده را متعهد کرده است که اسرائیل را مهار کند و گفت اگر اسرائیل از این چارچوب عدول کند، ایران واکنش نشان خواهد داد. Reuters https://bbc.in/442nc7p @BBCPersian 17.6K edited 11:49 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285495_5920369662149463644.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285495_5920369662149463644.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285495" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="افزایش بازده اوراق قرضه منطقه یورو در پی تردیدها درباره مذاکرات ایران و آمریکا بازده اوراق قرضه منطقه یورو روز چهارشنبه اندکی افزایش یافت؛ پس از آن‌که ایران اعلام کرد در قطر با نمایندگان آمریکا دیدار نخواهد کرد، موضوعی که تردیدها درباره روند صلح را افزایش داد. تحولات بازار اوراق خزانه‌داری آمریکا نیز بر بازار اروپا اثر گذاشت. با این حال، بازده اوراق کوتاه‌مدت منطقه یورو کاهش یافت؛ پس از انتشار داده‌هایی که نشان داد تورم در ماه ژوئن بیش از انتظار کند شده و در نتیجه، فشار بر بانک مرکزی اروپا برای افزایش دوباره نرخ بهره کاهش یافته است. بازده اوراق قرضه ده‌ساله آلمان که شاخص مرجع منطقه یورو محسوب می‌شود، ۱/۵ واحد پایه افزایش یافت و به ۲/۹۲۴ درصد رسید. قیمت نفت ابتدا پس از آن افزایش یافت که ایران روز سه‌شنبه اعلام کرد با فرستادگان ارشد آمریکا که به منطقه سفر کرده‌اند دیدار نخواهد کرد؛ نشانه‌ای از آن‌که دو طرف همچنان بر سر ارکان اصلی توافق چارچوبی اختلاف دارند. با این حال، بهای نفت برنت بعدا کاهش یافت و به ۷۱ دلار و ۹۰ سنت رسید؛ سطحی نزدیک به پایین‌ترین قیمت از زمان آغاز جنگ در اواخر فو" style="animation-delay: 0.25s;">
+        <div class="post-header">
+            <span class="post-number">#6</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="افزایش بازده اوراق قرضه منطقه یورو در پی تردیدها درباره مذاکرات ایران و آمریکا بازده اوراق قرضه منطقه یورو روز چهارشنبه اندکی افزایش یافت؛ پس از آن‌که ایران اعلام کرد در قطر با نمایندگان آمریکا دیدار نخواهد کرد، موضوعی که تردیدها درباره روند صلح را افزایش داد. تحولات بازار اوراق خزانه‌داری آمریکا نیز بر بازار اروپا اثر گذاشت. با این حال، بازده اوراق کوتاه‌مدت منطقه یورو کاهش یافت؛ پس از انتشار داده‌هایی که نشان داد تورم در ماه ژوئن بیش از انتظار کند شده و در نتیجه، فشار بر بانک مرکزی اروپا برای افزایش دوباره نرخ بهره کاهش یافته است. بازده اوراق قرضه ده‌ساله آلمان که شاخص مرجع منطقه یورو محسوب می‌شود، ۱/۵ واحد پایه افزایش یافت و به ۲/۹۲۴ درصد رسید. قیمت نفت ابتدا پس از آن افزایش یافت که ایران روز سه‌شنبه اعلام کرد با فرستادگان ارشد آمریکا که به منطقه سفر کرده‌اند دیدار نخواهد کرد؛ نشانه‌ای از آن‌که دو طرف همچنان بر سر ارکان اصلی توافق چارچوبی اختلاف دارند. با این حال، بهای نفت برنت بعدا کاهش یافت و به ۷۱ دلار و ۹۰ سنت رسید؛ سطحی نزدیک به پایین‌ترین قیمت از زمان آغاز جنگ در اواخر فو">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            افزایش بازده اوراق قرضه منطقه یورو در پی تردیدها درباره مذاکرات ایران و آمریکا بازده اوراق قرضه منطقه یورو روز چهارشنبه اندکی افزایش یافت؛ پس از آن‌که ایران اعلام کرد در قطر با نمایندگان آمریکا دیدار نخواهد کرد، موضوعی که تردیدها درباره روند صلح را افزایش داد. تحولات بازار اوراق خزانه‌داری آمریکا نیز بر بازار اروپا اثر گذاشت. با این حال، بازده اوراق کوتاه‌مدت منطقه یورو کاهش یافت؛ پس از انتشار داده‌هایی که نشان داد تورم در ماه ژوئن بیش از انتظار کند شده و در نتیجه، فشار بر بانک مرکزی اروپا برای افزایش دوباره نرخ بهره کاهش یافته است. بازده اوراق قرضه ده‌ساله آلمان که شاخص مرجع منطقه یورو محسوب می‌شود، ۱/۵ واحد پایه افزایش یافت و به ۲/۹۲۴ درصد رسید. قیمت نفت ابتدا پس از آن افزایش یافت که ایران روز سه‌شنبه اعلام کرد با فرستادگان ارشد آمریکا که به منطقه سفر کرده‌اند دیدار نخواهد کرد؛ نشانه‌ای از آن‌که دو طرف همچنان بر سر ارکان اصلی توافق چارچوبی اختلاف دارند. با این حال، بهای نفت برنت بعدا کاهش یافت و به ۷۱ دلار و ۹۰ سنت رسید؛ سطحی نزدیک به پایین‌ترین قیمت از زمان آغاز جنگ در اواخر فو
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285494_0.png" loading="lazy" alt="تصویر" onclick="openLightbox('media/285494_0.png')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285494" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="سرپرست وزارت دفاع ایران: قدرت دفاعی، موشکی و پهپادی ایران، خط قرمز امنیت ملی است سرپرست وزارت دفاع ایران می‌گوید که قابلیت‌های نظامی ایران، از جمله برنامه‌های موشکی و پهپادی آن، «خط قرمز امنیت ملی» است و قابل مذاکره نخواهد بود. مجید ابن‌الرضا در شبکه اجتماعی ایکس نوشت که در جلسه‌ بررسی «ابعاد، دستاوردها و ویژگی‌های» جنگ اخیر با آمریکا و اسرائیل با اعضای کمیسیون اقتصاد مجلس تاکید شد که «قدرت دفاعی، موشکی و پهپادی ایران خط قرمز امنیت ملی است. این موضوع قابل مذاکره نیست و هرگز هم نخواهد بود.» او افزود که ایران به گسترش این قابلیت‌ها «با استفاده از پتانسیل‌های داخلی» ادامه خواهد داد. همانطور که پیش از این گزارش کردیم ، مذاکرات غیرمستقیم ایران و آمریکا از شامگاه گذشته در قطر در جریان بوده و بر تنگه هرمز و آزادسازی دارایی‌های مسدودشده ایران متمرکز است. https://bbc.in/442nc7p @BBCPersian 24.2K 10:56 AM" style="animation-delay: 0.30000000000000004s;">
+        <div class="post-header">
+            <span class="post-number">#7</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="سرپرست وزارت دفاع ایران: قدرت دفاعی، موشکی و پهپادی ایران، خط قرمز امنیت ملی است سرپرست وزارت دفاع ایران می‌گوید که قابلیت‌های نظامی ایران، از جمله برنامه‌های موشکی و پهپادی آن، «خط قرمز امنیت ملی» است و قابل مذاکره نخواهد بود. مجید ابن‌الرضا در شبکه اجتماعی ایکس نوشت که در جلسه‌ بررسی «ابعاد، دستاوردها و ویژگی‌های» جنگ اخیر با آمریکا و اسرائیل با اعضای کمیسیون اقتصاد مجلس تاکید شد که «قدرت دفاعی، موشکی و پهپادی ایران خط قرمز امنیت ملی است. این موضوع قابل مذاکره نیست و هرگز هم نخواهد بود.» او افزود که ایران به گسترش این قابلیت‌ها «با استفاده از پتانسیل‌های داخلی» ادامه خواهد داد. همانطور که پیش از این گزارش کردیم ، مذاکرات غیرمستقیم ایران و آمریکا از شامگاه گذشته در قطر در جریان بوده و بر تنگه هرمز و آزادسازی دارایی‌های مسدودشده ایران متمرکز است. https://bbc.in/442nc7p @BBCPersian 24.2K 10:56 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            سرپرست وزارت دفاع ایران: قدرت دفاعی، موشکی و پهپادی ایران، خط قرمز امنیت ملی است سرپرست وزارت دفاع ایران می‌گوید که قابلیت‌های نظامی ایران، از جمله برنامه‌های موشکی و پهپادی آن، «خط قرمز امنیت ملی» است و قابل مذاکره نخواهد بود. مجید ابن‌الرضا در شبکه اجتماعی ایکس نوشت که در جلسه‌ بررسی «ابعاد، دستاوردها و ویژگی‌های» جنگ اخیر با آمریکا و اسرائیل با اعضای کمیسیون اقتصاد مجلس تاکید شد که «قدرت دفاعی، موشکی و پهپادی ایران خط قرمز امنیت ملی است. این موضوع قابل مذاکره نیست و هرگز هم نخواهد بود.» او افزود که ایران به گسترش این قابلیت‌ها «با استفاده از پتانسیل‌های داخلی» ادامه خواهد داد. همانطور که پیش از این گزارش کردیم ، مذاکرات غیرمستقیم ایران و آمریکا از شامگاه گذشته در قطر در جریان بوده و بر تنگه هرمز و آزادسازی دارایی‌های مسدودشده ایران متمرکز است. https://bbc.in/442nc7p @BBCPersian 24.2K 10:56 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285493_0.png" loading="lazy" alt="تصویر" onclick="openLightbox('media/285493_0.png')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285493" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="حملات هوایی حکومت طالبان به مناطق مرزی پاکستان و تشدید تنش‌ها حکومت طالبان افغانستان اعلام کرد که شب گذشته حملاتی را به اهدافی در امتداد مرز با پاکستان، در استان بلوچستان در جنوب غربی، انجام داده و تلفات سنگینی به آنها وارد کرده است. https://bbc.in/4v3aOPh @BBCPersian BBC News فارسی حملات هوایی حکومت طالبان به مناطق مرزی پاکستان و تشدید تنش‌ها حکومت طالبان افغانستان اعلام کرد که سه‌شبنه شب (۳۰ ژوئن) حملاتی را به اهدافی در امتداد مرز با پاکستان، در استان بلوچستان در جنوب غربی، انجام داده و تلفات سنگینی به آنها و... INSTANT VIEW 25.1K 10:42 AM" style="animation-delay: 0.35000000000000003s;">
+        <div class="post-header">
+            <span class="post-number">#8</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="حملات هوایی حکومت طالبان به مناطق مرزی پاکستان و تشدید تنش‌ها حکومت طالبان افغانستان اعلام کرد که شب گذشته حملاتی را به اهدافی در امتداد مرز با پاکستان، در استان بلوچستان در جنوب غربی، انجام داده و تلفات سنگینی به آنها وارد کرده است. https://bbc.in/4v3aOPh @BBCPersian BBC News فارسی حملات هوایی حکومت طالبان به مناطق مرزی پاکستان و تشدید تنش‌ها حکومت طالبان افغانستان اعلام کرد که سه‌شبنه شب (۳۰ ژوئن) حملاتی را به اهدافی در امتداد مرز با پاکستان، در استان بلوچستان در جنوب غربی، انجام داده و تلفات سنگینی به آنها و... INSTANT VIEW 25.1K 10:42 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            حملات هوایی حکومت طالبان به مناطق مرزی پاکستان و تشدید تنش‌ها حکومت طالبان افغانستان اعلام کرد که شب گذشته حملاتی را به اهدافی در امتداد مرز با پاکستان، در استان بلوچستان در جنوب غربی، انجام داده و تلفات سنگینی به آنها وارد کرده است. https://bbc.in/4v3aOPh @BBCPersian BBC News فارسی حملات هوایی حکومت طالبان به مناطق مرزی پاکستان و تشدید تنش‌ها حکومت طالبان افغانستان اعلام کرد که سه‌شبنه شب (۳۰ ژوئن) حملاتی را به اهدافی در امتداد مرز با پاکستان، در استان بلوچستان در جنوب غربی، انجام داده و تلفات سنگینی به آنها و... INSTANT VIEW 25.1K 10:42 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285492_5919387269984882186.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285492_5919387269984882186.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285492" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="اتحادیه‌ها و شرکت‌های کشتیرانی امروز اعلام کردند که تنگه هرمز همچنان «منطقه عملیات جنگی» محسوب خواهد شد؛ تصمیمی که پس از حمله به دو کشتی، با وجود آتش‌بس میان ایران و آمریکا، گرفته شده است. فدراسیون بین‌المللی کارگران حمل‌ونقل و «گروه مشترک مذاکره» که نماینده مالکان کشتی‌هاست، در بیانیه‌ مشترکی گفتند که این تصمیم بازتاب‌دهنده «خطر جدی و ادامه‌دار برای جان افراد و تحولات سریع اوضاع در منطقه» است. یک منبع آگاه از این گفت‌وگوها به خبرگزاری فرانسه گفت که اگر از پنجشنبه گذشته دو کشتی در دو روز جداگانه هدف قرار نگرفته بودند و رفت‌وآمد کشتی‌ها بدون اختلال ادامه می‌یافت، احتمال داشت این هفته در این طبقه‌بندی تجدیدنظر شود. بر اساس این بیانیه، تنگه هرمز دست‌کم تا ۱۸ تیر/۹ ژوئیه همچنان «منطقه عملیات جنگی» خواهد ماند و این وضعیت هر هفته بازبینی می‌شود. تنگه هرمز نخستین‌بار در ۵ مارس، پس از حمله به کشتی‌هایی که قصد عبور از این گذرگاه حیاتی انرژی را داشتند، در این طبقه‌بندی قرار گرفت. Reuters https://bbc.in/442nc7p @BBCPersian 25.8K edited 10:24 AM" style="animation-delay: 0.4s;">
+        <div class="post-header">
+            <span class="post-number">#9</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="اتحادیه‌ها و شرکت‌های کشتیرانی امروز اعلام کردند که تنگه هرمز همچنان «منطقه عملیات جنگی» محسوب خواهد شد؛ تصمیمی که پس از حمله به دو کشتی، با وجود آتش‌بس میان ایران و آمریکا، گرفته شده است. فدراسیون بین‌المللی کارگران حمل‌ونقل و «گروه مشترک مذاکره» که نماینده مالکان کشتی‌هاست، در بیانیه‌ مشترکی گفتند که این تصمیم بازتاب‌دهنده «خطر جدی و ادامه‌دار برای جان افراد و تحولات سریع اوضاع در منطقه» است. یک منبع آگاه از این گفت‌وگوها به خبرگزاری فرانسه گفت که اگر از پنجشنبه گذشته دو کشتی در دو روز جداگانه هدف قرار نگرفته بودند و رفت‌وآمد کشتی‌ها بدون اختلال ادامه می‌یافت، احتمال داشت این هفته در این طبقه‌بندی تجدیدنظر شود. بر اساس این بیانیه، تنگه هرمز دست‌کم تا ۱۸ تیر/۹ ژوئیه همچنان «منطقه عملیات جنگی» خواهد ماند و این وضعیت هر هفته بازبینی می‌شود. تنگه هرمز نخستین‌بار در ۵ مارس، پس از حمله به کشتی‌هایی که قصد عبور از این گذرگاه حیاتی انرژی را داشتند، در این طبقه‌بندی قرار گرفت. Reuters https://bbc.in/442nc7p @BBCPersian 25.8K edited 10:24 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            اتحادیه‌ها و شرکت‌های کشتیرانی امروز اعلام کردند که تنگه هرمز همچنان «منطقه عملیات جنگی» محسوب خواهد شد؛ تصمیمی که پس از حمله به دو کشتی، با وجود آتش‌بس میان ایران و آمریکا، گرفته شده است. فدراسیون بین‌المللی کارگران حمل‌ونقل و «گروه مشترک مذاکره» که نماینده مالکان کشتی‌هاست، در بیانیه‌ مشترکی گفتند که این تصمیم بازتاب‌دهنده «خطر جدی و ادامه‌دار برای جان افراد و تحولات سریع اوضاع در منطقه» است. یک منبع آگاه از این گفت‌وگوها به خبرگزاری فرانسه گفت که اگر از پنجشنبه گذشته دو کشتی در دو روز جداگانه هدف قرار نگرفته بودند و رفت‌وآمد کشتی‌ها بدون اختلال ادامه می‌یافت، احتمال داشت این هفته در این طبقه‌بندی تجدیدنظر شود. بر اساس این بیانیه، تنگه هرمز دست‌کم تا ۱۸ تیر/۹ ژوئیه همچنان «منطقه عملیات جنگی» خواهد ماند و این وضعیت هر هفته بازبینی می‌شود. تنگه هرمز نخستین‌بار در ۵ مارس، پس از حمله به کشتی‌هایی که قصد عبور از این گذرگاه حیاتی انرژی را داشتند، در این طبقه‌بندی قرار گرفت. Reuters https://bbc.in/442nc7p @BBCPersian 25.8K edited 10:24 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285491_5920369662149463591.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285491_5920369662149463591.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285491" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="فراخوان تجربه و مشاهده از #اختلال در خدمات باکی در ایران واتس‌اپ: ۰۰۴۴۷۳۴۲۰۳۲۱۱۳ تلگرام: BBCShoma@ مشتریان چهار بانک بزرگ در ایران از ۲۳ خرداد ۱۴۰۵ تا کنون درگیر اختلال در دریافت خدمات بانکی هستند. بانک مرکزی ایران پیشتر دلیل اختلال در بانک‌های ملی، صادرات، تجارت و توسعه صادرات را «حمله سایبری به زیرساخت ارتباطی» اعلام کرده بود. مدیرعامل شرکت خدمات انفورماتیک ایران می‌گوید اطلاعات مشتریان «کاملا موجود» و در حال انتقال به بانک‌هاست. تجربه و مشاهده شما از اختلال در خدمات بانکی چیست؟ این اختلال چه تاثیری بر زندگی و کسب‌وکار شما گذاشته است؟ با هشتگ #اختلال برای ما ویدیو یا فایل صوتی بفرستید به: واتس‌اپ: ۰۰۴۴۷۳۴۲۰۳۲۱۱۳ تلگرام: BBCShoma@ 27.4K 10:02 AM" style="animation-delay: 0.45s;">
+        <div class="post-header">
+            <span class="post-number">#10</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="فراخوان تجربه و مشاهده از #اختلال در خدمات باکی در ایران واتس‌اپ: ۰۰۴۴۷۳۴۲۰۳۲۱۱۳ تلگرام: BBCShoma@ مشتریان چهار بانک بزرگ در ایران از ۲۳ خرداد ۱۴۰۵ تا کنون درگیر اختلال در دریافت خدمات بانکی هستند. بانک مرکزی ایران پیشتر دلیل اختلال در بانک‌های ملی، صادرات، تجارت و توسعه صادرات را «حمله سایبری به زیرساخت ارتباطی» اعلام کرده بود. مدیرعامل شرکت خدمات انفورماتیک ایران می‌گوید اطلاعات مشتریان «کاملا موجود» و در حال انتقال به بانک‌هاست. تجربه و مشاهده شما از اختلال در خدمات بانکی چیست؟ این اختلال چه تاثیری بر زندگی و کسب‌وکار شما گذاشته است؟ با هشتگ #اختلال برای ما ویدیو یا فایل صوتی بفرستید به: واتس‌اپ: ۰۰۴۴۷۳۴۲۰۳۲۱۱۳ تلگرام: BBCShoma@ 27.4K 10:02 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            فراخوان تجربه و مشاهده از <span class="hashtag">#اختلال</span> در خدمات باکی در ایران واتس‌اپ: ۰۰۴۴۷۳۴۲۰۳۲۱۱۳ تلگرام: BBCShoma@ مشتریان چهار بانک بزرگ در ایران از ۲۳ خرداد ۱۴۰۵ تا کنون درگیر اختلال در دریافت خدمات بانکی هستند. بانک مرکزی ایران پیشتر دلیل اختلال در بانک‌های ملی، صادرات، تجارت و توسعه صادرات را «حمله سایبری به زیرساخت ارتباطی» اعلام کرده بود. مدیرعامل شرکت خدمات انفورماتیک ایران می‌گوید اطلاعات مشتریان «کاملا موجود» و در حال انتقال به بانک‌هاست. تجربه و مشاهده شما از اختلال در خدمات بانکی چیست؟ این اختلال چه تاثیری بر زندگی و کسب‌وکار شما گذاشته است؟ با هشتگ <span class="hashtag">#اختلال</span> برای ما ویدیو یا فایل صوتی بفرستید به: واتس‌اپ: ۰۰۴۴۷۳۴۲۰۳۲۱۱۳ تلگرام: BBCShoma@ 27.4K 10:02 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285489_5920369662149463582.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285489_5920369662149463582.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285489_5920369662149463583.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285489_5920369662149463583.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285489" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="یک منبع آگاه به رویترز گفته است که گفت‌وگوهای فنی غیرمستقیم میان ایران و آمریکا روز چهارشنبه در دوحه، با میانجی‌گری قطر و پاکستان، در حال برگزاری است. به گفته این منبع، استیو ویتکاف، فرستاده آمریکا، و جرد کوشنر، داماد دونالد ترامپ، دیروز با نخست‌وزیر قطر دیدار کردند تا زمینه را برای نشست‌های فنی روز چهارشنبه فراهم کنند، اما خود در این گفت‌وگوها حضور ندارند. Getty https://bbc.in/442nc7p @BBCPersian 32.2K 09:24 AM" style="animation-delay: 0.5s;">
+        <div class="post-header">
+            <span class="post-number">#11</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="یک منبع آگاه به رویترز گفته است که گفت‌وگوهای فنی غیرمستقیم میان ایران و آمریکا روز چهارشنبه در دوحه، با میانجی‌گری قطر و پاکستان، در حال برگزاری است. به گفته این منبع، استیو ویتکاف، فرستاده آمریکا، و جرد کوشنر، داماد دونالد ترامپ، دیروز با نخست‌وزیر قطر دیدار کردند تا زمینه را برای نشست‌های فنی روز چهارشنبه فراهم کنند، اما خود در این گفت‌وگوها حضور ندارند. Getty https://bbc.in/442nc7p @BBCPersian 32.2K 09:24 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            یک منبع آگاه به رویترز گفته است که گفت‌وگوهای فنی غیرمستقیم میان ایران و آمریکا روز چهارشنبه در دوحه، با میانجی‌گری قطر و پاکستان، در حال برگزاری است. به گفته این منبع، استیو ویتکاف، فرستاده آمریکا، و جرد کوشنر، داماد دونالد ترامپ، دیروز با نخست‌وزیر قطر دیدار کردند تا زمینه را برای نشست‌های فنی روز چهارشنبه فراهم کنند، اما خود در این گفت‌وگوها حضور ندارند. Getty https://bbc.in/442nc7p @BBCPersian 32.2K 09:24 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285488_5920369662149463549.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285488_5920369662149463549.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285488" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="سازمان هواپیمایی ایران از وضع محدودیت‌های گسترده پروازی همزمان با برگزاری مراسم تشییع علی خامنه‌ای، رهبر سابق جمهوری اسلامی خبر داده است. ابوذر شیرودی، رئیس این سازمان گفته است فرودگاه مهرآباد از صبح جمعه(دوازدهم تیر ماه) به‌طور کامل بسته می‌شود. پروازهای دیپلماتیک و سیاسی شامل این محدودیت نخواهند شد و فعالیت فرودگاه «امام خمینی»هم در این روز بدون محدودیت اعلام شده است. او همچنین گفته است روز دوشنبه هفته آینده هم به دلیل برگزاری مراسم تشییع، آسمان تهران به‌طور کامل از پروازها خالی خواهد شد. بگفته آقای شیرودی در روز دوشنبه «هیچ پروازی» از دو فرودگاه اصلی تهران انجام نخواهد شد. تشییع و تدفین علی خامنه‌ای قرار است از ۱۳ تا ۱۸ تیرماه در تهران و قم و مشهد برگزار شود. همچنین مراسمی هم در شهرهای «بغداد، کاظمین، کربلا و نجف» در عراق برگزار خواهد شد. Getty https://bbc.in/442nc7p @BBCPersian 35.9K edited 08:31 AM" style="animation-delay: 0.55s;">
+        <div class="post-header">
+            <span class="post-number">#12</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="سازمان هواپیمایی ایران از وضع محدودیت‌های گسترده پروازی همزمان با برگزاری مراسم تشییع علی خامنه‌ای، رهبر سابق جمهوری اسلامی خبر داده است. ابوذر شیرودی، رئیس این سازمان گفته است فرودگاه مهرآباد از صبح جمعه(دوازدهم تیر ماه) به‌طور کامل بسته می‌شود. پروازهای دیپلماتیک و سیاسی شامل این محدودیت نخواهند شد و فعالیت فرودگاه «امام خمینی»هم در این روز بدون محدودیت اعلام شده است. او همچنین گفته است روز دوشنبه هفته آینده هم به دلیل برگزاری مراسم تشییع، آسمان تهران به‌طور کامل از پروازها خالی خواهد شد. بگفته آقای شیرودی در روز دوشنبه «هیچ پروازی» از دو فرودگاه اصلی تهران انجام نخواهد شد. تشییع و تدفین علی خامنه‌ای قرار است از ۱۳ تا ۱۸ تیرماه در تهران و قم و مشهد برگزار شود. همچنین مراسمی هم در شهرهای «بغداد، کاظمین، کربلا و نجف» در عراق برگزار خواهد شد. Getty https://bbc.in/442nc7p @BBCPersian 35.9K edited 08:31 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            سازمان هواپیمایی ایران از وضع محدودیت‌های گسترده پروازی همزمان با برگزاری مراسم تشییع علی خامنه‌ای، رهبر سابق جمهوری اسلامی خبر داده است. ابوذر شیرودی، رئیس این سازمان گفته است فرودگاه مهرآباد از صبح جمعه(دوازدهم تیر ماه) به‌طور کامل بسته می‌شود. پروازهای دیپلماتیک و سیاسی شامل این محدودیت نخواهند شد و فعالیت فرودگاه «امام خمینی»هم در این روز بدون محدودیت اعلام شده است. او همچنین گفته است روز دوشنبه هفته آینده هم به دلیل برگزاری مراسم تشییع، آسمان تهران به‌طور کامل از پروازها خالی خواهد شد. بگفته آقای شیرودی در روز دوشنبه «هیچ پروازی» از دو فرودگاه اصلی تهران انجام نخواهد شد. تشییع و تدفین علی خامنه‌ای قرار است از ۱۳ تا ۱۸ تیرماه در تهران و قم و مشهد برگزار شود. همچنین مراسمی هم در شهرهای «بغداد، کاظمین، کربلا و نجف» در عراق برگزار خواهد شد. Getty https://bbc.in/442nc7p @BBCPersian 35.9K edited 08:31 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285487_5920451919363116749.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285487_5920451919363116749.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285487" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="یک مامور نیروی انتظامی در تیراندازی افراد ناشناس در سیستان و بلوچستان کشته شد خبرگزاری‌های ایران از کشته شدن یک مامور نیروی انتظامی در شهرستان سیب سوران در استان سیستان و بلوچستان خبر داده‌اند. نام این فرد «محمد پلنگی» اعلام شده که به گزارش رسانه‌های ایران «توسط افراد مسلح ناشناس» هدف تیراندازی با سلاح گرم قرار گرفته وکشته شده است. خبرگزاری فارس دیروز در گزارشی به افزایش درگیری‌ها در این استان اشاره کرده بود؛ از جمله کشته شدن یک مامور انتظامی در ۱۷ و ۱۸ خرداد. https://bbc.in/442nc7p @BBCPersian 35.6K 08:02 AM" style="animation-delay: 0.6000000000000001s;">
+        <div class="post-header">
+            <span class="post-number">#13</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="یک مامور نیروی انتظامی در تیراندازی افراد ناشناس در سیستان و بلوچستان کشته شد خبرگزاری‌های ایران از کشته شدن یک مامور نیروی انتظامی در شهرستان سیب سوران در استان سیستان و بلوچستان خبر داده‌اند. نام این فرد «محمد پلنگی» اعلام شده که به گزارش رسانه‌های ایران «توسط افراد مسلح ناشناس» هدف تیراندازی با سلاح گرم قرار گرفته وکشته شده است. خبرگزاری فارس دیروز در گزارشی به افزایش درگیری‌ها در این استان اشاره کرده بود؛ از جمله کشته شدن یک مامور انتظامی در ۱۷ و ۱۸ خرداد. https://bbc.in/442nc7p @BBCPersian 35.6K 08:02 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            یک مامور نیروی انتظامی در تیراندازی افراد ناشناس در سیستان و بلوچستان کشته شد خبرگزاری‌های ایران از کشته شدن یک مامور نیروی انتظامی در شهرستان سیب سوران در استان سیستان و بلوچستان خبر داده‌اند. نام این فرد «محمد پلنگی» اعلام شده که به گزارش رسانه‌های ایران «توسط افراد مسلح ناشناس» هدف تیراندازی با سلاح گرم قرار گرفته وکشته شده است. خبرگزاری فارس دیروز در گزارشی به افزایش درگیری‌ها در این استان اشاره کرده بود؛ از جمله کشته شدن یک مامور انتظامی در ۱۷ و ۱۸ خرداد. https://bbc.in/442nc7p @BBCPersian 35.6K 08:02 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285486_0.png" loading="lazy" alt="تصویر" onclick="openLightbox('media/285486_0.png')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285486" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="افشین سفاهن، رئیس مرکز حقوقی، لوایح و امور مجلس وزارت علوم گفته است در جریان جنگ اخیر آمریکا و اسرائیل با ایران ۴۴ مرکز علمی در این کشور آسیب دیده‌اند. او گفته است بر اساس یک گزارش نهایی که در اختیار دولت ایران هم قرار گرفته، «میزان خسارت‌های واردشده بیش از ۳۳ همت برآورد شده است.» در جریان جنگ اخیر، بعضی از مراکز آموزشی و علمی در ایران هدف حملات قرار گرفت از جمله بخش‌هایی از دانشگاه صنعتی شریف. همچنین تخریب بخش‌هایی از ساختمان اصلی انستیتو پاستورواکنش‌‌های بین‌المللی گسترده‌ای را هم به‌دنبال داشت. Getty https://bbc.in/442nc7p @BBCPersian 36.3K edited 07:39 AM" style="animation-delay: 0.65s;">
+        <div class="post-header">
+            <span class="post-number">#14</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="افشین سفاهن، رئیس مرکز حقوقی، لوایح و امور مجلس وزارت علوم گفته است در جریان جنگ اخیر آمریکا و اسرائیل با ایران ۴۴ مرکز علمی در این کشور آسیب دیده‌اند. او گفته است بر اساس یک گزارش نهایی که در اختیار دولت ایران هم قرار گرفته، «میزان خسارت‌های واردشده بیش از ۳۳ همت برآورد شده است.» در جریان جنگ اخیر، بعضی از مراکز آموزشی و علمی در ایران هدف حملات قرار گرفت از جمله بخش‌هایی از دانشگاه صنعتی شریف. همچنین تخریب بخش‌هایی از ساختمان اصلی انستیتو پاستورواکنش‌‌های بین‌المللی گسترده‌ای را هم به‌دنبال داشت. Getty https://bbc.in/442nc7p @BBCPersian 36.3K edited 07:39 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            افشین سفاهن، رئیس مرکز حقوقی، لوایح و امور مجلس وزارت علوم گفته است در جریان جنگ اخیر آمریکا و اسرائیل با ایران ۴۴ مرکز علمی در این کشور آسیب دیده‌اند. او گفته است بر اساس یک گزارش نهایی که در اختیار دولت ایران هم قرار گرفته، «میزان خسارت‌های واردشده بیش از ۳۳ همت برآورد شده است.» در جریان جنگ اخیر، بعضی از مراکز آموزشی و علمی در ایران هدف حملات قرار گرفت از جمله بخش‌هایی از دانشگاه صنعتی شریف. همچنین تخریب بخش‌هایی از ساختمان اصلی انستیتو پاستورواکنش‌‌های بین‌المللی گسترده‌ای را هم به‌دنبال داشت. Getty https://bbc.in/442nc7p @BBCPersian 36.3K edited 07:39 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285485_5920451919363116728.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285485_5920451919363116728.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285485" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+    
+    <div class="post" data-text="بخش چینی بی‌بی‌سی: با نزدیک شدن تابستان، ککسین هنگام مرتب کردن لباس‌هایش متوجه تغییری شد: تعداد لباس‌های «مردانه» او اکنون از لباس‌های زنانه‌اش بیشتر شده بود. پیراهن‌ها، تی‌شرت‌ها و شلوارک‌ها برای دوست‌پسر یا پدرش خریده نشده بودند، بلکه برای خودش بودند. ککسین تنها نیست. شمار فزاینده‌ای از زنان جوان چینی، چه در حلقه دوستان او و چه در فضای آنلاین، می‌گویند به دلایلی مشابه از جمله کیفیت بهتر، قیمت پایین‌تر، راحتی بیشتر و شرمسارسازی کمتر درباره بدن، به پوشیدن لباس‌های مردانه روی آورده‌اند. BBC/ AFP via Getty Images/ VCG via Getty Images/wangwangsuibingbing/ Likeke/ LightRocket via Getty Images/ China News Service via Getty Images https://bbc.in/4eUzXG2 @BBCPersian 31.5K 07:09 AM" style="animation-delay: 0.7000000000000001s;">
+        <div class="post-header">
+            <span class="post-number">#15</span>
+            <span class="post-date">
+                <i class="far fa-calendar-alt"></i>
+                
+            </span>
+        </div>
+
+        <div class="post-body">
+            <button class="copy-btn" onclick="copyText(this)" data-fulltext="بخش چینی بی‌بی‌سی: با نزدیک شدن تابستان، ککسین هنگام مرتب کردن لباس‌هایش متوجه تغییری شد: تعداد لباس‌های «مردانه» او اکنون از لباس‌های زنانه‌اش بیشتر شده بود. پیراهن‌ها، تی‌شرت‌ها و شلوارک‌ها برای دوست‌پسر یا پدرش خریده نشده بودند، بلکه برای خودش بودند. ککسین تنها نیست. شمار فزاینده‌ای از زنان جوان چینی، چه در حلقه دوستان او و چه در فضای آنلاین، می‌گویند به دلایلی مشابه از جمله کیفیت بهتر، قیمت پایین‌تر، راحتی بیشتر و شرمسارسازی کمتر درباره بدن، به پوشیدن لباس‌های مردانه روی آورده‌اند. BBC/ AFP via Getty Images/ VCG via Getty Images/wangwangsuibingbing/ Likeke/ LightRocket via Getty Images/ China News Service via Getty Images https://bbc.in/4eUzXG2 @BBCPersian 31.5K 07:09 AM">
+                <i class="fas fa-copy"></i> کپی
+            </button>
+            بخش چینی بی‌بی‌سی: با نزدیک شدن تابستان، ککسین هنگام مرتب کردن لباس‌هایش متوجه تغییری شد: تعداد لباس‌های «مردانه» او اکنون از لباس‌های زنانه‌اش بیشتر شده بود. پیراهن‌ها، تی‌شرت‌ها و شلوارک‌ها برای دوست‌پسر یا پدرش خریده نشده بودند، بلکه برای خودش بودند. ککسین تنها نیست. شمار فزاینده‌ای از زنان جوان چینی، چه در حلقه دوستان او و چه در فضای آنلاین، می‌گویند به دلایلی مشابه از جمله کیفیت بهتر، قیمت پایین‌تر، راحتی بیشتر و شرمسارسازی کمتر درباره بدن، به پوشیدن لباس‌های مردانه روی آورده‌اند. BBC/ AFP via Getty Images/ VCG via Getty Images/wangwangsuibingbing/ Likeke/ LightRocket via Getty Images/ China News Service via Getty Images https://bbc.in/4eUzXG2 @BBCPersian 31.5K 07:09 AM
+        </div>
+
+        <div class="media-container">
+            
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116710.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116710.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116708.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116708.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116709.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116709.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116711.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116711.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116712.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116712.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116706.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116706.jpg')">
+                        
+                    </div>
+                
+                    
+                    <div class="media-item">
+                        
+                            <img src="media/285478_5920451919363116707.jpg" loading="lazy" alt="تصویر" onclick="openLightbox('media/285478_5920451919363116707.jpg')">
+                        
+                    </div>
+                
+            
+        </div>
+
+        
+        <a href="https://t.me/bbcpersian/285478" target="_blank" rel="noopener" class="post-url">
+            <i class="fas fa-external-link-alt"></i>
+            مشاهده در تلگرام
+        </a>
+        
+
+        
+    </div>
+    
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <img id="lightbox-img" src="" alt="پیش‌نمایش">
+</div>
+
+<button id="backToTop" class="back-to-top" onclick="scrollToTop()" title="بازگشت به بالا">
+    <i class="fas fa-chevron-up"></i>
+</button>
+
+<div class="footer">
+    تولید شده توسط <strong>Telegram Channel Scraper</strong> &copy; 2026/07/01 - 16:44
+</div>
+
+<script>
+    function openLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+    function toggleTheme() {
+        const body = document.body;
+        const icon = document.getElementById('theme-icon');
+        body.classList.toggle('dark');
+        const isDark = body.classList.contains('dark');
+        icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+    (function () {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (saved === 'dark' || (!saved && prefersDark)) {
+            document.body.classList.add('dark');
+            document.getElementById('theme-icon').className = 'fas fa-sun';
+        }
+    })();
+
+    const backBtn = document.getElementById('backToTop');
+    window.addEventListener('scroll', () => {
+        backBtn.classList.toggle('visible', window.scrollY > 400);
+        const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const scrolled = (winScroll / height) * 100;
+        document.getElementById('progress-bar').style.width = scrolled + '%';
+    });
+    function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+    function copyText(btn) {
+        const text = btn.getAttribute('data-fulltext');
+        navigator.clipboard.writeText(text).then(() => {
+            btn.innerHTML = '<i class="fas fa-check"></i> کپی شد';
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> کپی'; }, 2000);
+        }).catch(() => alert('خطا در کپی متن'));
+    }
+
+    function filterPosts() {
+        const query = document.getElementById('searchInput').value.trim().toLowerCase();
+        const posts = document.querySelectorAll('.post');
+        
+        posts.forEach(post => {
+            const text = post.getAttribute('data-text').toLowerCase();
+            const shouldShow = !query || text.includes(query);
+            post.style.display = shouldShow ? '' : 'none';
+            
+            if (shouldShow && query) {
+                const bodyDiv = post.querySelector('.post-body');
+                if (bodyDiv) {
+                    let html = bodyDiv.innerHTML;
+                    // حذف کامل تگ‌های highlight قبلی
+                    html = html.replace(/<span class="highlight">|<\/span>/g, '');
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    bodyDiv.innerHTML = html.replace(regex, '<span class="highlight">$1</span>');
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
