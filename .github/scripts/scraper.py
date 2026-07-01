@@ -195,7 +195,7 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.debug(f"خطا در رسم صلیب: {e}")
 
-    # ═══════════════════ استخراج پست‌ها با Resume و استخراج هوشمند متن ═══════════════════
+    # ═══════════════════ استخراج پست‌ها با Resume و استخراج هوشمند متن (نسخه نهایی مقاوم) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         from playwright.async_api import async_playwright
 
@@ -329,10 +329,10 @@ class TelegramChannelScraper:
                         if not start_collecting:
                             continue
 
-                        # ═══════════════ استخراج هوشمند متن پست (نسخه نهایی بهینه‌شده) ═══════════════
+                        # ═══════════════ استخراج هوشمند متن پست (نسخه نهایی مقاوم) ═══════════════
                         text = ""
                         try:
-                            # روش ۱: selectorهای خاص (اولویت)
+                            # روش ۱: selectorهای خاص برای محتوای اصلی
                             content_selectors = [
                                 'div.message-content',
                                 'div.text-content',
@@ -344,29 +344,55 @@ class TelegramChannelScraper:
                                 content = msg.locator(sel).first
                                 if await content.count() > 0:
                                     text = (await content.inner_text()).strip()[:1000]
-                                    if text and len(text) > 3:  # حداقل طول منطقی
+                                    if text and len(text) > 3:
                                         break
 
-                            # روش ۲: fallback به inner_text کل پیام
+                            # روش ۲: استفاده از inner_text کل پیام (با try/except جداگانه)
                             if not text or len(text) < 5:
-                                text = (await msg.inner_text()).strip()[:1000]
+                                try:
+                                    text = (await msg.inner_text()).strip()[:1000]
+                                except Exception as e:
+                                    self.logger.debug(f"   inner_text fallback failed for {msg_id}: {e}")
 
                             # روش ۳: JavaScript textContent (قوی‌ترین fallback)
                             if not text or len(text) < 5:
-                                text = (await msg.evaluate("el => el.textContent || ''")).strip()[:1000]
+                                try:
+                                    text = (await msg.evaluate("el => el.textContent || ''")).strip()[:1000]
+                                except Exception as e:
+                                    self.logger.debug(f"   textContent fallback failed for {msg_id}: {e}")
 
-                            # تمیز کردن نهایی متن (فاصله‌های اضافی)
-                            text = re.sub(r'\s+', ' ', text).strip()[:1000]
+                            # روش ۴: (اضطراری) استفاده از page.evaluate روی خود المنت با innerText
+                            if not text or len(text) < 5:
+                                try:
+                                    text = (await page.evaluate(f"""
+                                        () => {{
+                                            const el = document.querySelector('[data-message-id="{msg_id}"]');
+                                            return el ? el.innerText || el.textContent || '' : '';
+                                        }}
+                                    """)).strip()[:1000]
+                                except Exception as e:
+                                    self.logger.debug(f"   emergency evaluate failed for {msg_id}: {e}")
+
+                            # تمیز کردن نهایی (حذف فاصله‌های اضافی)
+                            if text:
+                                text = re.sub(r'\s+', ' ', text).strip()[:1000]
+
+                            # اگر باز هم خالی بود، لاگ هشدار
+                            if not text or len(text) < 2:
+                                self.logger.debug(f"⚠️ متن پست {msg_id} خالی یا بسیار کوتاه است.")
 
                         except Exception as e:
-                            self.logger.debug(f"خطا در استخراج متن پست {msg_id}: {e}")
+                            self.logger.warning(f"❌ خطا در استخراج متن پست {msg_id}: {e}")
                             text = ""
 
                         # استخراج تاریخ
                         date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
                         date = ""
-                        if await date_el.count() > 0:
-                            date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
+                        try:
+                            if await date_el.count() > 0:
+                                date = await date_el.inner_text() or await date_el.get_attribute('datetime') or ""
+                        except Exception:
+                            pass
 
                         items.append({
                             'id': msg_id,
