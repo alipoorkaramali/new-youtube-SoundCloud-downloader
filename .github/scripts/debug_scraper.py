@@ -7,7 +7,7 @@
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های بیشتری برای تحلیل مراحل ذخیره می‌کند.
 – خروجی JSON را برای بررسی داده‌های استخراج‌شده ذخیره می‌کند.
-– بهبود یافته با صبر هوشمند و حلقه اسکرول مقاوم.
+– بهبود یافته با صبر هوشمند و حلقه اسکرول مقاوم (استخراج مستقیم با JavaScript).
 """
 
 import asyncio
@@ -71,7 +71,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         selector = "div.message, .bubbles-group, [data-msg-id], .history > div"
 
         try:
-            # استفاده از asyncio.wait_for برای سازگاری با نسخه‌های قدیمی‌تر پایتون
             await asyncio.wait_for(
                 self._wait_until_count_increases(page, selector, previous_count),
                 timeout=timeout / 1000
@@ -90,21 +89,20 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             current_count = await page.locator(selector).count()
             if current_count > previous_count:
                 self.logger.info(f"✅ {current_count - previous_count} پست جدید لود شد (مجموع: {current_count})")
-                await page.wait_for_timeout(800)  # صبر کوتاه برای رندر نهایی
+                await page.wait_for_timeout(800)
                 return
             await page.wait_for_timeout(600)
 
-    # ═══════════════════ بازنویسی متد استخراج با حلقه اسکرول هوشمند ═══════════════════
+    # ═══════════════════ بازنویسی متد استخراج با حلقه اسکرول هوشمند (استخراج مستقیم با JS) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         """
-        استراتژی: اول والد را اجرا کن، اگر کافی نبود، اسکرول هوشمند اضافه کن.
+        استراتژی: ابتدا والد را اجرا کن، اگر کافی نبود، اسکرول هوشمند با استخراج مستقیم JS اضافه کن.
         """
         self.logger.info("🐞 شروع استخراج پست‌ها با حلقه اسکرول هوشمند...")
 
         items = []
         context = None
         page = None
-        seen_ids = set()
 
         try:
             # ۱. اجرای متد والد (setup + استخراج اولیه)
@@ -125,24 +123,34 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             seen_ids = {item.get('id') for item in items if item.get('id')}
             await self._save_debug_screenshot(page, "initial_load")
 
-            # ۲. حلقه اسکرول اضافی
+            # ۲. حلقه اسکرول اضافی با استخراج مستقیم JavaScript
             no_new_attempts = 0
-            max_no_new_attempts = 4
+            max_no_new_attempts = 5
 
             while len(items) < self.limit:
-                # استخراج مجدد
-                try:
-                    current_items = await self._extract_items(page)
-                except (AttributeError, Exception) as e:
-                    self.logger.warning(f"⚠️ _extract_items در دسترس نبود: {e}")
-                    current_items = []
+                # استخراج مستقیم با JavaScript (چون _extract_items وجود ندارد)
+                current_items = await page.evaluate("""
+                    () => {
+                        const posts = [];
+                        document.querySelectorAll('div.message, .bubbles-group > div, [data-msg-id]').forEach(el => {
+                            const msgId = el.getAttribute('data-msg-id') || el.id;
+                            if (msgId) {
+                                posts.push({
+                                    id: msgId,
+                                    text: el.innerText ? el.innerText.substring(0, 100) : ''
+                                });
+                            }
+                        });
+                        return posts;
+                    }
+                """)
 
-                # اضافه کردن جدیدها
                 added = 0
                 for item in current_items:
                     item_id = item.get('id')
                     if item_id and item_id not in seen_ids:
                         seen_ids.add(item_id)
+                        # داده‌های کامل‌تر را می‌توان از والد گرفت، اما فعلاً id کافی است
                         items.append(item)
                         added += 1
 
@@ -151,12 +159,12 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 if len(items) >= self.limit:
                     break
 
-                # اسکرول
-                await page.evaluate("window.scrollBy(0, window.innerHeight * 1.8)")
-                await page.wait_for_timeout(800)
+                # اسکرول قوی‌تر
+                await page.evaluate("window.scrollBy(0, window.innerHeight * 2.5)")
+                await page.wait_for_timeout(1200)
 
-                # صبر هوشمند
-                if await self._wait_for_new_posts(page, len(items), timeout=14000):
+                # صبر هوشمند با timeout بیشتر
+                if await self._wait_for_new_posts(page, len(items), timeout=18000):
                     no_new_attempts = 0
                     await self._save_debug_screenshot(page, f"after_load_{len(items)}")
                 else:
@@ -164,9 +172,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     if no_new_attempts >= max_no_new_attempts:
                         self.logger.info("🚫 به انتهای کانال رسیدیم (یا لود متوقف شد).")
                         break
-                    await page.wait_for_timeout(3000)
+                    await page.wait_for_timeout(4000)
 
             await self._save_debug_screenshot(page, "final_debug")
+            self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
             return items, context, page
 
         except Exception as e:
@@ -176,7 +185,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             return items, context, page
 
         finally:
-            # context را در اینجا نمی‌بندیم، چون در _run_impl مدیریت می‌شود
+            # context در _run_impl مدیریت می‌شود، در اینجا نمی‌بندیم
             pass
 
     async def run(self):
