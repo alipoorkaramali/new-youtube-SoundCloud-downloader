@@ -15,7 +15,7 @@ import random
 from pathlib import Path
 from typing import List, Dict
 
-sys.path.insert(0, str(Path(file).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config_loader import load_config
 from scraper import TelegramChannelScraper
@@ -34,9 +34,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     هماهنگ با scraper.py – از متد _smart_scroll با پله‌های افزایشی استفاده می‌کند.
     """
 
-    def init(self, config, debug_screenshots: bool = True):
+    def __init__(self, config, debug_screenshots: bool = True):
         config.debug_mode = True
-        super().init(config)
+        super().__init__(config)
         self.debug_screenshots = debug_screenshots
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,7 +94,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await page.evaluate(f"window.scrollBy(0, {amount})")
             await human_sleep(1.2, 0.3)
 
-new_height = await page.evaluate("document.documentElement.scrollHeight")
+            new_height = await page.evaluate("document.documentElement.scrollHeight")
             if new_height != old_height:
                 self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
                 return True
@@ -172,8 +172,7 @@ new_height = await page.evaluate("document.documentElement.scrollHeight")
                 scroll_button_selectors = [
                     'button[title="Go to bottom"]',
                     'div[class*="scroll-to-bottom"]',
-
-'div[class*="ScrollButton"]',
+                    'div[class*="ScrollButton"]',
                     '[aria-label="Scroll to bottom"]',
                     'button:has(svg[class*="arrow-down"])',
                 ]
@@ -202,9 +201,9 @@ new_height = await page.evaluate("document.documentElement.scrollHeight")
                 self.logger.info("   ✅ به بالای صفحه رفتیم.")
 
         # ─── تنظیم ترتیب پیمایش پست‌ها بر اساس جهت ──────────────────────
-        # این بخش توسط خود scraper.py مدیریت می‌شود، اما در اینجا نیز برای اطمینان،
-        # ما از متد super()._fetch_posts_from_telegram() استفاده کرده‌ایم که خودش
-        # از scroller استفاده می‌کند. بنابراین نیازی به تغییر نیست.
+        # این بخش توسط خود `scraper.py` مدیریت می‌شود، اما در اینجا نیز برای اطمینان،
+        # ما از متد `super()._fetch_posts_from_telegram()` استفاده کرده‌ایم که خودش
+        # از `scroller` استفاده می‌کند. بنابراین نیازی به تغییر نیست.
 
         # ۲. اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر
         seen_ids = {item.get('id') for item in items if item.get('id')}
@@ -257,8 +256,7 @@ new_height = await page.evaluate("document.documentElement.scrollHeight")
         await super().run()
 
         try:
-
-debug_json_path = self.base_dir / "debug_summary.json"
+            debug_json_path = self.base_dir / "debug_summary.json"
             summary = {
                 "channel": self.channel,
                 "limit": self.limit,
@@ -347,5 +345,5 @@ async def main():
         sys.exit(1)
 
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
