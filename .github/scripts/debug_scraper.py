@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه نهایی اصلاح‌شده
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه نهایی با رفرش صفحه و ادامه از آخرین پست
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – از همان تنظیمات config.yaml استفاده می‌کند (پشتیبانی از start_link).
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های بیشتری برای تحلیل مراحل ذخیره می‌کند.
 – خروجی JSON را برای بررسی داده‌های استخراج‌شده ذخیره می‌کند.
-– **نسخه نهایی با قابلیت Resume با لینک مستقیم به آخرین پست + استخراج کامل داده‌ها**
+– **نسخه نهایی با قابلیت رفرش صفحه و ادامه از آخرین پست (بدون نیاز به _setup_browser)**
 """
 
 import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -25,8 +25,7 @@ from output_generator import OutputGenerator
 
 class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
-    نسخهٔ دیباگ اسکرپر – تمام مراحل اسکرپینگ را انجام می‌دهد اما رسانه‌ها را دانلود نمی‌کند.
-    همچنین اسکرین‌شات‌های بیشتری برای تحلیل مراحل ذخیره می‌کند.
+    نسخهٔ دیباگ اسکرپر – با قابلیت رفرش صفحه و ادامه از آخرین پست.
     """
 
     def __init__(self, config, debug_screenshots: bool = True):
@@ -59,7 +58,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
     # ═══════════════════ صبر هوشمند برای لود پست‌های جدید ═══════════════════
-    async def _wait_for_new_posts(self, page, previous_count: int, timeout: int = 28000) -> bool:
+    async def _wait_for_new_posts(self, page, previous_count: int, timeout: int = 30000) -> bool:
         """صبر هوشمند تا پست‌های جدید لود شوند."""
         self.logger.info(f"🐞 صبر برای لود پست‌های جدید... (قبلاً {previous_count} پست)")
         selector = "div.message, .bubbles-group, [data-msg-id], .history > div"
@@ -79,12 +78,12 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
     async def _wait_until_count_increases(self, page, selector, previous_count):
         """حلقه‌ای که تا افزایش تعداد پست‌ها صبر می‌کند."""
-        max_checks = 40
+        max_checks = 45
         for i in range(max_checks):
             current_count = await page.locator(selector).count()
             if current_count > previous_count:
                 self.logger.info(f"✅ {current_count - previous_count} پست جدید لود شد (مجموع: {current_count})")
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(1200)
                 return
             await page.wait_for_timeout(700)
         self.logger.warning("⏳ حداکثر چک‌ها انجام شد بدون لود جدید")
@@ -92,10 +91,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
     # ═══════════════════ استخراج کامل پست‌ها با JavaScript ═══════════════════
     async def _extract_posts_from_page(self, page) -> List[Dict]:
-        """
-        استخراج کامل پست‌ها از صفحه با استفاده از JavaScript.
-        برمی‌گرداند: لیستی از دیکشنری‌های شامل id, text, date, sender و ...
-        """
+        """استخراج کامل پست‌ها از صفحه با استفاده از JavaScript."""
         return await page.evaluate("""
             () => {
                 const posts = [];
@@ -104,15 +100,12 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     const msgId = el.getAttribute('data-msg-id') || el.id;
                     if (!msgId) return;
                     
-                    // پیدا کردن متن پیام
                     const textEl = el.querySelector('.text, .message-text, [data-text]');
                     const text = textEl ? textEl.innerText.trim() : '';
                     
-                    // پیدا کردن تاریخ/زمان
                     const dateEl = el.querySelector('.date, .time, [data-date]');
                     const date = dateEl ? dateEl.innerText.trim() : '';
                     
-                    // پیدا کردن فرستنده (برای گروه‌ها)
                     const senderEl = el.querySelector('.sender-name, [data-sender]');
                     const sender = senderEl ? senderEl.innerText.trim() : '';
                     
@@ -121,30 +114,26 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                         text: text,
                         date: date,
                         sender: sender,
-                        raw_html: el.outerHTML.substring(0, 500)  // برای دیباگ
+                        raw_html: el.outerHTML.substring(0, 500)
                     });
                 });
                 return posts;
             }
         """)
 
-    # ═══════════════════ یک دور استخراج (Single Scrape Attempt) ═══════════════════
+    # ═══════════════════ یک دور استخراج با تلاش‌های بیشتر ═══════════════════
     async def _single_scrape_attempt(
         self,
         page,
         seen_ids: set,
-        max_attempts: int = 6
+        max_attempts: int = 10
     ) -> Tuple[List[Dict], int]:
-        """
-        یک دور کامل استخراج با اسکرول هوشمند.
-        برمی‌گرداند: (لیست آیتم‌های جدید, تعداد آیتم‌های جدید)
-        """
-        self.logger.info("🔄 شروع یک دور استخراج...")
+        """یک دور کامل استخراج با اسکرول هوشمند و تلاش‌های بیشتر."""
+        self.logger.info(f"🔄 شروع یک دور استخراج (با {max_attempts} تلاش)...")
         new_items = []
         no_new_attempts = 0
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            # استخراج پست‌های فعلی
             current_items = await self._extract_posts_from_page(page)
             added_this_round = 0
 
@@ -165,129 +154,90 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             if len(seen_ids) >= self.limit or no_new_attempts >= max_attempts:
                 break
 
-            # اسکرول و صبر
+            # اسکرول با فواصل بیشتر
             await page.evaluate("window.scrollBy(0, window.innerHeight * 2.5)")
-            await page.wait_for_timeout(1800)
-            await self._wait_for_new_posts(page, len(seen_ids), timeout=28000)
+            await page.wait_for_timeout(2000)
+            await self._wait_for_new_posts(page, len(seen_ids), timeout=30000)
 
         self.logger.info(f"🏁 پایان دور: {len(new_items)} پست جدید")
         return new_items, len(new_items)
 
-    # ═══════════════════ ساخت لینک مستقیم به یک پیام (نسخه قوی‌تر) ═══════════════════
-    def _build_direct_link(self, channel: str, msg_id: str) -> str:
-        """
-        ساخت لینک مستقیم به یک پیام در تلگرام وب.
-        - اگر msg_id عددی باشد، لینک با شناسه پیام ساخته می‌شود.
-        - در غیر این صورت، فقط به کانال هدایت می‌شود.
-        """
-        if not msg_id or not msg_id.isdigit():
-            # اگر msg_id معتبر نبود، فقط به کانال برو
-            clean_channel = channel.lstrip('@')
-            return f"https://web.telegram.org/k/#@{clean_channel}"
-
-        clean_channel = channel.lstrip('@')
-        return f"https://web.telegram.org/k/#@{clean_channel}/{msg_id}"
-
-    # ═══════════════════ بازنویسی متد استخراج با حلقه Resume ═══════════════════
+    # ═══════════════════ متد استخراج با رفرش صفحه و ادامه از آخرین پست ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         """
-        استراتژی: والد + حلقه Resume با لینک مستقیم به آخرین پست.
+        استراتژی: والد + یک دور اسکرول، سپس در صورت نیاز رفرش صفحه و ادامه از آخرین پست.
         """
-        self.logger.info("🐞 شروع استخراج با حلقه Resume...")
+        self.logger.info("🐞 شروع استخراج با رفرش صفحه و ادامه از آخرین پست...")
 
-        all_items = []
-        seen_ids = set()
-        last_known_id = None
-        max_retries = 2          # برای تست اولیه
-        retry_count = 0
-        context = None
-        page = None
+        # ۱. اجرای والد
+        parent_result = await super()._fetch_posts_from_telegram()
+        if not parent_result:
+            self.logger.error("❌ والد هیچ پستی برنگرداند.")
+            return [], None, None
 
-        try:
-            # ۱. اجرای والد
-            parent_result = await super()._fetch_posts_from_telegram()
-            if parent_result:
-                items, context, page = parent_result
-                self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
+        items, context, page = parent_result
+        self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
 
-                for item in items:
-                    item_id = item.get('id')
-                    if item_id:
-                        seen_ids.add(item_id)
-                        all_items.append(item)
-                        last_known_id = item_id
+        if not page:
+            self.logger.error("❌ صفحه دریافت نشد.")
+            return items, context, page
 
-            if not page:
-                self.logger.error("❌ صفحه دریافت نشد.")
-                return [], None, None
+        if len(items) >= self.limit:
+            self.logger.info(f"✅ تعداد کافی پست از قبل وجود دارد.")
+            return items, context, page
 
-            if len(all_items) >= self.limit:
-                await self._save_debug_screenshot(page, "final_from_parent")
-                return all_items, context, page
+        seen_ids = {item.get('id') for item in items if item.get('id')}
+        last_known_id = items[-1].get('id') if items else None
 
-            await self._save_debug_screenshot(page, "initial_load")
+        await self._save_debug_screenshot(page, "initial_load")
 
-            # ۲. حلقه Resume
-            while len(all_items) < self.limit and retry_count < max_retries:
-                self.logger.info(f"🔄 دور {retry_count+1} (مجموع: {len(all_items)} پست)")
+        # ۲. دور اول اسکرول
+        new_items, added = await self._single_scrape_attempt(page, seen_ids, max_attempts=10)
+        if new_items:
+            items.extend(new_items)
+            last_known_id = new_items[-1].get('id') or last_known_id
 
-                new_items, added = await self._single_scrape_attempt(page, seen_ids)
-
-                if new_items:
-                    all_items.extend(new_items)
-                    if new_items:
-                        last_known_id = new_items[-1].get('id') or last_known_id
-
-                if len(all_items) >= self.limit:
-                    break
-
-                retry_count += 1
-                if retry_count >= max_retries:
-                    break
-
-                # ====== ریستارت و استفاده از لینک مستقیم ======
-                self.logger.info("🔄 ریستارت صفحه و رفتن به آخرین پست...")
-
-                # بستن context قبلی
-                if context:
-                    await context.close()
-                    await asyncio.sleep(2)  # کمی صبر برای آزاد شدن منابع
-                    context = None
-                    page = None
-
-                # ایجاد مرورگر جدید با متد والد
-                browser, new_context, new_page = await self._setup_browser()
-                if not new_page:
-                    self.logger.error("❌ ایجاد صفحه جدید ناموفق.")
-                    break
-                context = new_context
-                page = new_page
-
-                # رفتن به لینک مستقیم آخرین پست
-                if last_known_id:
-                    direct_link = self._build_direct_link(self.channel, last_known_id)
-                    self.logger.info(f"🔗 لینک مستقیم: {direct_link}")
-                    try:
-                        await page.goto(direct_link, wait_until="domcontentloaded")
-                        await page.wait_for_timeout(4000)  # صبر برای بارگذاری کامل
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ خطا در رفتن به لینک مستقیم: {e}")
-                        # Fallback: به کانال برو
-                        await self._navigate(page)
-                else:
-                    await self._navigate(page)
-
-                await self._save_debug_screenshot(page, f"resume_{retry_count}")
-
+        if len(items) >= self.limit:
             await self._save_debug_screenshot(page, "final_debug")
-            self.logger.info(f"🐞 استخراج نهایی: {len(all_items)} پست")
-            return all_items, context, page
+            return items, context, page
+
+        # ۳. رفرش صفحه و ادامه از آخرین پست
+        self.logger.info("🔄 رفرش صفحه و ادامه از آخرین پست...")
+        try:
+            # رفرش صفحه با صبر بیشتر
+            await page.reload(wait_until="domcontentloaded")
+            await page.wait_for_timeout(5000)  # ۵ ثانیه صبر برای بارگذاری کامل
+
+            # اسکرول به آخرین پست شناخته‌شده
+            if last_known_id:
+                self.logger.info(f"🔍 اسکرول به پست با شناسه {last_known_id}")
+                await page.evaluate(f"""
+                    () => {{
+                        const post = document.querySelector('[data-msg-id="{last_known_id}"]');
+                        if (post) {{
+                            post.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                        }}
+                    }}
+                """)
+                await page.wait_for_timeout(3000)
+                self.logger.info("✅ اسکرول به آخرین پست انجام شد")
+                await self._save_debug_screenshot(page, "after_scroll_to_last")
+            else:
+                self.logger.warning("⚠️ هیچ شناسه‌ای برای اسکرول وجود ندارد.")
+
+            # ۴. دور دوم اسکرول بعد از رفرش (با ۱۰ تلاش)
+            self.logger.info("🔄 شروع دور دوم استخراج بعد از رفرش...")
+            new_items_2, added_2 = await self._single_scrape_attempt(page, seen_ids, max_attempts=10)
+            if new_items_2:
+                items.extend(new_items_2)
+                self.logger.info(f"📈 در دور دوم {added_2} پست جدید اضافه شد (مجموع: {len(items)})")
 
         except Exception as e:
-            self.logger.error(f"❌ خطا: {e}", exc_info=True)
-            if page:
-                await self._save_debug_screenshot(page, "error_debug")
-            return all_items, context, page
+            self.logger.error(f"❌ خطا در رفرش صفحه: {e}", exc_info=True)
+
+        await self._save_debug_screenshot(page, "final_debug")
+        self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
+        return items, context, page
 
     async def run(self):
         """اجرای اصلی با ذخیرهٔ خروجی JSON اضافی برای دیباگ."""
@@ -347,7 +297,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (Resume)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (رفرش + ادامه)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
