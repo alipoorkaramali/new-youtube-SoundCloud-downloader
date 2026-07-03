@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه کامل با پشتیبانی از:
-- اسکرول جهت‌دار (بالا/پایین) برای دریافت پست‌های قدیمی‌تر یا جدیدتر
-- رعایت کامل لیمیت (تا رسیدن به تعداد درخواستی یا پایان محتوا)
-- انتظار برای بارگذاری کامل (نشانگر "updating..." یا "به‌روزرسانی...")
-- ذخیره اسکرین‌شات‌های کامل و دیباگ
-- غیرفعال کردن دانلود رسانه (حالت دیباگ)
-- مدیریت خطاها و تطابق کامل با کلاس والد (TelegramChannelScraper)
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه هماهنگ با scraper.py
+– کاربر می‌تواند تعیین کند که از پست خاص به بالا (قدیمی‌تر) برود یا پایین (جدیدتر).
+– تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
+– رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
+– اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
 """
 
 import asyncio
@@ -15,144 +13,65 @@ import json
 import sys
 import random
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 
-# اضافه کردن مسیر پروژه برای دسترسی به ماژول‌های دیگر
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(file).parent.parent))
 
 from config_loader import load_config
 from scraper import TelegramChannelScraper
 from output_generator import OutputGenerator
 
 
-# ═══════════════════ توابع کمکی ═══════════════════
+# ═══════════════════ Human-like sleep ═══════════════════
 async def human_sleep(base: float, jitter: float = 0.4):
-    """خواب انسانی با جیتر تصادفی."""
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
 
-# ═══════════════════ کلاس دیباگ اسکرپر ═══════════════════
 class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
-    نسخه‌ی دیباگ اسکرپر با قابلیت:
-    - اسکرول جهت‌دار (up/down)
-    - انتظار برای بارگذاری کامل (updating...)
-    - ذخیره اسکرین‌شات‌های کامل و دیباگ
-    - غیرفعال کردن دانلود رسانه
+    نسخه‌ی دیباگ اسکرپر با قابلیت انتخاب جهت اسکرول.
+    هماهنگ با scraper.py – از متد _smart_scroll با پله‌های افزایشی استفاده می‌کند.
     """
 
-    def __init__(self, config, debug_screenshots: bool = True):
-        # فعال کردن حالت دیباگ در والد
+    def init(self, config, debug_screenshots: bool = True):
         config.debug_mode = True
-        super().__init__(config)
-
-        # ─── تنظیمات دیباگ ──────────────────────────────
+        super().init(config)
         self.debug_screenshots = debug_screenshots
-
-        # اطمینان از وجود base_dir (اگر والد آن را نداشته باشد)
-        if not hasattr(self, 'base_dir'):
-            self.base_dir = Path(config.output_dir) if hasattr(config, 'output_dir') else Path.cwd() / "output"
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-
-        # پوشه اسکرین‌شات‌های دیباگ
-        self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-        # پوشه اسکرین‌شات‌های معمولی (اگر والد نداشته باشد)
-        if not hasattr(self, 'screenshots_dir'):
-            self.screenshots_dir = self.base_dir / "screenshots"
-            self.screenshots_dir.mkdir(parents=True, exist_ok=True)
-
-        # ─── جهت اسکرول ──────────────────────────────────
+        # پارامتر جدید: جهت اسکرول (up/down)
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
         if self.scroll_direction not in ['up', 'down']:
-            self.logger.warning(
-                f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'."
-            )
+            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
             self.scroll_direction = 'up'
 
-        # ─── لاگ اولیه ────────────────────────────────────
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
-        self.logger.info(
-            f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}"
-        )
-
-        # متغیر برای نگهداری آخرین پست‌ها (جهت خلاصه)
+        self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
         self._last_items = []
 
-    # ═══════════════ غیرفعال کردن دانلود رسانه ═══════════════
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
         """در حالت دیباگ، دانلود رسانه غیرفعال است."""
         self.logger.info("🐞 حالت دیباگ: دانلود رسانه غیرفعال است.")
         media_map = {}
         for item in items:
-            msg_id = item.get('id')
-            if msg_id:
-                self.logger.info(f"   🖼️ [دیباگ] پست {msg_id}: دانلود رسانه انجام نشد.")
-                media_map[msg_id] = []
+            msg_id = item['id']
+            self.logger.info(f"   🖼️ [دیباگ] پست {msg_id}: دانلود رسانه انجام نشد.")
+            media_map[msg_id] = []
         return media_map, 0
 
-    # ═══════════════ متد اسکرین‌شات (در صورت نبود در والد) ═══════════════
-    async def _screenshot(self, page, name: str, full_page: bool = False):
-        """ذخیره اسکرین‌شات در پوشه دیباگ (در صورت نداشتن والد)."""
-        try:
-            # اگر والد متد _screenshot دارد، از آن استفاده می‌کنیم
-            if hasattr(super(), '_screenshot'):
-                return await super()._screenshot(page, name, full_page)
-            # در غیر این صورت خودمان ذخیره می‌کنیم
-            safe_name = self._sanitize_filename(name)
-            path = self.debug_screenshots_dir / f"{safe_name}.png"
-            await page.screenshot(path=path, full_page=full_page)
-            self.logger.debug(f"🐞 اسکرین‌شات ذخیره شد: {path}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
-
     async def _save_debug_screenshot(self, page, name: str):
-        """ذخیره اسکرین‌شات دیباگ (فقط در صورت فعال بودن)."""
         if not self.debug_screenshots:
             return
         try:
+            self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
             await self._screenshot(page, name, full_page=True)
             self.logger.debug(f"🐞 اسکرین‌شات دیباگ ذخیره شد: {name}")
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
-        """گرفتن اسکرین‌شات کامل از کل صفحه (با نام خاص)."""
-        try:
-            await page.evaluate("window.scrollTo(0, 0)")
-            await asyncio.sleep(1)
-            safe_channel = self._sanitize_filename(self.channel)
-            path = self.screenshots_dir / f"{safe_channel}_{name}.png"
-            await page.screenshot(path=path, full_page=True)
-            self.logger.info(f"📸 اسکرین‌شات کامل صفحه ذخیره شد: {path.name}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
-
-    # ═══════════════ انتظار برای بارگذاری کامل (updating...) ═══════════════
-    async def _wait_for_update_complete(self, page, timeout: int = 60):
-        """
-        منتظر می‌ماند تا عبارت 'updating...' یا 'به‌روزرسانی...' از صفحه ناپدید شود.
-        اگر عبارت وجود نداشته باشد، بلافاصله ادامه می‌دهد.
-        """
-        self.logger.info("⏳ بررسی وضعیت بارگذاری (جستجوی 'updating...')...")
-        try:
-            # منتظر می‌مانیم تا المان حاوی این متن، مخفی یا حذف شود (state='hidden')
-            await page.wait_for_selector(
-                "xpath=//*[contains(text(), 'updating...') or contains(text(), 'به‌روزرسانی...')]",
-                state="hidden",
-                timeout=timeout * 1000  # تبدیل به میلی‌ثانیه
-            )
-            self.logger.info("✅ عبارت بارگذاری ناپدید شد. ادامه می‌دهیم.")
-        except Exception as e:
-            # اگر تایم‌اوت شد یا خطایی رخ داد (مثلاً المان پیدا نشد)، ادامه می‌دهیم
-            self.logger.warning(
-                f"⚠️ انتظار برای 'updating...' با خطا/تایم‌اوت مواجه شد: {e}. ادامه می‌دهیم..."
-            )
-
-    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی ═══════════════
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی (هماهنگ با scraper.py) ═══════════════
     async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
         """
         اسکرول هوشمند با سه پله افزایشی.
@@ -175,7 +94,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await page.evaluate(f"window.scrollBy(0, {amount})")
             await human_sleep(1.2, 0.3)
 
-            new_height = await page.evaluate("document.documentElement.scrollHeight")
+new_height = await page.evaluate("document.documentElement.scrollHeight")
             if new_height != old_height:
                 self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
                 return True
@@ -183,7 +102,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
         return False
 
-    # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════
+    # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
     async def _extract_posts_from_page(self, page) -> List[Dict]:
         """استخراج پست‌ها از صفحه با JavaScript."""
         return await page.evaluate("""
@@ -202,8 +121,21 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             }
         """)
 
-    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════
-    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], Any, Optional[Any]]:
+    # ═══════════════ اسکرین‌شات کامل صفحه ═══════════════════
+    async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
+        """گرفتن اسکرین‌شات کامل از کل صفحه."""
+        try:
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+            safe_channel = self._sanitize_filename(self.channel)
+            path = self.screenshots_dir / f"{safe_channel}_{name}.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات کامل صفحه ذخیره شد: {path.name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
+
+    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
+    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         """
         اجرای والد، سپس اگر تعداد پست‌ها کافی نبود، اسکرول جهت‌دار اضافی انجام می‌دهد.
         همچنین در حالت عادی (بدون start_link و بدون resume) به ابتدا یا انتها می‌پرد.
@@ -218,32 +150,30 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.error("❌ صفحه دریافت نشد.")
             return items, context, page
 
-        # ✅ انتظار برای پایان بارگذاری اولیه (updating...)
-        await self._wait_for_update_complete(page)
-        await self._save_debug_screenshot(page, "after_initial_load")
-
         if not items:
             self.logger.warning("⚠️ والد هیچ پستی نیاورد.")
             return items, context, page
 
         self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
 
-        # اگر به اندازه کافی پست داریم، بدون اسکرول اضافی برگردان
         if len(items) >= self.limit:
             await self._capture_full_page_screenshot(page, "final")
             return items, context, page
 
         # ─── پرش به ابتدا یا انتها در حالت عادی (بدون start_link و resume) ───
-        resume_data = getattr(self, 'resume_data', {})
-        if not self.start_link and not resume_data.get('last_msg_id'):
+        # این کار فقط زمانی انجام می‌شود که والد از حالت عادی استفاده کرده باشد
+        # (یعنی start_link نداشته باشیم و resume هم فعال نباشد)
+        # برای تشخیص، بررسی می‌کنیم که آیا resume_data خالی است و start_link هم نداریم
+        if not self.start_link and not self.resume_data.get('last_msg_id'):
             if self.scroll_direction == 'up':
-                # برای جمع‌آوری قدیمی‌ترها، باید به پایین‌ترین نقطه برویم (جدیدترین پست‌ها)
+                # برای جمع‌آوری قدیمی‌ترها، باید به پایین‌ترین نقطه برویم
                 self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
                 clicked = False
                 scroll_button_selectors = [
                     'button[title="Go to bottom"]',
                     'div[class*="scroll-to-bottom"]',
-                    'div[class*="ScrollButton"]',
+
+'div[class*="ScrollButton"]',
                     '[aria-label="Scroll to bottom"]',
                     'button:has(svg[class*="arrow-down"])',
                 ]
@@ -255,8 +185,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                             self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
                             clicked = True
                             await human_sleep(3.5, 0.4)
-                            # پس از کلیک، دوباره منتظر updating...
-                            await self._wait_for_update_complete(page, timeout=30)
                             break
                     except Exception:
                         continue
@@ -271,10 +199,14 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 for _ in range(3):
                     await page.evaluate("window.scrollBy(0, -2000)")
                     await human_sleep(1, 0.2)
-                    await self._wait_for_update_complete(page, timeout=15)
                 self.logger.info("   ✅ به بالای صفحه رفتیم.")
 
-        # ─── اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر ──────────────────
+        # ─── تنظیم ترتیب پیمایش پست‌ها بر اساس جهت ──────────────────────
+        # این بخش توسط خود scraper.py مدیریت می‌شود، اما در اینجا نیز برای اطمینان،
+        # ما از متد super()._fetch_posts_from_telegram() استفاده کرده‌ایم که خودش
+        # از scroller استفاده می‌کند. بنابراین نیازی به تغییر نیست.
+
+        # ۲. اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر
         seen_ids = {item.get('id') for item in items if item.get('id')}
         new_items = []
         no_new_attempts = 0
@@ -287,9 +219,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 no_new_attempts += 1
                 self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
                 continue
-
-            # ✅ قبل از استخراج، صبر می‌کنیم تا بارگذاری کامل شود
-            await self._wait_for_update_complete(page, timeout=30)
 
             # استخراج پست‌های جدید
             current_items = await self._extract_posts_from_page(page)
@@ -309,7 +238,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             if len(seen_ids) >= self.limit:
                 break
 
-        # ─── ترکیب پست‌ها ────────────────────────────────────────────
         if new_items:
             # اگر جهت down است، پست‌های جدیدتر را در ابتدا قرار بده
             if self.scroll_direction == 'down':
@@ -317,20 +245,20 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             items.extend(new_items)
             self.logger.info(f"📈 مجموعاً {len(items)} پست (با {len(new_items)} پست جدید)")
 
-        # ─── اسکرین‌شات نهایی ─────────────────────────────────────────
+        # ۳. اسکرین‌شات کامل صفحه
         await self._capture_full_page_screenshot(page, "final")
         await self._save_debug_screenshot(page, "debug_final")
 
         self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
         return items, context, page
 
-    # ═══════════════ اجرای اصلی و ذخیره خلاصه ═══════════════
     async def run(self):
         """اجرای اصلی با ذخیرهٔ خلاصه JSON."""
         await super().run()
 
         try:
-            debug_json_path = self.base_dir / "debug_summary.json"
+
+debug_json_path = self.base_dir / "debug_summary.json"
             summary = {
                 "channel": self.channel,
                 "limit": self.limit,
@@ -382,7 +310,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.logger.info("✅ پایان موفقیت‌آمیز دیباگ.")
 
 
-# ═══════════════════ تابع اصلی ═══════════════════
 async def main():
     print("🐞 ========================================")
     print("🐞 Telegram Channel Scraper - حالت دیباگ (هماهنگ با scraper.py)")
@@ -420,5 +347,5 @@ async def main():
         sys.exit(1)
 
 
-if __name__ == "__main__":
+if name == "main":
     asyncio.run(main())
