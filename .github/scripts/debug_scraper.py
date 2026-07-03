@@ -8,6 +8,7 @@
 – اسکرین‌شات‌های بیشتری برای تحلیل مراحل ذخیره می‌کند.
 – خروجی JSON را برای بررسی داده‌های استخراج‌شده ذخیره می‌کند.
 – بهبود یافته با صبر هوشمند و حلقه اسکرول مقاوم (استخراج مستقیم با JavaScript).
+– افزایش تایم‌اوت‌ها و بهبود حلقه‌های صبر برای لود کامل تلگرام.
 """
 
 import asyncio
@@ -59,7 +60,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
     # ═══════════════════ صبر هوشمند برای لود پست‌های جدید ═══════════════════
-    async def _wait_for_new_posts(self, page, previous_count: int, timeout: int = 15000) -> bool:
+    async def _wait_for_new_posts(self, page, previous_count: int, timeout: int = 28000) -> bool:
         """
         صبر هوشمند تا پست‌های جدید لود شوند.
         - اگر تعداد پست‌ها افزایش پیدا کرد → True
@@ -84,14 +85,21 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             return False
 
     async def _wait_until_count_increases(self, page, selector, previous_count):
-        """حلقه‌ای که تا افزایش تعداد پست‌ها صبر می‌کند."""
-        while True:
+        """
+        حلقه‌ای که تا افزایش تعداد پست‌ها صبر می‌کند.
+        با تعداد چک‌های بیشتر و زمان‌های طولانی‌تر برای لود کامل.
+        """
+        max_checks = 40  # حدود ۲۵-۳۰ ثانیه (هر چک ۰.۷ ثانیه)
+        for i in range(max_checks):
             current_count = await page.locator(selector).count()
             if current_count > previous_count:
                 self.logger.info(f"✅ {current_count - previous_count} پست جدید لود شد (مجموع: {current_count})")
-                await page.wait_for_timeout(800)
+                await page.wait_for_timeout(1000)   # صبر بعد از لود برای رندر نهایی
                 return
-            await page.wait_for_timeout(600)
+            await page.wait_for_timeout(700)   # چک هر ۰.۷ ثانیه
+
+        self.logger.warning("⏳ حداکثر چک‌ها انجام شد بدون لود جدید")
+        raise asyncio.TimeoutError("No new posts after max checks")
 
     # ═══════════════════ بازنویسی متد استخراج با حلقه اسکرول هوشمند (استخراج مستقیم با JS) ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
@@ -150,7 +158,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     item_id = item.get('id')
                     if item_id and item_id not in seen_ids:
                         seen_ids.add(item_id)
-                        # داده‌های کامل‌تر را می‌توان از والد گرفت، اما فعلاً id کافی است
                         items.append(item)
                         added += 1
 
@@ -159,12 +166,12 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 if len(items) >= self.limit:
                     break
 
-                # اسکرول قوی‌تر
+                # اسکرول قوی‌تر با زمان انتظار بیشتر
                 await page.evaluate("window.scrollBy(0, window.innerHeight * 2.5)")
-                await page.wait_for_timeout(1200)
+                await page.wait_for_timeout(1800)   # افزایش زمان برای شروع لود
 
-                # صبر هوشمند با timeout بیشتر
-                if await self._wait_for_new_posts(page, len(items), timeout=18000):
+                # صبر هوشمند با timeout هماهنگ (۲۸ ثانیه)
+                if await self._wait_for_new_posts(page, len(items), timeout=28000):
                     no_new_attempts = 0
                     await self._save_debug_screenshot(page, f"after_load_{len(items)}")
                 else:
@@ -172,7 +179,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     if no_new_attempts >= max_no_new_attempts:
                         self.logger.info("🚫 به انتهای کانال رسیدیم (یا لود متوقف شد).")
                         break
-                    await page.wait_for_timeout(4000)
+                    # زمان انتظار بیشتر بین تلاش‌های ناموفق
+                    await page.wait_for_timeout(7000)
 
             await self._save_debug_screenshot(page, "final_debug")
             self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
