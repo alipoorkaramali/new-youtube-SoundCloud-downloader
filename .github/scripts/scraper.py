@@ -264,9 +264,8 @@ class TelegramChannelScraper:
             return [], None, None
         await self._save_screenshot(page, "initial")
 
-        # پرش به پایین فقط در حالت عادی و بدون resume (اگر جهت up باشد، به پایین می‌رویم)
+        # ═══════════════ پرش به ابتدا یا انتهای صفحه بر اساس جهت اسکرول ═══════════════
         if not self.start_link and not self.resume_data.get('last_msg_id'):
-            # اگر جهت up باشد، ابتدا به پایین می‌رویم تا جدیدترین پست‌ها را ببینیم
             if self.scroll_direction == 'up':
                 self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
                 clicked = False
@@ -290,10 +289,18 @@ class TelegramChannelScraper:
                         continue
                 if not clicked:
                     self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-            else:
-                self.logger.info("ℹ️ حالت down: بدون پرش به پایین، از همان نقطه شروع می‌کنیم.")
+            else:  # scroll_direction == 'down'
+                self.logger.info("⬆️ تلاش برای رفتن به بالای صفحه (قدیمی‌ترین پست‌ها)...")
+                # اسکرول به بالای صفحه
+                await page.evaluate("window.scrollTo(0, 0)")
+                await human_sleep(2, 0.3)
+                # چند اسکرول اضافی برای اطمینان از رسیدن به ابتدا
+                for _ in range(3):
+                    await page.evaluate("window.scrollBy(0, -2000)")
+                    await human_sleep(1, 0.2)
+                self.logger.info("   ✅ به بالای صفحه رفتیم.")
         elif self.start_link:
-            self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.")
+            self.logger.info("ℹ️ در حالت start_link، پرش به پایین/بالا انجام نمی‌شود.")
         else:
             self.logger.info(f"ℹ️ حالت Resume: از msg_id={self.resume_data.get('last_msg_id')} ادامه می‌دهیم.")
 
@@ -468,7 +475,6 @@ class TelegramChannelScraper:
                 break
 
             # ─── اسکرول هوشمند با جهت ──────────────────────────────────
-            # استفاده از متد _smart_scroll که بر اساس direction کار می‌کند
             old_height = await page.evaluate("document.documentElement.scrollHeight")
             scrolled = await self._smart_scroll(page, self.scroll_direction, step=SCROLL_STEP_BASE, max_attempts=3)
             new_height = await page.evaluate("document.documentElement.scrollHeight")
