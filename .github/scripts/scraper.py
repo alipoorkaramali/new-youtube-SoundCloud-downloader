@@ -291,10 +291,8 @@ class TelegramChannelScraper:
                     self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
             else:  # scroll_direction == 'down'
                 self.logger.info("⬆️ تلاش برای رفتن به بالای صفحه (قدیمی‌ترین پست‌ها)...")
-                # اسکرول به بالای صفحه
                 await page.evaluate("window.scrollTo(0, 0)")
                 await human_sleep(2, 0.3)
-                # چند اسکرول اضافی برای اطمینان از رسیدن به ابتدا
                 for _ in range(3):
                     await page.evaluate("window.scrollBy(0, -2000)")
                     await human_sleep(1, 0.2)
@@ -322,7 +320,6 @@ class TelegramChannelScraper:
                 target_locator = page.locator(f'[data-message-id="{resume_last_id}"]').first
                 if await target_locator.count() > 0:
                     await target_locator.scroll_into_view_if_needed()
-                    # اسکرول به سمت بالا یا پایین بر اساس جهت
                     offset = -150 if self.scroll_direction == 'up' else 150
                     await page.evaluate(f"window.scrollBy(0, {offset})")
                     await human_sleep(1, 0.3)
@@ -356,16 +353,28 @@ class TelegramChannelScraper:
         # حالت عادی (بدون resume و بدون start_link)
         if not resume_last_id and not self.start_link:
             start_collecting = True
-            self.logger.info("ℹ️ حالت عادی: شروع جمع‌آوری از جدیدترین پست‌ها.")
+            self.logger.info("ℹ️ حالت عادی: شروع جمع‌آوری.")
 
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
                 messages = await page.locator('div[data-message-id]').all()
 
+                # ─── تعیین ترتیب پیمایش بر اساس جهت اسکرول ──────────────────
+                # در حالت عادی (بدون start_link و resume)، اگر direction == 'up' از جدیدترین به قدیمی‌ترین
+                # و اگر direction == 'down' از قدیمی‌ترین به جدیدترین
                 if self.start_link or resume_last_id:
-                    msg_iter = messages
+                    # در حالت start_link یا resume، باید از نقطه شروع به سمت direction حرکت کنیم
+                    # اما چون start_collecting کنترل می‌کند، می‌توانیم از ترتیب کلی استفاده کنیم
+                    if self.scroll_direction == 'up':
+                        msg_iter = reversed(messages)  # از انتها به ابتدا (جدید به قدیم)
+                    else:
+                        msg_iter = messages  # از ابتدا به انتها (قدیم به جدید)
                 else:
-                    msg_iter = reversed(messages)
+                    # حالت عادی
+                    if self.scroll_direction == 'up':
+                        msg_iter = reversed(messages)  # جدید به قدیم
+                    else:  # down
+                        msg_iter = messages  # قدیم به جدید
 
                 for msg in msg_iter:
                     try:
@@ -373,6 +382,7 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
+                        # در حالت start_link یا resume، فقط زمانی که به نقطه شروع رسیدیم جمع‌آوری کنیم
                         if self.start_link and not start_collecting:
                             if msg_id == self.target_msg_id:
                                 start_collecting = True
@@ -381,15 +391,16 @@ class TelegramChannelScraper:
                             else:
                                 continue
                         elif resume_last_id and not start_collecting:
+                            # در resume، ما قبلاً start_collecting را True کرده‌ایم اگر پیام پیدا شده باشد
+                            # اما اگر پیدا نشده، اینجا ignore می‌کنیم
                             pass
 
                         if not start_collecting:
                             continue
 
-                        # ═══════════════ استخراج هوشمند متن پست (نسخه نهایی مقاوم) ═══════════════
+                        # ─── استخراج متن ──────────────────────────────────────
                         text = ""
                         try:
-                            # روش ۱: selectorهای خاص برای محتوای اصلی
                             content_selectors = [
                                 'div.message-content',
                                 'div.text-content',
@@ -404,21 +415,18 @@ class TelegramChannelScraper:
                                     if text and len(text) > 3:
                                         break
 
-                            # روش ۲: استفاده از inner_text کل پیام (با try/except جداگانه)
                             if not text or len(text) < 5:
                                 try:
                                     text = (await msg.inner_text()).strip()[:1000]
-                                except Exception as e:
-                                    self.logger.debug(f"   inner_text fallback failed for {msg_id}: {e}")
+                                except Exception:
+                                    pass
 
-                            # روش ۳: JavaScript textContent (قوی‌ترین fallback)
                             if not text or len(text) < 5:
                                 try:
                                     text = (await msg.evaluate("el => el.textContent || ''")).strip()[:1000]
-                                except Exception as e:
-                                    self.logger.debug(f"   textContent fallback failed for {msg_id}: {e}")
+                                except Exception:
+                                    pass
 
-                            # روش ۴: (اضطراری) استفاده از page.evaluate روی خود المنت با innerText
                             if not text or len(text) < 5:
                                 try:
                                     text = (await page.evaluate(f"""
@@ -427,14 +435,12 @@ class TelegramChannelScraper:
                                             return el ? el.innerText || el.textContent || '' : '';
                                         }}
                                     """)).strip()[:1000]
-                                except Exception as e:
-                                    self.logger.debug(f"   emergency evaluate failed for {msg_id}: {e}")
+                                except Exception:
+                                    pass
 
-                            # تمیز کردن نهایی (حذف فاصله‌های اضافی)
                             if text:
                                 text = re.sub(r'\s+', ' ', text).strip()[:1000]
 
-                            # اگر باز هم خالی بود، لاگ هشدار
                             if not text or len(text) < 2:
                                 self.logger.debug(f"⚠️ متن پست {msg_id} خالی یا بسیار کوتاه است.")
 
@@ -442,7 +448,7 @@ class TelegramChannelScraper:
                             self.logger.warning(f"❌ خطا در استخراج متن پست {msg_id}: {e}")
                             text = ""
 
-                        # استخراج تاریخ
+                        # ─── استخراج تاریخ ────────────────────────────────────
                         date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
                         date = ""
                         try:
@@ -489,10 +495,9 @@ class TelegramChannelScraper:
                 extra_scroll_count += 1
                 if extra_scroll_count <= max_extra_scrolls:
                     self.logger.info(f"🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره {extra_scroll_count}...")
-                    # اسکرول اضافی با جهت
                     extra_amount = -SCROLL_STEP_BASE * 2 if self.scroll_direction == 'up' else SCROLL_STEP_BASE * 2
                     if extra_scroll_count >= 3:
-                        extra_amount = extra_amount * 2  # قوی‌تر
+                        extra_amount = extra_amount * 2
                         self.logger.warning(f"⚠️ اسکرول قوی‌تر انجام شد (تلاش {extra_scroll_count})")
                     await page.evaluate(f"window.scrollBy(0, {extra_amount})")
                     await human_sleep(1.5, 0.3)
