@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه با قابلیت انتخاب جهت اسکرول
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه هماهنگ با scraper.py
 – کاربر می‌تواند تعیین کند که از پست خاص به بالا (قدیمی‌تر) برود یا پایین (جدیدتر).
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
@@ -11,8 +11,9 @@
 import asyncio
 import json
 import sys
+import random
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -21,9 +22,16 @@ from scraper import TelegramChannelScraper
 from output_generator import OutputGenerator
 
 
+# ═══════════════════ Human-like sleep ═══════════════════
+async def human_sleep(base: float, jitter: float = 0.4):
+    time = base * (1 + random.uniform(-jitter, jitter))
+    await asyncio.sleep(max(0.1, time))
+
+
 class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
     نسخه‌ی دیباگ اسکرپر با قابلیت انتخاب جهت اسکرول.
+    هماهنگ با scraper.py – از متد _smart_scroll با پله‌های افزایشی استفاده می‌کند.
     """
 
     def __init__(self, config, debug_screenshots: bool = True):
@@ -63,32 +71,36 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ صبر هوشمند با بررسی ارتفاع صفحه ═══════════════
-    async def _wait_for_height_change(self, page, old_height: int, timeout: int = 20000) -> bool:
-        """منتظر می‌ماند تا ارتفاع صفحه افزایش یا کاهش یابد (نشان‌دهنده لود محتوای جدید)."""
-        self.logger.info(f"🐞 منتظر تغییر ارتفاع صفحه (از {old_height}px)...")
-        try:
-            await asyncio.wait_for(
-                self._wait_until_height_changes(page, old_height),
-                timeout=timeout / 1000
-            )
-            return True
-        except asyncio.TimeoutError:
-            self.logger.warning(f"⚠️ timeout: ارتفاع صفحه تغییر نکرد.")
-            return False
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در انتظار تغییر ارتفاع: {e}")
-            return False
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی (هماهنگ با scraper.py) ═══════════════
+    async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
+        """
+        اسکرول هوشمند با سه پله افزایشی.
+        - direction: 'up' یا 'down'
+        - step: مقدار پایه (مثبت)
+        - max_attempts: تعداد پله‌ها
+        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
+        """
+        old_height = await page.evaluate("document.documentElement.scrollHeight")
+        scroll_multipliers = [1, 1.8, 2.8]  # پله‌های افزایشی
 
-    async def _wait_until_height_changes(self, page, old_height: int):
-        """حلقه‌ای که تا تغییر ارتفاع صفحه چک می‌کند (افزایش یا کاهش)."""
-        while True:
+        for i in range(min(max_attempts, len(scroll_multipliers))):
+            multiplier = scroll_multipliers[i]
+            amount = int(step * multiplier)
+            if direction == 'up':
+                amount = -amount  # منفی = بالا
+            # برای down، amount مثبت می‌ماند
+
+            self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
+            await page.evaluate(f"window.scrollBy(0, {amount})")
+            await human_sleep(1.2, 0.3)
+
             new_height = await page.evaluate("document.documentElement.scrollHeight")
             if new_height != old_height:
-                self.logger.info(f"✅ ارتفاع از {old_height} به {new_height} تغییر یافت.")
-                await asyncio.sleep(1)
-                return
-            await asyncio.sleep(0.7)
+                self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
+                return True
+
+        self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
+        return False
 
     # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
     async def _extract_posts_from_page(self, page) -> List[Dict]:
@@ -109,52 +121,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             }
         """)
 
-    # ═══════════════ اسکرول هوشمند با جهت قابل تنظیم ═══════════════════
-    async def _smart_scroll(self, page, seen_ids: set, direction: str = 'up') -> List[Dict]:
-        """
-        اسکرول به سمت بالا یا پایین با سه پله.
-        - direction: 'up' (قدیمی‌تر) یا 'down' (جدیدتر)
-        """
-        self.logger.info(f"🔄 شروع اسکرول هوشمند به سمت {'بالا (قدیمی‌تر)' if direction == 'up' else 'پایین (جدیدتر)'}...")
-        new_items = []
-
-        # مقادیر اسکرول بر اساس جهت
-        if direction == 'up':
-            scroll_steps = [-3000, -4000, -5000]  # منفی = بالا
-        else:  # down
-            scroll_steps = [3000, 4000, 5000]     # مثبت = پایین
-
-        for step in scroll_steps:
-            if len(seen_ids) >= self.limit:
-                break
-
-            self.logger.info(f"   📍 اسکرول {step}px")
-            old_height = await page.evaluate("document.documentElement.scrollHeight")
-
-            # اسکرول
-            await page.evaluate(f"window.scrollBy(0, {step})")
-            await asyncio.sleep(1.5)
-
-            # منتظر تغییر ارتفاع
-            if await self._wait_for_height_change(page, old_height, timeout=20000):
-                # استخراج پست‌های جدید
-                current_items = await self._extract_posts_from_page(page)
-                added = 0
-                for item in current_items:
-                    item_id = item.get('id')
-                    if item_id and item_id not in seen_ids:
-                        seen_ids.add(item_id)
-                        new_items.append(item)
-                        added += 1
-                if added > 0:
-                    self.logger.info(f"✅ {added} پست جدید در این مرحله اضافه شد.")
-                else:
-                    self.logger.info(f"⚠️ ارتفاع تغییر کرد اما پست جدیدی پیدا نشد.")
-            else:
-                self.logger.info(f"⏳ ارتفاع تغییر نکرد، اسکرول بعدی...")
-
-        return new_items
-
     # ═══════════════ اسکرین‌شات کامل صفحه ═══════════════════
     async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
         """گرفتن اسکرین‌شات کامل از کل صفحه."""
@@ -168,14 +134,15 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    # ═══════════════ بازنویسی متد استخراج با اسکرول جهت‌دار ═══════════════════
+    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         """
-        اجرای والد، سپس اسکرول جهت‌دار برای دریافت پست‌های بیشتر.
+        اجرای والد، سپس اگر تعداد پست‌ها کافی نبود، اسکرول جهت‌دار اضافی انجام می‌دهد.
+        همچنین در حالت عادی (بدون start_link و بدون resume) به ابتدا یا انتها می‌پرد.
         """
         self.logger.info(f"🐞 شروع استخراج با اسکرول جهت‌دار ({self.scroll_direction})...")
 
-        # ۱. اجرای والد
+        # ۱. اجرای والد (که شامل ورود به کانال و جمع‌آوری اولیه است)
         result = await super()._fetch_posts_from_telegram()
         items, context, page = result
 
@@ -193,10 +160,78 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await self._capture_full_page_screenshot(page, "final")
             return items, context, page
 
-        seen_ids = {item.get('id') for item in items if item.get('id')}
+        # ─── پرش به ابتدا یا انتها در حالت عادی (بدون start_link و resume) ───
+        # این کار فقط زمانی انجام می‌شود که والد از حالت عادی استفاده کرده باشد
+        # (یعنی start_link نداشته باشیم و resume هم فعال نباشد)
+        # برای تشخیص، بررسی می‌کنیم که آیا resume_data خالی است و start_link هم نداریم
+        if not self.start_link and not self.resume_data.get('last_msg_id'):
+            if self.scroll_direction == 'up':
+                # برای جمع‌آوری قدیمی‌ترها، باید به پایین‌ترین نقطه برویم
+                self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+                clicked = False
+                scroll_button_selectors = [
+                    'button[title="Go to bottom"]',
+                    'div[class*="scroll-to-bottom"]',
+                    'div[class*="ScrollButton"]',
+                    '[aria-label="Scroll to bottom"]',
+                    'button:has(svg[class*="arrow-down"])',
+                ]
+                for sel in scroll_button_selectors:
+                    try:
+                        btn = page.locator(sel).first
+                        if await btn.count() > 0:
+                            await btn.click(timeout=5000)
+                            self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                            clicked = True
+                            await human_sleep(3.5, 0.4)
+                            break
+                    except Exception:
+                        continue
+                if not clicked:
+                    self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
+            else:  # scroll_direction == 'down'
+                # برای جمع‌آوری جدیدترها، باید به بالای صفحه برویم (قدیمی‌ترین پست‌ها)
+                self.logger.info("⬆️ تلاش برای رفتن به بالای صفحه (قدیمی‌ترین پست‌ها)...")
+                await page.evaluate("window.scrollTo(0, 0)")
+                await human_sleep(2, 0.3)
+                # چند اسکرول اضافی برای اطمینان از رسیدن به ابتدا
+                for _ in range(3):
+                    await page.evaluate("window.scrollBy(0, -2000)")
+                    await human_sleep(1, 0.2)
+                self.logger.info("   ✅ به بالای صفحه رفتیم.")
 
-        # ۲. اسکرول جهت‌دار
-        new_items = await self._smart_scroll(page, seen_ids, self.scroll_direction)
+        # ۲. اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر
+        seen_ids = {item.get('id') for item in items if item.get('id')}
+        new_items = []
+        no_new_attempts = 0
+        max_attempts = 4  # حداکثر ۴ بار اسکرول جهت‌دار
+
+        while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
+            # اسکرول هوشمند با جهت
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
+            if not scrolled:
+                no_new_attempts += 1
+                self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
+                continue
+
+            # استخراج پست‌های جدید
+            current_items = await self._extract_posts_from_page(page)
+            added = 0
+            for item in current_items:
+                item_id = item.get('id')
+                if item_id and item_id not in seen_ids:
+                    seen_ids.add(item_id)
+                    new_items.append(item)
+                    added += 1
+            if added > 0:
+                self.logger.info(f"📈 {added} پست جدید در این مرحله اضافه شد (مجموع: {len(seen_ids)})")
+                no_new_attempts = 0  # ریست شمارنده در صورت موفقیت
+            else:
+                no_new_attempts += 1
+
+            if len(seen_ids) >= self.limit:
+                break
+
         if new_items:
             # اگر جهت down است، پست‌های جدیدتر را در ابتدا قرار بده
             if self.scroll_direction == 'down':
@@ -270,7 +305,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (با جهت‌یابی)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (هماهنگ با scraper.py)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
