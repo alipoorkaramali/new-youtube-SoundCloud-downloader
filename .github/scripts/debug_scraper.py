@@ -25,6 +25,10 @@ from scraper import TelegramChannelScraper
 from output_generator import OutputGenerator
 
 
+# ═══════════════════ Constants ═══════════════════
+HOME_URL = "https://web.telegram.org/a/"
+
+
 # ═══════════════════ Human-like sleep ═══════════════════
 async def human_sleep(base: float, jitter: float = 0.4):
     time = base * (1 + random.uniform(-jitter, jitter))
@@ -266,7 +270,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     async def _fetch_posts_with_refresh_and_resume(self) -> tuple[List[Dict], Any, Any]:
         """
         استخراج پست‌ها با اسکرول اولیه، سپس در صورت نیاز رفرش و ادامه از آخرین پست.
-        پس از رفرش، جهت اسکرول به DOWN (پایین، جدیدتر) تغییر می‌کند.
+        پس از رفرش، از متد _navigate_to_start_link برای جستجوی لینک آخرین پست استفاده می‌کند.
         """
         self.logger.info("🐞 شروع استخراج با رفرش و ادامه از آخرین پست...")
 
@@ -312,22 +316,21 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             refresh_count += 1
             self.logger.info(f"🔄 مرحله {refresh_count}: رفرش و ادامه از آخرین پست...")
 
-            # ذخیره آخرین ID برای جستجو
             if not last_known_id:
                 self.logger.warning("⚠️ آخرین ID مشخص نیست، از رفرش معمولی استفاده می‌شود.")
                 await page.reload(wait_until="domcontentloaded")
                 await asyncio.sleep(3)
             else:
-                # ── رفرش و جستجوی لینک ──────────────────
+                # ── رفرش و جستجوی لینک با متد _navigate_to_start_link ──
                 self.logger.info(f"🔍 جستجوی لینک آخرین پست: {last_known_id}")
 
-                # بستن context قبلی و ایجاد دوباره (برای شبیه‌سازی ورود مجدد)
+                # بستن context قبلی
                 if context:
                     await context.close()
                     context = None
                     page = None
 
-                # ایجاد context جدید (مانند والد)
+                # ایجاد context جدید
                 from playwright.async_api import async_playwright
                 p = await async_playwright().start()
                 context = await p.chromium.launch_persistent_context(
@@ -339,28 +342,29 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 )
                 page = await context.new_page()
 
-                # رفتن به لینک آخرین پست
-                direct_link = self._build_direct_link(self.channel, last_known_id)
-                self.logger.info(f"🔗 لینک مستقیم: {direct_link}")
-                try:
-                    await page.goto(direct_link, wait_until="domcontentloaded", timeout=30000)
-                    await asyncio.sleep(3)
-                    # اسکرول به پست مورد نظر
-                    await page.evaluate(f"""
-                        () => {{
-                            const post = document.querySelector('[data-msg-id="{last_known_id}"]');
-                            if (post) {{
-                                post.scrollIntoView({{ behavior: "smooth", block: "center" }});
-                            }}
-                        }}
-                    """)
-                    await asyncio.sleep(2)
-                    self.logger.info("✅ به لینک مستقیم رفتیم و اسکرول انجام شد.")
-                    await self._save_debug_screenshot(page, f"after_refresh_{refresh_count}")
-                except Exception as e:
-                    self.logger.warning(f"⚠️ خطا در رفتن به لینک مستقیم: {e}")
-                    # Fallback: جستجوی کانال
+                # رفتن به صفحه اصلی تلگرام
+                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+
+                # ── تنظیم start_link و target_msg_id ──
+                # ذخیره start_link قبلی برای بازگردانی بعداً
+                original_start_link = self.start_link
+                original_target_msg_id = self.target_msg_id
+
+                self.start_link = self._build_direct_link(self.channel, last_known_id)
+                self.target_msg_id = last_known_id
+
+                # ── جستجو و کلیک ──
+                entered = await self._navigate_to_start_link(page)
+                if not entered:
+                    self.logger.warning("⚠️ نتوانستیم به لینک آخرین پست برویم. از روش fallback استفاده می‌شود.")
                     await self._search_and_enter_channel(page)
+
+                # بازگردانی start_link (برای جلوگیری از تداخل)
+                self.start_link = original_start_link
+                self.target_msg_id = original_target_msg_id
+
+                await self._save_debug_screenshot(page, f"after_refresh_{refresh_count}")
 
             # ── اسکرول مجدد با جهت DOWN (پایین، جدیدتر) ────
             self.logger.info("🔄 اسکرول مجدد با جهت DOWN (پایین، جدیدتر)...")
