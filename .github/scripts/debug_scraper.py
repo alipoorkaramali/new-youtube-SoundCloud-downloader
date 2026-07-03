@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه هماهنگ با scraper.py
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه اتوماتیک با رفرش و ادامه از آخرین پست
 – کاربر می‌تواند تعیین کند که از پست خاص به بالا (قدیمی‌تر) برود یا پایین (جدیدتر).
+– در صورت نیاز، صفحه رفرش شده و از آخرین پست استخراج‌شده ادامه می‌یابد.
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
@@ -13,7 +14,7 @@ import json
 import sys
 import random
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple, Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -30,7 +31,7 @@ async def human_sleep(base: float, jitter: float = 0.4):
 
 class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
-    نسخه‌ی دیباگ اسکرپر با قابلیت انتخاب جهت اسکرول.
+    نسخه‌ی دیباگ اسکرپر با قابلیت انتخاب جهت اسکرول و رفرش خودکار.
     هماهنگ با scraper.py – از متد _smart_scroll با پله‌های افزایشی استفاده می‌کند.
     """
 
@@ -71,7 +72,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی (هماهنگ با scraper.py) ═══════════════
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی ═══════════════
     async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
         """
         اسکرول هوشمند با سه پله افزایشی.
@@ -134,85 +135,28 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
+    # ═══════════════ ساخت لینک مستقیم به پیام ═══════════════════
+    def _build_direct_link(self, channel: str, msg_id: str) -> str:
+        """ساخت لینک مستقیم به یک پیام در تلگرام وب."""
+        if not msg_id or not msg_id.isdigit():
+            clean_channel = channel.lstrip('@')
+            return f"https://web.telegram.org/k/#@{clean_channel}"
+        clean_channel = channel.lstrip('@')
+        return f"https://web.telegram.org/k/#@{clean_channel}/{msg_id}"
+
+    # ═══════════════ یک دور اسکرول جهت‌دار ═══════════════════
+    async def _single_scrape_attempt_with_direction(self, page, seen_ids: set) -> Tuple[List[Dict], int]:
         """
-        اجرای والد، سپس اگر تعداد پست‌ها کافی نبود، اسکرول جهت‌دار اضافی انجام می‌دهد.
-        همچنین در حالت عادی (بدون start_link و بدون resume) به ابتدا یا انتها می‌پرد.
+        یک دور اسکرول با جهت انتخابی (up/down) تا زمانی که پست جدیدی اضافه نشود.
+        برمی‌گرداند: (لیست آیتم‌های جدید, تعداد آیتم‌های جدید)
         """
-        self.logger.info(f"🐞 شروع استخراج با اسکرول جهت‌دار ({self.scroll_direction})...")
-
-        # ۱. اجرای والد (که شامل ورود به کانال و جمع‌آوری اولیه است)
-        result = await super()._fetch_posts_from_telegram()
-        items, context, page = result
-
-        if not page:
-            self.logger.error("❌ صفحه دریافت نشد.")
-            return items, context, page
-
-        if not items:
-            self.logger.warning("⚠️ والد هیچ پستی نیاورد.")
-            return items, context, page
-
-        self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
-
-        if len(items) >= self.limit:
-            await self._capture_full_page_screenshot(page, "final")
-            return items, context, page
-
-        # ─── پرش به ابتدا یا انتها در حالت عادی (بدون start_link و resume) ───
-        # این کار فقط زمانی انجام می‌شود که والد از حالت عادی استفاده کرده باشد
-        # (یعنی start_link نداشته باشیم و resume هم فعال نباشد)
-        # برای تشخیص، بررسی می‌کنیم که آیا resume_data خالی است و start_link هم نداریم
-        if not self.start_link and not self.resume_data.get('last_msg_id'):
-            if self.scroll_direction == 'up':
-                # برای جمع‌آوری قدیمی‌ترها، باید به پایین‌ترین نقطه برویم
-                self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
-                clicked = False
-                scroll_button_selectors = [
-                    'button[title="Go to bottom"]',
-                    'div[class*="scroll-to-bottom"]',
-                    'div[class*="ScrollButton"]',
-                    '[aria-label="Scroll to bottom"]',
-                    'button:has(svg[class*="arrow-down"])',
-                ]
-                for sel in scroll_button_selectors:
-                    try:
-                        btn = page.locator(sel).first
-                        if await btn.count() > 0:
-                            await btn.click(timeout=5000)
-                            self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                            clicked = True
-                            await human_sleep(3.5, 0.4)
-                            break
-                    except Exception:
-                        continue
-                if not clicked:
-                    self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-            else:  # scroll_direction == 'down'
-                # برای جمع‌آوری جدیدترها، باید به بالای صفحه برویم (قدیمی‌ترین پست‌ها)
-                self.logger.info("⬆️ تلاش برای رفتن به بالای صفحه (قدیمی‌ترین پست‌ها)...")
-                await page.evaluate("window.scrollTo(0, 0)")
-                await human_sleep(2, 0.3)
-                # چند اسکرول اضافی برای اطمینان از رسیدن به ابتدا
-                for _ in range(3):
-                    await page.evaluate("window.scrollBy(0, -2000)")
-                    await human_sleep(1, 0.2)
-                self.logger.info("   ✅ به بالای صفحه رفتیم.")
-
-        # ─── تنظیم ترتیب پیمایش پست‌ها بر اساس جهت ──────────────────────
-        # این بخش توسط خود `scraper.py` مدیریت می‌شود، اما در اینجا نیز برای اطمینان،
-        # ما از متد `super()._fetch_posts_from_telegram()` استفاده کرده‌ایم که خودش
-        # از `scroller` استفاده می‌کند. بنابراین نیازی به تغییر نیست.
-
-        # ۲. اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر
-        seen_ids = {item.get('id') for item in items if item.get('id')}
+        self.logger.info(f"🔄 اسکرول جهت‌دار با {self.scroll_direction}...")
         new_items = []
         no_new_attempts = 0
-        max_attempts = 4  # حداکثر ۴ بار اسکرول جهت‌دار
+        max_attempts = 6
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            # اسکرول هوشمند با جهت
+            # اسکرول هوشمند
             scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
             if not scrolled:
                 no_new_attempts += 1
@@ -230,27 +174,141 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     added += 1
             if added > 0:
                 self.logger.info(f"📈 {added} پست جدید در این مرحله اضافه شد (مجموع: {len(seen_ids)})")
-                no_new_attempts = 0  # ریست شمارنده در صورت موفقیت
+                no_new_attempts = 0
             else:
                 no_new_attempts += 1
 
             if len(seen_ids) >= self.limit:
                 break
 
-        if new_items:
-            # اگر جهت down است، پست‌های جدیدتر را در ابتدا قرار بده
-            if self.scroll_direction == 'down':
-                new_items.reverse()
-            items.extend(new_items)
-            self.logger.info(f"📈 مجموعاً {len(items)} پست (با {len(new_items)} پست جدید)")
+        return new_items, len(new_items)
 
-        # ۳. اسکرین‌شات کامل صفحه
+    # ═══════════════ منطق اصلی با رفرش و ادامه از آخرین پست ═══════════════════
+    async def _fetch_posts_with_refresh_and_resume(self) -> tuple[List[Dict], Any, Any]:
+        """
+        استخراج پست‌ها با اسکرول اولیه، سپس در صورت نیاز رفرش و ادامه از آخرین پست.
+        """
+        self.logger.info("🐞 شروع استخراج با رفرش و ادامه از آخرین پست...")
+
+        # ۱. اجرای والد (ورود به کانال و استخراج اولیه)
+        result = await super()._fetch_posts_from_telegram()
+        items, context, page = result
+
+        if not page:
+            self.logger.error("❌ صفحه دریافت نشد.")
+            return items, context, page
+
+        if not items:
+            self.logger.warning("⚠️ هیچ پستی از والد دریافت نشد.")
+            return items, context, page
+
+        self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
+
+        if len(items) >= self.limit:
+            await self._capture_full_page_screenshot(page, "final")
+            return items, context, page
+
+        # ─── تنظیمات حلقه ──────────────────────────────────
+        seen_ids = {item.get('id') for item in items if item.get('id')}
+        last_known_id = items[-1].get('id') if items else None
+        max_refresh_attempts = 3
+        refresh_count = 0
+
+        # ─── اسکرول اولیه ──────────────────────────────────
+        self.logger.info("🔄 مرحله ۱: اسکرول اولیه...")
+        new_items, added = await self._single_scrape_attempt_with_direction(page, seen_ids)
+        if new_items:
+            items.extend(new_items)
+            if new_items:
+                last_known_id = new_items[-1].get('id') or last_known_id
+            self.logger.info(f"📈 در اسکرول اولیه {added} پست جدید اضافه شد (مجموع: {len(items)})")
+
+        if len(items) >= self.limit:
+            await self._capture_full_page_screenshot(page, "final")
+            return items, context, page
+
+        # ─── حلقه رفرش و ادامه ────────────────────────────
+        while len(items) < self.limit and refresh_count < max_refresh_attempts:
+            refresh_count += 1
+            self.logger.info(f"🔄 مرحله {refresh_count}: رفرش و ادامه از آخرین پست...")
+
+            # ذخیره آخرین ID برای جستجو
+            if not last_known_id:
+                self.logger.warning("⚠️ آخرین ID مشخص نیست، از رفرش معمولی استفاده می‌شود.")
+                await page.reload(wait_until="domcontentloaded")
+                await asyncio.sleep(3)
+            else:
+                # ── رفرش و جستجوی لینک ──────────────────
+                self.logger.info(f"🔍 جستجوی لینک آخرین پست: {last_known_id}")
+
+                # بستن context قبلی و ایجاد دوباره (برای شبیه‌سازی ورود مجدد)
+                if context:
+                    await context.close()
+                    context = None
+                    page = None
+
+                # ایجاد context جدید (مانند والد)
+                from playwright.async_api import async_playwright
+                p = await async_playwright().start()
+                context = await p.chromium.launch_persistent_context(
+                    user_data_dir=str(self.profile_dir),
+                    headless=False,
+                    args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                    viewport={"width": 1366, "height": 900},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+                )
+                page = await context.new_page()
+
+                # رفتن به لینک آخرین پست
+                direct_link = self._build_direct_link(self.channel, last_known_id)
+                self.logger.info(f"🔗 لینک مستقیم: {direct_link}")
+                try:
+                    await page.goto(direct_link, wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(3)
+                    # اسکرول به پست مورد نظر
+                    await page.evaluate(f"""
+                        () => {{
+                            const post = document.querySelector('[data-msg-id="{last_known_id}"]');
+                            if (post) {{
+                                post.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                            }}
+                        }}
+                    """)
+                    await asyncio.sleep(2)
+                    self.logger.info("✅ به لینک مستقیم رفتیم و اسکرول انجام شد.")
+                    await self._save_debug_screenshot(page, f"after_refresh_{refresh_count}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ خطا در رفتن به لینک مستقیم: {e}")
+                    # Fallback: جستجوی کانال
+                    await self._search_and_enter_channel(page)
+
+            # ── اسکرول مجدد با جهت ──────────────────────────
+            self.logger.info(f"🔄 اسکرول مجدد با جهت {self.scroll_direction}...")
+            new_items_round, added_round = await self._single_scrape_attempt_with_direction(page, seen_ids)
+            if new_items_round:
+                items.extend(new_items_round)
+                if new_items_round:
+                    last_known_id = new_items_round[-1].get('id') or last_known_id
+                self.logger.info(f"📈 در دور {refresh_count} تعداد {added_round} پست جدید اضافه شد (مجموع: {len(items)})")
+
+            if len(items) >= self.limit:
+                break
+
+        # ─── پایان ──────────────────────────────────────────
         await self._capture_full_page_screenshot(page, "final")
         await self._save_debug_screenshot(page, "debug_final")
 
         self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
         return items, context, page
 
+    # ═══════════════ بازنویسی متد استخراج برای استفاده از منطق جدید ═══════════════════
+    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], Any, Any]:
+        """
+        نسخه نهایی با رفرش و جستجوی آخرین پست.
+        """
+        return await self._fetch_posts_with_refresh_and_resume()
+
+    # ═══════════════ اجرای اصلی با ذخیره‌ی خلاصه JSON ═══════════════════
     async def run(self):
         """اجرای اصلی با ذخیرهٔ خلاصه JSON."""
         await super().run()
@@ -263,7 +321,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 "start_link": self.start_link,
                 "scroll_direction": self.scroll_direction,
                 "total_posts": len(self._last_items) if hasattr(self, '_last_items') else 0,
-                "debug_mode": True
+                "debug_mode": True,
+                "auto_refresh": True
             }
             with open(debug_json_path, 'w', encoding='utf-8') as f:
                 json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -308,9 +367,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.logger.info("✅ پایان موفقیت‌آمیز دیباگ.")
 
 
+# ═══════════════════ تابع اصلی ═══════════════════
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (هماهنگ با scraper.py)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (اتوماتیک با رفرش)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
@@ -323,6 +383,7 @@ async def main():
             print(f"   start_link: {config.start_link}")
         scroll_dir = getattr(config, 'scroll_direction', 'up')
         print(f"   جهت اسکرول: {'بالا (قدیمی‌تر)' if scroll_dir == 'up' else 'پایین (جدیدتر)'}")
+        print(f"   رفرش خودکار: فعال")
     except FileNotFoundError:
         print(f"❌ فایل {config_path} یافت نشد.")
         sys.exit(1)
