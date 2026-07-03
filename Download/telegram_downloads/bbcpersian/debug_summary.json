@@ -1,6 +1,6 @@
 {
   "channel": "bbcpersian",
-  "limit": 35,
+  "limit": 30,
   "start_link": "",
   "total_posts": 20,
   "debug_mode": true
