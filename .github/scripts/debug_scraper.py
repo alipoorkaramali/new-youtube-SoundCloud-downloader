@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ پیشرفته – حل مشکل شمارش دقیق پست‌ها تا limit
+اسکریپت دیباگ با تاخیر بیشتر برای بارگذاری کامل پست‌ها
 """
 
 import asyncio
@@ -56,7 +56,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
-        page.set_default_timeout(60000)
+        page.set_default_timeout(90000)  # افزایش timeout کلی به ۹۰ ثانیه
         return page, context, playwright
 
     async def _setup_browser(self):
@@ -64,24 +64,22 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return page, context
 
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
-        self.logger.info("🐞 شروع استخراج با حلقه‌ی دقیق...")
+        self.logger.info("🐞 شروع استخراج با تاخیر بیشتر...")
         page = None
         context = None
         try:
             page, context = await self._setup_browser()
 
-            # ساخت آدرس و رفتن به صفحه
             url = self.start_link if self.start_link else f"https://t.me/s/{self.channel}"
             self.logger.info(f"🌐 رفتن به {url}")
             await page.goto(url, wait_until="networkidle", timeout=60000)
-            await page.wait_for_selector("body", timeout=10000)
+            await page.wait_for_selector("body", timeout=15000)
             await self._save_debug_screenshot(page, "initial_page")
 
-            # بررسی وجود پست
             try:
-                await page.wait_for_selector(".tgme_widget_message", timeout=15000)
+                await page.wait_for_selector(".tgme_widget_message", timeout=20000)
             except:
-                self.logger.warning("⚠️ پستی یافت نشد، ذخیره‌ی HTML برای دیباگ")
+                self.logger.warning("⚠️ پستی یافت نشد، ذخیره‌ی HTML")
                 html = await page.content()
                 (self.base_dir / "debug_page_content.html").write_text(html, encoding="utf-8")
                 await self._save_debug_screenshot(page, "no_posts")
@@ -91,7 +89,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             all_items = []
             no_new_count = 0
             scroll_attempts = 0
-            max_scrolls = 200
+            max_scrolls = 300  # افزایش سقف اسکرول
 
             while len(all_items) < self.limit and scroll_attempts < max_scrolls:
                 current_posts = await self._collect_current_posts(page)
@@ -104,18 +102,30 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     no_new_count = 0
                 else:
                     no_new_count += 1
-                    if no_new_count >= 3:
-                        self.logger.info("🚫 سه بار پست جدید نیامد، انتهای کانال.")
+                    self.logger.debug(f"⚠️ تلاش بی‌نتیجه {no_new_count}")
+                    if no_new_count >= 5:  # افزایش به ۵ بار
+                        self.logger.info("🚫 پنج بار پست جدید نیامد، انتهای کانال.")
                         break
 
                 if len(all_items) >= self.limit:
                     break
 
-                # اسکرول هوشمند
+                # ─── اسکرول با تاخیر بیشتر ──────────────────
                 await page.keyboard.press("PageDown")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)  # افزایش مکث
                 await page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(3.0)  # افزایش زمان انتظار اصلی
+
+                # منتظر بارگذاری آخرین پست با timeout بیشتر
+                try:
+                    await page.wait_for_selector(
+                        ".tgme_widget_message:last-child",
+                        timeout=10000,  # افزایش به ۱۰ ثانیه
+                        state="visible"
+                    )
+                except:
+                    pass
+
                 scroll_attempts += 1
 
                 if scroll_attempts % 5 == 0:
@@ -196,7 +206,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
 
 async def main():
-    print("🐞 Telegram Channel Scraper - حالت دیباگ پیشرفته")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ با تاخیر بیشتر")
     config = load_config("config/config.yaml")
     scraper = DebugTelegramChannelScraper(config, debug_screenshots=True)
     try:
