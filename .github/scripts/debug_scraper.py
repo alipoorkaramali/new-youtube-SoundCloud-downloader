@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه اتوماتیک با رفرش و تغییر جهت به DOWN بعد از رفرش
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه اتوماتیک با رفرش و ادامه از آخرین پست
 – کاربر می‌تواند تعیین کند که از پست خاص به بالا (قدیمی‌تر) برود یا پایین (جدیدتر).
 – در صورت نیاز، صفحه رفرش شده و از آخرین پست استخراج‌شده ادامه می‌یابد.
-– پس از رفرش، جهت اسکرول به‌صورت خودکار به DOWN (پایین، جدیدتر) تغییر می‌کند.
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
-– **افزوده‌شده: در صورت شکست اسکرول، اسکرین‌شات با فلش جهت اسکرول و وضعیت "updating"**
 """
 
 import asyncio
@@ -23,10 +21,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config_loader import load_config
 from scraper import TelegramChannelScraper
 from output_generator import OutputGenerator
-
-
-# ═══════════════════ Constants ═══════════════════
-HOME_URL = "https://web.telegram.org/a/"
 
 
 # ═══════════════════ Human-like sleep ═══════════════════
@@ -55,8 +49,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
-        self.logger.info(f"🧭 جهت اسکرول اولیه: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
-        self.logger.info("🔄 پس از رفرش، جهت اسکرول به DOWN (پایین، جدیدتر) تغییر خواهد کرد.")
+        self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
         self._last_items = []
 
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
@@ -79,49 +72,14 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ متد کمکی برای رسم فلش جهت اسکرول روی صفحه ═══════════════
-    async def _draw_scroll_arrow(self, page, direction: str):
-        """یک فلش در گوشه صفحه رسم می‌کند که جهت اسکرول را نشان می‌دهد."""
-        arrow_html = """
-        <div id="scroll-arrow" style="
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 99999;
-            font-size: 60px;
-            color: red;
-            background: rgba(0,0,0,0.7);
-            padding: 10px 15px;
-            border-radius: 50%;
-            border: 3px solid yellow;
-            box-shadow: 0 0 20px rgba(255,0,0,0.8);
-            pointer-events: none;
-            transform: rotate(0deg);
-        ">
-        """
-        if direction == 'up':
-            arrow_html += "&#8593;"  # فلش بالا
-        else:
-            arrow_html += "&#8595;"  # فلش پایین
-        arrow_html += "</div>"
-        await page.evaluate(f"""
-            () => {{
-                const existing = document.getElementById('scroll-arrow');
-                if (existing) existing.remove();
-                document.body.insertAdjacentHTML('beforeend', `{arrow_html}`);
-                setTimeout(() => {{
-                    const el = document.getElementById('scroll-arrow');
-                    if (el) el.style.display = 'none';
-                }}, 5000);
-            }}
-        """)
-
-    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی و اسکرین‌شات در صورت شکست ═══════════════
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی ═══════════════
     async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
         """
         اسکرول هوشمند با سه پله افزایشی.
-        در صورت شکست (عدم تغییر ارتفاع)، یک اسکرین‌شات با فلش جهت اسکرول می‌گیرد.
-        همچنین وضعیت "updating" را بررسی می‌کند.
+        - direction: 'up' یا 'down'
+        - step: مقدار پایه (مثبت)
+        - max_attempts: تعداد پله‌ها
+        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
         """
         old_height = await page.evaluate("document.documentElement.scrollHeight")
         scroll_multipliers = [1, 1.8, 2.8]  # پله‌های افزایشی
@@ -134,52 +92,15 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             # برای down، amount مثبت می‌ماند
 
             self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
-
-            # ─── رسم فلش روی صفحه ──────────────────────────
-            await self._draw_scroll_arrow(page, direction)
-
-            # ─── اسکرول ──────────────────────────────────
             await page.evaluate(f"window.scrollBy(0, {amount})")
             await human_sleep(1.2, 0.3)
 
-            # ─── بررسی تغییر ارتفاع ──────────────────────
             new_height = await page.evaluate("document.documentElement.scrollHeight")
             if new_height != old_height:
                 self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
-                # پاک کردن فلش
-                await page.evaluate("() => { const el = document.getElementById('scroll-arrow'); if(el) el.remove(); }")
                 return True
 
-        # ─── شکست اسکرول: گرفتن اسکرین‌شات با فلش ──────
         self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
-        # بررسی وضعیت "updating"
-        is_updating = False
-        try:
-            updating_el = page.locator("text=Updating").first
-            if await updating_el.count() > 0:
-                is_updating = True
-                self.logger.info("🔄 وضعیت 'Updating' در صفحه مشاهده شد.")
-        except Exception:
-            pass
-
-        # اسکرین‌شات با فلش (فلش قبلاً رسم شده، اما ممکن است محو شده باشد؛ دوباره رسم می‌کنیم)
-        await self._draw_scroll_arrow(page, direction)
-        # کمی صبر تا فلش نمایش داده شود
-        await asyncio.sleep(0.5)
-        # گرفتن اسکرین‌شات
-        timestamp = asyncio.get_event_loop().time()
-        screenshot_name = f"scroll_failed_{direction}_{int(timestamp)}"
-        await self._save_debug_screenshot(page, screenshot_name)
-        self.logger.info(f"📸 اسکرین‌شات شکست اسکرول ذخیره شد: {screenshot_name}")
-
-        # پاک کردن فلش
-        await page.evaluate("() => { const el = document.getElementById('scroll-arrow'); if(el) el.remove(); }")
-
-        if is_updating:
-            self.logger.info("🔍 دلیل شکست: صفحه در حال به‌روزرسانی (Updating) است.")
-        else:
-            self.logger.info("🔍 دلیل شکست: محتوای جدیدی برای بارگذاری وجود ندارد (احتمالاً به انتها رسیده‌ایم).")
-
         return False
 
     # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
@@ -223,24 +144,20 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         clean_channel = channel.lstrip('@')
         return f"https://web.telegram.org/k/#@{clean_channel}/{msg_id}"
 
-    # ═══════════════ یک دور اسکرول جهت‌دار با پارامتر direction ═══════════════════
-    async def _single_scrape_attempt_with_direction(self, page, seen_ids: set, direction: Optional[str] = None) -> Tuple[List[Dict], int]:
+    # ═══════════════ یک دور اسکرول جهت‌دار ═══════════════════
+    async def _single_scrape_attempt_with_direction(self, page, seen_ids: set) -> Tuple[List[Dict], int]:
         """
         یک دور اسکرول با جهت انتخابی (up/down) تا زمانی که پست جدیدی اضافه نشود.
-        اگر direction ارسال نشود، از self.scroll_direction استفاده می‌کند.
         برمی‌گرداند: (لیست آیتم‌های جدید, تعداد آیتم‌های جدید)
         """
-        if direction is None:
-            direction = self.scroll_direction
-
-        self.logger.info(f"🔄 اسکرول جهت‌دار با {direction}...")
+        self.logger.info(f"🔄 اسکرول جهت‌دار با {self.scroll_direction}...")
         new_items = []
         no_new_attempts = 0
         max_attempts = 6
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            # اسکرول هوشمند (که در صورت شکست اسکرین‌شات می‌گیرد)
-            scrolled = await self._smart_scroll(page, direction, step=1200, max_attempts=3)
+            # اسکرول هوشمند
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
             if not scrolled:
                 no_new_attempts += 1
                 self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
@@ -266,11 +183,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         return new_items, len(new_items)
 
-    # ═══════════════ منطق اصلی با رفرش و ادامه از آخرین پست (با تغییر جهت به DOWN) ═══════════════════
+    # ═══════════════ منطق اصلی با رفرش و ادامه از آخرین پست ═══════════════════
     async def _fetch_posts_with_refresh_and_resume(self) -> tuple[List[Dict], Any, Any]:
         """
         استخراج پست‌ها با اسکرول اولیه، سپس در صورت نیاز رفرش و ادامه از آخرین پست.
-        پس از رفرش، از متد _navigate_to_start_link برای جستجوی لینک آخرین پست استفاده می‌کند.
         """
         self.logger.info("🐞 شروع استخراج با رفرش و ادامه از آخرین پست...")
 
@@ -298,9 +214,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         max_refresh_attempts = 3
         refresh_count = 0
 
-        # ─── اسکرول اولیه با جهت انتخابی ──────────────────
+        # ─── اسکرول اولیه ──────────────────────────────────
         self.logger.info("🔄 مرحله ۱: اسکرول اولیه...")
-        new_items, added = await self._single_scrape_attempt_with_direction(page, seen_ids, self.scroll_direction)
+        new_items, added = await self._single_scrape_attempt_with_direction(page, seen_ids)
         if new_items:
             items.extend(new_items)
             if new_items:
@@ -316,21 +232,22 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             refresh_count += 1
             self.logger.info(f"🔄 مرحله {refresh_count}: رفرش و ادامه از آخرین پست...")
 
+            # ذخیره آخرین ID برای جستجو
             if not last_known_id:
                 self.logger.warning("⚠️ آخرین ID مشخص نیست، از رفرش معمولی استفاده می‌شود.")
                 await page.reload(wait_until="domcontentloaded")
                 await asyncio.sleep(3)
             else:
-                # ── رفرش و جستجوی لینک با متد _navigate_to_start_link ──
+                # ── رفرش و جستجوی لینک ──────────────────
                 self.logger.info(f"🔍 جستجوی لینک آخرین پست: {last_known_id}")
 
-                # بستن context قبلی
+                # بستن context قبلی و ایجاد دوباره (برای شبیه‌سازی ورود مجدد)
                 if context:
                     await context.close()
                     context = None
                     page = None
 
-                # ایجاد context جدید
+                # ایجاد context جدید (مانند والد)
                 from playwright.async_api import async_playwright
                 p = await async_playwright().start()
                 context = await p.chromium.launch_persistent_context(
@@ -342,33 +259,32 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 )
                 page = await context.new_page()
 
-                # رفتن به صفحه اصلی تلگرام
-                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(2)
-
-                # ── تنظیم start_link و target_msg_id ──
-                # ذخیره start_link قبلی برای بازگردانی بعداً
-                original_start_link = self.start_link
-                original_target_msg_id = self.target_msg_id
-
-                self.start_link = self._build_direct_link(self.channel, last_known_id)
-                self.target_msg_id = last_known_id
-
-                # ── جستجو و کلیک ──
-                entered = await self._navigate_to_start_link(page)
-                if not entered:
-                    self.logger.warning("⚠️ نتوانستیم به لینک آخرین پست برویم. از روش fallback استفاده می‌شود.")
+                # رفتن به لینک آخرین پست
+                direct_link = self._build_direct_link(self.channel, last_known_id)
+                self.logger.info(f"🔗 لینک مستقیم: {direct_link}")
+                try:
+                    await page.goto(direct_link, wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(3)
+                    # اسکرول به پست مورد نظر
+                    await page.evaluate(f"""
+                        () => {{
+                            const post = document.querySelector('[data-msg-id="{last_known_id}"]');
+                            if (post) {{
+                                post.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                            }}
+                        }}
+                    """)
+                    await asyncio.sleep(2)
+                    self.logger.info("✅ به لینک مستقیم رفتیم و اسکرول انجام شد.")
+                    await self._save_debug_screenshot(page, f"after_refresh_{refresh_count}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ خطا در رفتن به لینک مستقیم: {e}")
+                    # Fallback: جستجوی کانال
                     await self._search_and_enter_channel(page)
 
-                # بازگردانی start_link (برای جلوگیری از تداخل)
-                self.start_link = original_start_link
-                self.target_msg_id = original_target_msg_id
-
-                await self._save_debug_screenshot(page, f"after_refresh_{refresh_count}")
-
-            # ── اسکرول مجدد با جهت DOWN (پایین، جدیدتر) ────
-            self.logger.info("🔄 اسکرول مجدد با جهت DOWN (پایین، جدیدتر)...")
-            new_items_round, added_round = await self._single_scrape_attempt_with_direction(page, seen_ids, direction='down')
+            # ── اسکرول مجدد با جهت ──────────────────────────
+            self.logger.info(f"🔄 اسکرول مجدد با جهت {self.scroll_direction}...")
+            new_items_round, added_round = await self._single_scrape_attempt_with_direction(page, seen_ids)
             if new_items_round:
                 items.extend(new_items_round)
                 if new_items_round:
@@ -406,8 +322,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 "scroll_direction": self.scroll_direction,
                 "total_posts": len(self._last_items) if hasattr(self, '_last_items') else 0,
                 "debug_mode": True,
-                "auto_refresh": True,
-                "refresh_direction": "down"  # جهت پس از رفرش
+                "auto_refresh": True
             }
             with open(debug_json_path, 'w', encoding='utf-8') as f:
                 json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -455,7 +370,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 # ═══════════════════ تابع اصلی ═══════════════════
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (رفرش + تغییر جهت به DOWN)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (اتوماتیک با رفرش)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
@@ -467,10 +382,8 @@ async def main():
         if config.start_link:
             print(f"   start_link: {config.start_link}")
         scroll_dir = getattr(config, 'scroll_direction', 'up')
-        print(f"   جهت اسکرول اولیه: {'بالا (قدیمی‌تر)' if scroll_dir == 'up' else 'پایین (جدیدتر)'}")
+        print(f"   جهت اسکرول: {'بالا (قدیمی‌تر)' if scroll_dir == 'up' else 'پایین (جدیدتر)'}")
         print(f"   رفرش خودکار: فعال")
-        print(f"   جهت پس از رفرش: پایین (جدیدتر - DOWN)")
-        print(f"   اسکرین‌شات در صورت شکست اسکرول: فعال")
     except FileNotFoundError:
         print(f"❌ فایل {config_path} یافت نشد.")
         sys.exit(1)
