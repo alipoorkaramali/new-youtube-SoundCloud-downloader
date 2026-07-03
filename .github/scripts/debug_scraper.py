@@ -97,74 +97,87 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     # ═══════════════════ بازنویسی متد استخراج با حلقه اسکرول هوشمند ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         """
-        استخراج پست‌ها با حلقه اسکرول هوشمند که از _wait_for_new_posts استفاده می‌کند.
-        از متدهای _setup_browser و _navigate والد استفاده می‌کند (بدون فراخوانی super()._fetch_posts...).
+        استراتژی: اول والد را اجرا کن، اگر کافی نبود، اسکرول هوشمند اضافه کن.
         """
         self.logger.info("🐞 شروع استخراج پست‌ها با حلقه اسکرول هوشمند...")
 
-        browser = None
+        items = []
         context = None
         page = None
-        items = []
+        seen_ids = set()
 
         try:
-            # ========== راه‌اندازی مرورگر و صفحه ==========
-            browser, context, page = await self._setup_browser()
+            # ۱. اجرای متد والد (setup + استخراج اولیه)
+            parent_result = await super()._fetch_posts_from_telegram()
+            if parent_result:
+                items, context, page = parent_result
+                self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
+
             if not page:
-                raise Exception("صفحه ایجاد نشد")
+                self.logger.error("❌ صفحه از والد دریافت نشد.")
+                return [], None, None
 
-            # ========== هدایت به کانال ==========
-            await self._navigate(page)
+            # اگر والد به اندازه کافی پست آورده، تمام
+            if len(items) >= self.limit:
+                await self._save_debug_screenshot(page, "final_from_parent")
+                return items, context, page
 
-            # ========== اسکرین‌شات اولیه ==========
+            seen_ids = {item.get('id') for item in items if item.get('id')}
             await self._save_debug_screenshot(page, "initial_load")
 
-            # ========== جمع‌آوری پست‌ها با حلقه اسکرول ==========
+            # ۲. حلقه اسکرول اضافی
             no_new_attempts = 0
-            max_no_new_attempts = 4  # بعد از ۴ بار عدم تغییر، متوقف می‌شویم
+            max_no_new_attempts = 4
 
             while len(items) < self.limit:
-                # استخراج تمام پست‌های لود شده (فرض می‌کنیم _extract_items همه را برمی‌گرداند)
-                current_items = await self._extract_items(page)
-                if current_items:
-                    # اگر لیست کامل برگردانده شود، می‌توانیم جایگزین کنیم
-                    items = current_items
-                    self.logger.info(f"📥 تعداد پست‌های استخراج‌شده: {len(items)}")
+                # استخراج مجدد
+                try:
+                    current_items = await self._extract_items(page)
+                except (AttributeError, Exception) as e:
+                    self.logger.warning(f"⚠️ _extract_items در دسترس نبود: {e}")
+                    current_items = []
 
-                # اگر به حد نصاب رسیدیم، خارج شو
+                # اضافه کردن جدیدها
+                added = 0
+                for item in current_items:
+                    item_id = item.get('id')
+                    if item_id and item_id not in seen_ids:
+                        seen_ids.add(item_id)
+                        items.append(item)
+                        added += 1
+
+                self.logger.info(f"📊 وضعیت: {len(items)} پست (در این دور {added} جدید)")
+
                 if len(items) >= self.limit:
                     break
 
-                # اسکرول به پایین
+                # اسکرول
                 await page.evaluate("window.scrollBy(0, window.innerHeight * 1.8)")
-                await page.wait_for_timeout(700)
+                await page.wait_for_timeout(800)
 
-                # صبر هوشمند برای لود شدن پست‌های جدید
+                # صبر هوشمند
                 if await self._wait_for_new_posts(page, len(items), timeout=14000):
-                    no_new_attempts = 0  # ریست شمارنده
+                    no_new_attempts = 0
                     await self._save_debug_screenshot(page, f"after_load_{len(items)}")
                 else:
                     no_new_attempts += 1
-                    self.logger.info(f"🔄 تلاش ناموفق {no_new_attempts}/{max_no_new_attempts}")
                     if no_new_attempts >= max_no_new_attempts:
-                        self.logger.info("🚫 چند بار تلاش بی‌نتیجه – احتمالاً به انتهای کانال رسیدیم.")
+                        self.logger.info("🚫 به انتهای کانال رسیدیم (یا لود متوقف شد).")
                         break
-                    await page.wait_for_timeout(2500)  # صبر بیشتر قبل از تلاش مجدد
+                    await page.wait_for_timeout(3000)
 
-            # ========== اسکرین‌شات نهایی ==========
             await self._save_debug_screenshot(page, "final_debug")
-            self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
-
             return items, context, page
 
         except Exception as e:
-            self.logger.error(f"❌ خطا در استخراج دیباگ: {e}", exc_info=True)
+            self.logger.error(f"❌ خطا در استخراج: {e}", exc_info=True)
             if page:
                 await self._save_debug_screenshot(page, "error_debug")
-            # بستن context در صورت وجود
-            if context:
-                await context.close()
-            return [], context, page
+            return items, context, page
+
+        finally:
+            # context را در اینجا نمی‌بندیم، چون در _run_impl مدیریت می‌شود
+            pass
 
     async def run(self):
         """اجرای اصلی با ذخیرهٔ خروجی JSON اضافی برای دیباگ."""
