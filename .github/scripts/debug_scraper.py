@@ -7,6 +7,7 @@
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
+– **افزوده‌شده: در صورت شکست اسکرول، اسکرین‌شات با فلش جهت اسکرول و وضعیت "updating"**
 """
 
 import asyncio
@@ -72,14 +73,49 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی ═══════════════
+    # ═══════════════ متد کمکی برای رسم فلش جهت اسکرول روی صفحه ═══════════════
+    async def _draw_scroll_arrow(self, page, direction: str):
+        """یک فلش در گوشه صفحه رسم می‌کند که جهت اسکرول را نشان می‌دهد."""
+        arrow_html = """
+        <div id="scroll-arrow" style="
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 99999;
+            font-size: 60px;
+            color: red;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 50%;
+            border: 3px solid yellow;
+            box-shadow: 0 0 20px rgba(255,0,0,0.8);
+            pointer-events: none;
+            transform: rotate(0deg);
+        ">
+        """
+        if direction == 'up':
+            arrow_html += "&#8593;"  # فلش بالا
+        else:
+            arrow_html += "&#8595;"  # فلش پایین
+        arrow_html += "</div>"
+        await page.evaluate(f"""
+            () => {{
+                const existing = document.getElementById('scroll-arrow');
+                if (existing) existing.remove();
+                document.body.insertAdjacentHTML('beforeend', `{arrow_html}`);
+                setTimeout(() => {{
+                    const el = document.getElementById('scroll-arrow');
+                    if (el) el.style.display = 'none';
+                }}, 5000);
+            }}
+        """)
+
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی و اسکرین‌شات در صورت شکست ═══════════════
     async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
         """
         اسکرول هوشمند با سه پله افزایشی.
-        - direction: 'up' یا 'down'
-        - step: مقدار پایه (مثبت)
-        - max_attempts: تعداد پله‌ها
-        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
+        در صورت شکست (عدم تغییر ارتفاع)، یک اسکرین‌شات با فلش جهت اسکرول می‌گیرد.
+        همچنین وضعیت "updating" را بررسی می‌کند.
         """
         old_height = await page.evaluate("document.documentElement.scrollHeight")
         scroll_multipliers = [1, 1.8, 2.8]  # پله‌های افزایشی
@@ -92,15 +128,52 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             # برای down، amount مثبت می‌ماند
 
             self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
+
+            # ─── رسم فلش روی صفحه ──────────────────────────
+            await self._draw_scroll_arrow(page, direction)
+
+            # ─── اسکرول ──────────────────────────────────
             await page.evaluate(f"window.scrollBy(0, {amount})")
             await human_sleep(1.2, 0.3)
 
+            # ─── بررسی تغییر ارتفاع ──────────────────────
             new_height = await page.evaluate("document.documentElement.scrollHeight")
             if new_height != old_height:
                 self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
+                # پاک کردن فلش
+                await page.evaluate("() => { const el = document.getElementById('scroll-arrow'); if(el) el.remove(); }")
                 return True
 
+        # ─── شکست اسکرول: گرفتن اسکرین‌شات با فلش ──────
         self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
+        # بررسی وضعیت "updating"
+        is_updating = False
+        try:
+            updating_el = page.locator("text=Updating").first
+            if await updating_el.count() > 0:
+                is_updating = True
+                self.logger.info("🔄 وضعیت 'Updating' در صفحه مشاهده شد.")
+        except Exception:
+            pass
+
+        # اسکرین‌شات با فلش (فلش قبلاً رسم شده، اما ممکن است محو شده باشد؛ دوباره رسم می‌کنیم)
+        await self._draw_scroll_arrow(page, direction)
+        # کمی صبر تا فلش نمایش داده شود
+        await asyncio.sleep(0.5)
+        # گرفتن اسکرین‌شات
+        timestamp = asyncio.get_event_loop().time()
+        screenshot_name = f"scroll_failed_{direction}_{int(timestamp)}"
+        await self._save_debug_screenshot(page, screenshot_name)
+        self.logger.info(f"📸 اسکرین‌شات شکست اسکرول ذخیره شد: {screenshot_name}")
+
+        # پاک کردن فلش
+        await page.evaluate("() => { const el = document.getElementById('scroll-arrow'); if(el) el.remove(); }")
+
+        if is_updating:
+            self.logger.info("🔍 دلیل شکست: صفحه در حال به‌روزرسانی (Updating) است.")
+        else:
+            self.logger.info("🔍 دلیل شکست: محتوای جدیدی برای بارگذاری وجود ندارد (احتمالاً به انتها رسیده‌ایم).")
+
         return False
 
     # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
@@ -156,7 +229,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         max_attempts = 6
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            # اسکرول هوشمند
+            # اسکرول هوشمند (که در صورت شکست اسکرین‌شات می‌گیرد)
             scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
             if not scrolled:
                 no_new_attempts += 1
@@ -370,7 +443,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 # ═══════════════════ تابع اصلی ═══════════════════
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (اتوماتیک با رفرش)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (اتوماتیک با رفرش و تشخیص شکست)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
@@ -384,6 +457,7 @@ async def main():
         scroll_dir = getattr(config, 'scroll_direction', 'up')
         print(f"   جهت اسکرول: {'بالا (قدیمی‌تر)' if scroll_dir == 'up' else 'پایین (جدیدتر)'}")
         print(f"   رفرش خودکار: فعال")
+        print(f"   اسکرین‌شات در صورت شکست اسکرول: فعال")
     except FileNotFoundError:
         print(f"❌ فایل {config_path} یافت نشد.")
         sys.exit(1)
