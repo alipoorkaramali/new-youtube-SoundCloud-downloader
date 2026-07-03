@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه اتوماتیک با رفرش و ادامه از آخرین پست
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه اتوماتیک با رفرش و تغییر جهت به DOWN بعد از رفرش
 – کاربر می‌تواند تعیین کند که از پست خاص به بالا (قدیمی‌تر) برود یا پایین (جدیدتر).
 – در صورت نیاز، صفحه رفرش شده و از آخرین پست استخراج‌شده ادامه می‌یابد.
+– پس از رفرش، جهت اسکرول به‌صورت خودکار به DOWN (پایین، جدیدتر) تغییر می‌کند.
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
@@ -50,7 +51,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
-        self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
+        self.logger.info(f"🧭 جهت اسکرول اولیه: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
+        self.logger.info("🔄 پس از رفرش، جهت اسکرول به DOWN (پایین، جدیدتر) تغییر خواهد کرد.")
         self._last_items = []
 
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
@@ -217,20 +219,24 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         clean_channel = channel.lstrip('@')
         return f"https://web.telegram.org/k/#@{clean_channel}/{msg_id}"
 
-    # ═══════════════ یک دور اسکرول جهت‌دار ═══════════════════
-    async def _single_scrape_attempt_with_direction(self, page, seen_ids: set) -> Tuple[List[Dict], int]:
+    # ═══════════════ یک دور اسکرول جهت‌دار با پارامتر direction ═══════════════════
+    async def _single_scrape_attempt_with_direction(self, page, seen_ids: set, direction: Optional[str] = None) -> Tuple[List[Dict], int]:
         """
         یک دور اسکرول با جهت انتخابی (up/down) تا زمانی که پست جدیدی اضافه نشود.
+        اگر direction ارسال نشود، از self.scroll_direction استفاده می‌کند.
         برمی‌گرداند: (لیست آیتم‌های جدید, تعداد آیتم‌های جدید)
         """
-        self.logger.info(f"🔄 اسکرول جهت‌دار با {self.scroll_direction}...")
+        if direction is None:
+            direction = self.scroll_direction
+
+        self.logger.info(f"🔄 اسکرول جهت‌دار با {direction}...")
         new_items = []
         no_new_attempts = 0
         max_attempts = 6
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
             # اسکرول هوشمند (که در صورت شکست اسکرین‌شات می‌گیرد)
-            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
+            scrolled = await self._smart_scroll(page, direction, step=1200, max_attempts=3)
             if not scrolled:
                 no_new_attempts += 1
                 self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
@@ -256,10 +262,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         return new_items, len(new_items)
 
-    # ═══════════════ منطق اصلی با رفرش و ادامه از آخرین پست ═══════════════════
+    # ═══════════════ منطق اصلی با رفرش و ادامه از آخرین پست (با تغییر جهت به DOWN) ═══════════════════
     async def _fetch_posts_with_refresh_and_resume(self) -> tuple[List[Dict], Any, Any]:
         """
         استخراج پست‌ها با اسکرول اولیه، سپس در صورت نیاز رفرش و ادامه از آخرین پست.
+        پس از رفرش، جهت اسکرول به DOWN (پایین، جدیدتر) تغییر می‌کند.
         """
         self.logger.info("🐞 شروع استخراج با رفرش و ادامه از آخرین پست...")
 
@@ -287,9 +294,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         max_refresh_attempts = 3
         refresh_count = 0
 
-        # ─── اسکرول اولیه ──────────────────────────────────
+        # ─── اسکرول اولیه با جهت انتخابی ──────────────────
         self.logger.info("🔄 مرحله ۱: اسکرول اولیه...")
-        new_items, added = await self._single_scrape_attempt_with_direction(page, seen_ids)
+        new_items, added = await self._single_scrape_attempt_with_direction(page, seen_ids, self.scroll_direction)
         if new_items:
             items.extend(new_items)
             if new_items:
@@ -355,9 +362,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     # Fallback: جستجوی کانال
                     await self._search_and_enter_channel(page)
 
-            # ── اسکرول مجدد با جهت ──────────────────────────
-            self.logger.info(f"🔄 اسکرول مجدد با جهت {self.scroll_direction}...")
-            new_items_round, added_round = await self._single_scrape_attempt_with_direction(page, seen_ids)
+            # ── اسکرول مجدد با جهت DOWN (پایین، جدیدتر) ────
+            self.logger.info("🔄 اسکرول مجدد با جهت DOWN (پایین، جدیدتر)...")
+            new_items_round, added_round = await self._single_scrape_attempt_with_direction(page, seen_ids, direction='down')
             if new_items_round:
                 items.extend(new_items_round)
                 if new_items_round:
@@ -395,7 +402,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 "scroll_direction": self.scroll_direction,
                 "total_posts": len(self._last_items) if hasattr(self, '_last_items') else 0,
                 "debug_mode": True,
-                "auto_refresh": True
+                "auto_refresh": True,
+                "refresh_direction": "down"  # جهت پس از رفرش
             }
             with open(debug_json_path, 'w', encoding='utf-8') as f:
                 json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -443,7 +451,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 # ═══════════════════ تابع اصلی ═══════════════════
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (اتوماتیک با رفرش و تشخیص شکست)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (رفرش + تغییر جهت به DOWN)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
@@ -455,8 +463,9 @@ async def main():
         if config.start_link:
             print(f"   start_link: {config.start_link}")
         scroll_dir = getattr(config, 'scroll_direction', 'up')
-        print(f"   جهت اسکرول: {'بالا (قدیمی‌تر)' if scroll_dir == 'up' else 'پایین (جدیدتر)'}")
+        print(f"   جهت اسکرول اولیه: {'بالا (قدیمی‌تر)' if scroll_dir == 'up' else 'پایین (جدیدتر)'}")
         print(f"   رفرش خودکار: فعال")
+        print(f"   جهت پس از رفرش: پایین (جدیدتر - DOWN)")
         print(f"   اسکرین‌شات در صورت شکست اسکرول: فعال")
     except FileNotFoundError:
         print(f"❌ فایل {config_path} یافت نشد.")
