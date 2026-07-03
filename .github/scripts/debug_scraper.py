@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اسکریپت دیباگ برای Telegram Channel Scraper – نسخه نهایی با رفرش صفحه و ادامه از آخرین پست
+اسکریپت دیباگ برای Telegram Channel Scraper – نسخه نهایی با لینک مستقیم و اسکرول قوی‌تر و اسکرین‌شات کامل صفحه
 – تمام مراحل اسکرپینگ (جستجو، ورود، اسکرول، استخراج) را انجام می‌دهد.
 – از همان تنظیمات config.yaml استفاده می‌کند (پشتیبانی از start_link).
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های بیشتری برای تحلیل مراحل ذخیره می‌کند.
 – خروجی JSON را برای بررسی داده‌های استخراج‌شده ذخیره می‌کند.
-– **نسخه نهایی با قابلیت رفرش صفحه و ادامه از آخرین پست (بدون نیاز به _setup_browser)**
+– **نسخه نهایی با قابلیت لینک مستقیم به آخرین پست، اسکرول قوی‌تر، و اسکرین‌شات کامل صفحه برای نمایش ترتیب پست‌ها**
 """
 
 import asyncio
@@ -25,7 +25,7 @@ from output_generator import OutputGenerator
 
 class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
-    نسخهٔ دیباگ اسکرپر – با قابلیت رفرش صفحه و ادامه از آخرین پست.
+    نسخهٔ دیباگ اسکرپر – با قابلیت لینک مستقیم، اسکرول قوی‌تر و اسکرین‌شات کامل صفحه.
     """
 
     def __init__(self, config, debug_screenshots: bool = True):
@@ -121,15 +121,16 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             }
         """)
 
-    # ═══════════════════ یک دور استخراج با تلاش‌های بیشتر ═══════════════════
+    # ═══════════════════ یک دور استخراج با پارامتر اسکرول قابل تنظیم ═══════════════════
     async def _single_scrape_attempt(
         self,
         page,
         seen_ids: set,
-        max_attempts: int = 10
+        max_attempts: int = 10,
+        scroll_amount: int = -2500  # مقدار اسکرول به بالا (منفی)
     ) -> Tuple[List[Dict], int]:
-        """یک دور کامل استخراج با اسکرول هوشمند و تلاش‌های بیشتر."""
-        self.logger.info(f"🔄 شروع یک دور استخراج (با {max_attempts} تلاش)...")
+        """یک دور کامل استخراج با اسکرول هوشمند و تلاش‌های بیشتر، با امکان تنظیم مقدار اسکرول."""
+        self.logger.info(f"🔄 شروع یک دور استخراج (با {max_attempts} تلاش، اسکرول {scroll_amount}px)...")
         new_items = []
         no_new_attempts = 0
 
@@ -154,20 +155,59 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             if len(seen_ids) >= self.limit or no_new_attempts >= max_attempts:
                 break
 
-            # اسکرول با فواصل بیشتر
-            await page.evaluate("window.scrollBy(0, window.innerHeight * 2.5)")
+            # اسکرول با مقدار مشخص‌شده
+            await page.evaluate(f"window.scrollBy(0, {scroll_amount})")
             await page.wait_for_timeout(2000)
             await self._wait_for_new_posts(page, len(seen_ids), timeout=30000)
 
         self.logger.info(f"🏁 پایان دور: {len(new_items)} پست جدید")
         return new_items, len(new_items)
 
-    # ═══════════════════ متد استخراج با رفرش صفحه و ادامه از آخرین پست ═══════════════════
+    # ═══════════════════ ساخت لینک مستقیم به یک پیام ═══════════════════
+    def _build_direct_link(self, channel: str, msg_id: str) -> str:
+        """
+        ساخت لینک مستقیم به یک پیام در تلگرام وب.
+        - اگر msg_id عددی باشد، لینک با شناسه پیام ساخته می‌شود.
+        - در غیر این صورت، فقط به کانال هدایت می‌شود.
+        """
+        if not msg_id or not msg_id.isdigit():
+            clean_channel = channel.lstrip('@')
+            return f"https://web.telegram.org/k/#@{clean_channel}"
+        clean_channel = channel.lstrip('@')
+        return f"https://web.telegram.org/k/#@{clean_channel}/{msg_id}"
+
+    # ═══════════════════ اسکرین‌شات کامل صفحه برای نمایش ترتیب پست‌ها ═══════════════════
+    async def _capture_post_screenshots(self, page, items: List[Dict]):
+        """
+        Override متد والد: به جای اسکرین‌شات تکی از هر پست، یک اسکرین‌شات کامل از کل صفحه می‌گیرد
+        تا ترتیب پست‌ها به‌خوبی مشخص شود.
+        """
+        self.logger.info(f"📸 گرفتن اسکرین‌شات کامل از صفحه برای نمایش ترتیب {len(items)} پست...")
+        try:
+            # اسکرول به بالای صفحه
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+
+            # گرفتن اسکرین‌شات کامل
+            safe_channel = self._sanitize_filename(self.channel)
+            path = self.screenshots_dir / f"{safe_channel}_full_page_posts.png"
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات کامل صفحه ذخیره شد: {path.name}")
+
+            # همچنین برای اطمینان، چند اسکرین‌شات از بخش‌های مختلف صفحه بگیریم (اختیاری)
+            # می‌توانیم اسکرول به پایین و اسکرین‌شات از بخش‌های میانی بگیریم
+            # اما برای سادگی، همین یک اسکرین‌شات کامل کافی است.
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل صفحه: {e}")
+            # در صورت خطا، به روش والد برگردیم (اسکرین‌شات تکی)
+            await super()._capture_post_screenshots(page, items)
+
+    # ═══════════════════ متد استخراج با لینک مستقیم و اسکرول قوی‌تر ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         """
-        استراتژی: والد + یک دور اسکرول، سپس در صورت نیاز رفرش صفحه و ادامه از آخرین پست.
+        استراتژی: والد + یک دور اسکرول، سپس در صورت نیاز لینک مستقیم به آخرین پست و اسکرول قوی‌تر.
         """
-        self.logger.info("🐞 شروع استخراج با رفرش صفحه و ادامه از آخرین پست...")
+        self.logger.info("🐞 شروع استخراج با لینک مستقیم و اسکرول قوی‌تر...")
 
         # ۱. اجرای والد
         parent_result = await super()._fetch_posts_from_telegram()
@@ -184,6 +224,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         if len(items) >= self.limit:
             self.logger.info(f"✅ تعداد کافی پست از قبل وجود دارد.")
+            await self._capture_post_screenshots(page, items)
             return items, context, page
 
         seen_ids = {item.get('id') for item in items if item.get('id')}
@@ -191,26 +232,27 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         await self._save_debug_screenshot(page, "initial_load")
 
-        # ۲. دور اول اسکرول
-        new_items, added = await self._single_scrape_attempt(page, seen_ids, max_attempts=10)
+        # ۲. دور اول اسکرول با مقدار پیش‌فرض (-2500)
+        new_items, added = await self._single_scrape_attempt(page, seen_ids, max_attempts=10, scroll_amount=-2500)
         if new_items:
             items.extend(new_items)
             last_known_id = new_items[-1].get('id') or last_known_id
 
         if len(items) >= self.limit:
+            await self._capture_post_screenshots(page, items)
             await self._save_debug_screenshot(page, "final_debug")
             return items, context, page
 
-        # ۳. رفرش صفحه و ادامه از آخرین پست
-        self.logger.info("🔄 رفرش صفحه و ادامه از آخرین پست...")
+        # ۳. استفاده از لینک مستقیم به آخرین پست به جای رفرش
+        self.logger.info("🔄 رفتن به لینک مستقیم آخرین پست و ادامه از آنجا...")
         try:
-            # رفرش صفحه با صبر بیشتر
-            await page.reload(wait_until="domcontentloaded")
-            await page.wait_for_timeout(5000)  # ۵ ثانیه صبر برای بارگذاری کامل
-
-            # اسکرول به آخرین پست شناخته‌شده
             if last_known_id:
-                self.logger.info(f"🔍 اسکرول به پست با شناسه {last_known_id}")
+                direct_link = self._build_direct_link(self.channel, last_known_id)
+                self.logger.info(f"🔗 لینک مستقیم: {direct_link}")
+                await page.goto(direct_link, wait_until="domcontentloaded")
+                await page.wait_for_timeout(5000)
+
+                # اسکرول به پست مورد نظر
                 await page.evaluate(f"""
                     () => {{
                         const post = document.querySelector('[data-msg-id="{last_known_id}"]');
@@ -220,21 +262,41 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     }}
                 """)
                 await page.wait_for_timeout(3000)
-                self.logger.info("✅ اسکرول به آخرین پست انجام شد")
-                await self._save_debug_screenshot(page, "after_scroll_to_last")
-            else:
-                self.logger.warning("⚠️ هیچ شناسه‌ای برای اسکرول وجود ندارد.")
+                self.logger.info("✅ به لینک مستقیم رفتیم و اسکرول انجام شد.")
+                await self._save_debug_screenshot(page, "after_direct_link")
 
-            # ۴. دور دوم اسکرول بعد از رفرش (با ۱۰ تلاش)
-            self.logger.info("🔄 شروع دور دوم استخراج بعد از رفرش...")
-            new_items_2, added_2 = await self._single_scrape_attempt(page, seen_ids, max_attempts=10)
+                # ۴. دور دوم استخراج با اسکرول قوی‌تر (-3500)
+                self.logger.info("🔄 شروع دور دوم استخراج بعد از لینک مستقیم...")
+                new_items_2, added_2 = await self._single_scrape_attempt(
+                    page,
+                    seen_ids,
+                    max_attempts=10,
+                    scroll_amount=-3500
+                )
+                if new_items_2:
+                    items.extend(new_items_2)
+                    self.logger.info(f"📈 در دور دوم {added_2} پست جدید اضافه شد (مجموع: {len(items)})")
+            else:
+                self.logger.warning("⚠️ شناسه آخرین پست موجود نیست، رفرش معمولی انجام می‌شود.")
+                await page.reload(wait_until="domcontentloaded")
+                await page.wait_for_timeout(5000)
+                new_items_2, added_2 = await self._single_scrape_attempt(page, seen_ids, max_attempts=10, scroll_amount=-2500)
+                if new_items_2:
+                    items.extend(new_items_2)
+                    self.logger.info(f"📈 در دور دوم {added_2} پست جدید اضافه شد (مجموع: {len(items)})")
+        except Exception as e:
+            self.logger.error(f"❌ خطا در رفتن به لینک مستقیم: {e}", exc_info=True)
+            # Fallback به رفرش
+            self.logger.info("🔄 Fallback: رفرش صفحه...")
+            await page.reload(wait_until="domcontentloaded")
+            await page.wait_for_timeout(5000)
+            new_items_2, added_2 = await self._single_scrape_attempt(page, seen_ids, max_attempts=10, scroll_amount=-2500)
             if new_items_2:
                 items.extend(new_items_2)
                 self.logger.info(f"📈 در دور دوم {added_2} پست جدید اضافه شد (مجموع: {len(items)})")
 
-        except Exception as e:
-            self.logger.error(f"❌ خطا در رفرش صفحه: {e}", exc_info=True)
-
+        # اسکرین‌شات کامل صفحه برای نمایش ترتیب پست‌ها
+        await self._capture_post_screenshots(page, items)
         await self._save_debug_screenshot(page, "final_debug")
         self.logger.info(f"🐞 استخراج نهایی: {len(items)} پست")
         return items, context, page
@@ -297,7 +359,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
 async def main():
     print("🐞 ========================================")
-    print("🐞 Telegram Channel Scraper - حالت دیباگ (رفرش + ادامه)")
+    print("🐞 Telegram Channel Scraper - حالت دیباگ (لینک مستقیم + اسکرول قوی + اسکرین‌شات کامل)")
     print("🐞 ========================================")
 
     config_path = "config/config.yaml"
