@@ -2,7 +2,7 @@
   "channel": "IranintlTV",
   "limit": 5,
   "start_link": "https://t.me/IranintlTV/344921",
-  "scroll_direction": "up",
+  "scroll_direction": "down",
   "total_posts": 5,
   "debug_mode": true,
   "auto_refresh": true
