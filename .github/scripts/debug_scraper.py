@@ -200,6 +200,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     await human_sleep(1, 0.2)
                 self.logger.info("   ✅ به بالای صفحه رفتیم.")
 
+        # ─── تنظیم ترتیب پیمایش پست‌ها بر اساس جهت ──────────────────────
+        # این بخش توسط خود `scraper.py` مدیریت می‌شود، اما در اینجا نیز برای اطمینان،
+        # ما از متد `super()._fetch_posts_from_telegram()` استفاده کرده‌ایم که خودش
+        # از `scroller` استفاده می‌کند. بنابراین نیازی به تغییر نیست.
+
         # ۲. اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر
         seen_ids = {item.get('id') for item in items if item.get('id')}
         new_items = []
