@@ -3,8 +3,6 @@
   "limit": 40,
   "start_link": "",
   "scroll_direction": "up",
-  "total_posts": 19,
-  "debug_mode": true,
-  "auto_refresh": true,
-  "refresh_direction": "down"
+  "total_posts": 20,
+  "debug_mode": true
 }
