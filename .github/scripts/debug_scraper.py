@@ -196,26 +196,22 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             'div[class*="chat-container"]',
             'div[class*="scroll"]'
         ]
-        container_js = """
-        () => {
-            const selectors = %s;
-            for (const sel of selectors) {
-                const el = document.querySelector(sel);
-                if (el) return el;
-            }
-            return document.documentElement;
-        }
-        """ % str(container_selectors)
+        selectors_json = json.dumps(container_selectors)
 
-        # گرفتن ارتفاع اولیه
+        # ─── گرفتن ارتفاع اولیه ──────────────────────────────────
         old_height = await page.evaluate(f"""
             (() => {{
-                const el = ({container_js});
+                const selectors = {selectors_json};
+                let el = document.documentElement;
+                for (const sel of selectors) {{
+                    const found = document.querySelector(sel);
+                    if (found) {{ el = found; break; }}
+                }}
                 return el.scrollHeight;
             }})()
         """)
 
-        scroll_multipliers = [1, 2, 3.5, 5]  # افزایشی‌تر
+        scroll_multipliers = [1, 2, 3.5, 5]
         attempts = min(max_attempts, len(scroll_multipliers))
 
         for i in range(attempts):
@@ -226,23 +222,23 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
             self.logger.debug(f"   اسکرول {amount}px (پله {i+1}) روی کانتینر")
 
-            # اسکرول روی کانتینر (نه window)
-            await page.evaluate(f"""
+            # ─── اسکرول و گرفتن ارتفاع جدید ──────────────────────
+            new_height = await page.evaluate(f"""
                 (() => {{
-                    const el = ({container_js});
-                    el.scrollBy(0, {amount});
+                    const selectors = {selectors_json};
+                    let el = document.documentElement;
+                    for (const sel of selectors) {{
+                        const found = document.querySelector(sel);
+                        if (found) {{ el = found; break; }}
+                    }}
+                    if (el && el.scrollBy) {{
+                        el.scrollBy(0, {amount});
+                    }}
+                    return el.scrollHeight;
                 }})()
             """)
 
             await human_sleep(1.5, 0.3)
-
-            # بررسی ارتفاع جدید
-            new_height = await page.evaluate(f"""
-                (() => {{
-                    const el = ({container_js});
-                    return el.scrollHeight;
-                }})()
-            """)
 
             if new_height != old_height:
                 self.logger.info(f"✅ ارتفاع کانتینر تغییر کرد: {old_height} → {new_height}")
