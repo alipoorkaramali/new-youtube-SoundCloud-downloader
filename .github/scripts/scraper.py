@@ -374,10 +374,19 @@ class TelegramChannelScraper:
 
         # تعیین نقطه شروع برای Resume
         resume_last_id = self._resume_data.get('last_msg_id') if self._resume_loaded else None
-        start_collecting = False
-        extra_scroll_count = 0
-        max_extra_scrolls = 4
         collected_count = 0
+
+        # ─── تعیین وضعیت start_collecting ──────────────────────
+        # اگر start_link یا resume داریم، باید به دنبال نقطه شروع بگردیم
+        has_specific_start = bool(self.start_link or self._resume_loaded)
+
+        if has_specific_start:
+            start_collecting = False  # نیاز به پیدا کردن نقطه شروع
+            extra_scroll_count = 0
+            max_extra_scrolls = 4
+        else:
+            start_collecting = True   # از ابتدا جمع‌آوری می‌کنیم
+            extra_scroll_count = 0    # نیازی به اسکرول اضافی نیست
 
         # ─── اگر Resume داریم، به پیام مورد نظر برویم ──────────
         if resume_last_id:
@@ -549,8 +558,8 @@ class TelegramChannelScraper:
                 scroll_attempts = 0
                 self.logger.debug(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
 
-            # ─── اگر start_collecting فعال نشده، اسکرول اضافی ──
-            if not start_collecting:
+            # ─── اگر start_collecting فعال نشده و در حالت خاص هستیم، اسکرول اضافی ──
+            if not start_collecting and has_specific_start:
                 extra_scroll_count += 1
                 if extra_scroll_count <= max_extra_scrolls:
                     self.logger.info(f"🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره {extra_scroll_count}...")
@@ -564,6 +573,7 @@ class TelegramChannelScraper:
                     self.logger.warning(f"⚠️ پس از {max_extra_scrolls} اسکرول اضافی، نقطه شروع پیدا نشد. ادامه با پست‌های موجود...")
                     start_collecting = True
                     resume_last_id = None
+            # در غیر این صورت (حالت عادی) هیچ اسکرول اضافی انجام نمی‌شود
 
             # ─── تاخیر برای جلوگیری از بارگذاری بیش از حد ──────
             if len(items) % 5 == 0 and len(items) > 0:
