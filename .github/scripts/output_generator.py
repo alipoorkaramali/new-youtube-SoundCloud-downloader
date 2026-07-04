@@ -8,6 +8,19 @@
 JSON، CSV، HTML و ZIP تبدیل کند. همچنین از قابلیت append_mode برای ادامه‌ی
 استخراج (Resume) پشتیبانی می‌کند و در این حالت، فایل‌های قبلی را با داده‌های
 جدید ادغام می‌کند بدون اینکه اطلاعات قبلی از بین برود.
+
+استراتژی ادغام (Merge Strategy):
+    ۱. اولویت اول: خواندن از فایل JSON (دقیق‌ترین و مطمئن‌ترین منبع)
+    ۲. در صورت عدم موفقیت یا عدم وجود JSON: خواندن از فایل HTML (به‌عنوان پشتیبان)
+    ۳. ترکیب داده‌های قبلی با داده‌های جدید
+    ۴. حذف پست‌های تکراری بر اساس `id`
+    ۵. مرتب‌سازی نزولی بر اساس `id` (جدیدترین در بالا)
+
+مشکلات رفع‌شده:
+    - از دست رفتن پست‌های قدیمی در اجراهای متوالی Resume
+    - عدم تشخیص صحیح فایل‌های JSON خراب
+    - لاگ‌های ناکافی برای دیباگ فرآیند ادغام
+    - عدم مقاومت در برابر خطاهای خواندن فایل
 """
 
 import json
@@ -19,7 +32,7 @@ import subprocess
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
@@ -88,6 +101,9 @@ class OutputGenerator:
         # ذخیره نام پاک‌سازی‌شده برای استفاده مکرر
         self._safe_name = self._sanitize_filename(self.channel)
 
+        # ذخیره وضعیت اولیه برای لاگ‌های دقیق‌تر
+        self._initial_post_count = len(self.posts)
+
     # ═══════════════════════════════════════════════════════════════════
     # متدهای کمکی
     # ═══════════════════════════════════════════════════════════════════
@@ -109,6 +125,68 @@ class OutputGenerator:
         """
         return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
+    def _validate_post_structure(self, post: Dict) -> bool:
+        """
+        اعتبارسنجی ساختار یک پست.
+
+        Args:
+            post (Dict): دیکشنری پست
+
+        Returns:
+            bool: True اگر ساختار معتبر باشد
+        """
+        if not isinstance(post, dict):
+            return False
+        if 'id' not in post:
+            return False
+        if not post['id']:
+            return False
+        return True
+
+    def _extract_posts_from_html(self, html_path: Path) -> List[Dict]:
+        """
+        استخراج پست‌ها از فایل HTML با استفاده از BeautifulSoup.
+
+        Args:
+            html_path (Path): مسیر فایل HTML
+
+        Returns:
+            List[Dict]: لیست پست‌های استخراج‌شده
+        """
+        if BeautifulSoup is None:
+            self.logger.warning("⚠️ BeautifulSoup نصب نیست، نمی‌توان HTML را خواند.")
+            return []
+
+        try:
+            with open(html_path, 'r', encoding='utf-8') as f:
+                soup = BeautifulSoup(f, 'html.parser')
+
+            existing_posts = []
+            # جستجوی تمام divهای با کلاس 'post'
+            post_divs = soup.find_all('div', class_='post')
+            self.logger.debug(f"🔍 تعداد divهای با کلاس 'post' در HTML: {len(post_divs)}")
+
+            for div in post_divs:
+                msg_id = div.get('data-msg-id')
+                if msg_id:
+                    text_div = div.find('div', class_='text')
+                    date_div = div.find('div', class_='date')
+                    post_data = {
+                        'id': str(msg_id).strip(),
+                        'text': text_div.get_text(strip=True) if text_div else '',
+                        'date': date_div.get_text(strip=True) if date_div else ''
+                    }
+                    if self._validate_post_structure(post_data):
+                        existing_posts.append(post_data)
+                    else:
+                        self.logger.debug(f"⚠️ پست نامعتبر در HTML: {post_data}")
+
+            return existing_posts
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در خواندن HTML: {e}")
+            return []
+
     # ═══════════════════════════════════════════════════════════════════
     # ادغام با داده‌های قبلی (Append Mode)
     # ═══════════════════════════════════════════════════════════════════
@@ -120,96 +198,113 @@ class OutputGenerator:
         استراتژی:
             ۱. ابتدا فایل JSON را امتحان می‌کند (دقیق‌ترین منبع)
             ۲. اگر JSON موجود نبود یا خطا داشت، از HTML به‌عنوان پشتیبان استفاده می‌کند
-            ۳. پست‌های تکراری بر اساس `id` حذف می‌شوند
-            ۴. مرتب‌سازی نزولی بر اساس `id` (جدیدترین در بالا)
+            ۳. اعتبارسنجی ساختار هر پست
+            ۴. پست‌های تکراری بر اساس `id` حذف می‌شوند
+            ۵. مرتب‌سازی نزولی بر اساس `id` (جدیدترین در بالا)
 
         Returns:
             list: لیست نهایی پست‌ها پس از ادغام
         """
         if not self.append_mode:
+            self.logger.info("ℹ️ append_mode غیرفعال است. بدون ادغام ادامه می‌یابد.")
             return self.posts
+
+        self.logger.info("🔄 شروع فرآیند ادغام با داده‌های قبلی...")
 
         json_path = self.base_dir / f"{self._safe_name}_posts.json"
         html_path = self.base_dir / f"{self._safe_name}_posts.html"
         existing_posts = []
 
-        # ─── مرحله ۱: تلاش برای خواندن از JSON ──────────────────
+        # ─── مرحله ۱: تلاش برای خواندن از JSON (اولویت اول) ──
         if json_path.exists():
             try:
                 with open(json_path, 'r', encoding='utf-8') as f:
-                    existing_posts = json.load(f)
+                    raw_data = json.load(f)
+
+                # اعتبارسنجی داده‌ها
+                if not isinstance(raw_data, list):
+                    self.logger.warning(f"⚠️ فایل JSON حاوی لیست نیست: {type(raw_data)}")
+                    raise ValueError("JSON must contain a list")
+
+                # فیلتر کردن پست‌های معتبر
+                for post in raw_data:
+                    if self._validate_post_structure(post):
+                        existing_posts.append(post)
+                    else:
+                        self.logger.debug(f"⚠️ پست نامعتبر در JSON: {post}")
+
                 self.logger.info(
-                    f"📄 {len(existing_posts)} پست از فایل JSON قبلی بارگذاری شد: {json_path.name}"
+                    f"📄 {len(existing_posts)} پست معتبر از فایل JSON قبلی بارگذاری شد: {json_path.name}"
                 )
-            except (json.JSONDecodeError, IOError) as e:
-                self.logger.warning(
-                    f"⚠️ خطا در خواندن JSON: {e}. تلاش برای خواندن HTML..."
-                )
+
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"⚠️ خطا در دیکد JSON (نقص در ساختار): {e}")
+                self.logger.info("ℹ️ تلاش برای خواندن از HTML به‌عنوان پشتیبان...")
                 existing_posts = []
 
-        # ─── مرحله ۲: در صورت عدم موفقیت JSON، از HTML استفاده کن ──
+            except (IOError, OSError) as e:
+                self.logger.warning(f"⚠️ خطای ورودی/خروجی در خواندن JSON: {e}")
+                existing_posts = []
+
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطای غیرمنتظره در خواندن JSON: {e}")
+                existing_posts = []
+
+        # ─── مرحله ۲: اگر JSON موفق نبود، از HTML استفاده کن ──
         if not existing_posts and html_path.exists():
             self.logger.info(f"📄 تلاش برای خواندن پست‌ها از فایل HTML: {html_path.name}")
+            html_posts = self._extract_posts_from_html(html_path)
 
-            if BeautifulSoup is None:
-                self.logger.warning("⚠️ BeautifulSoup نصب نیست، نمی‌توان HTML را خواند.")
+            if html_posts:
+                existing_posts = html_posts
+                self.logger.info(
+                    f"📄 {len(existing_posts)} پست از فایل HTML قبلی استخراج شد."
+                )
             else:
-                try:
-                    with open(html_path, 'r', encoding='utf-8') as f:
-                        soup = BeautifulSoup(f, 'html.parser')
-
-                    # جستجوی تمام divهای با کلاس 'post'
-                    post_divs = soup.find_all('div', class_='post')
-                    self.logger.debug(f"🔍 تعداد divهای با کلاس 'post': {len(post_divs)}")
-
-                    for div in post_divs:
-                        msg_id = div.get('data-msg-id')
-                        if msg_id:
-                            text_div = div.find('div', class_='text')
-                            date_div = div.find('div', class_='date')
-                            existing_posts.append({
-                                'id': msg_id,
-                                'text': text_div.get_text(strip=True) if text_div else '',
-                                'date': date_div.get_text(strip=True) if date_div else ''
-                            })
-
-                    if existing_posts:
-                        self.logger.info(
-                            f"📄 {len(existing_posts)} پست از فایل HTML قبلی استخراج شد."
-                        )
-                    else:
-                        self.logger.warning(
-                            "⚠️ در فایل HTML هیچ پستی با ساختار مورد انتظار یافت نشد."
-                        )
-
-                except Exception as e:
-                    self.logger.warning(f"⚠️ خطا در خواندن HTML: {e}")
+                self.logger.warning(
+                    "⚠️ در فایل HTML هیچ پست معتبری یافت نشد."
+                )
 
         # ─── مرحله ۳: اگر هیچ داده‌ای یافت نشد ──────────────────
         if not existing_posts:
             self.logger.info("ℹ️ هیچ پست قبلی یافت نشد. فقط پست‌های جدید ذخیره می‌شوند.")
+            self.logger.info(f"📊 تعداد پست‌های جدید: {len(self.posts)}")
             return self.posts
+
+        self.logger.info(f"📊 تعداد پست‌های قبلی: {len(existing_posts)}")
+        self.logger.info(f"📊 تعداد پست‌های جدید: {len(self.posts)}")
 
         # ─── مرحله ۴: ترکیب و حذف تکراری‌ها ──────────────────
         all_posts = existing_posts + self.posts
         seen_ids = set()
         unique_posts = []
+        duplicate_count = 0
 
         for post in all_posts:
             post_id = post.get('id')
-            if post_id and post_id not in seen_ids:
+            if not post_id:
+                self.logger.debug("⚠️ پست بدون 'id' یافت شد که نادیده گرفته شد.")
+                continue
+
+            if post_id not in seen_ids:
                 seen_ids.add(post_id)
                 unique_posts.append(post)
-            elif post_id:
+            else:
+                duplicate_count += 1
                 self.logger.debug(f"⏭️ پست تکراری حذف شد: id={post_id}")
 
         # ─── مرحله ۵: مرتب‌سازی نزولی ──────────────────────────
-        unique_posts.sort(key=lambda x: int(x.get('id', 0)), reverse=True)
+        try:
+            unique_posts.sort(key=lambda x: int(x.get('id', 0)), reverse=True)
+        except (ValueError, TypeError) as e:
+            self.logger.warning(f"⚠️ خطا در مرتب‌سازی: {e}. تلاش با روش جایگزین...")
+            # مرتب‌سازی به‌عنوان رشته (فال‌بک)
+            unique_posts.sort(key=lambda x: str(x.get('id', '0')), reverse=True)
 
         self.logger.info(
-            f"🔄 append_mode: {len(existing_posts)} پست قبلی + "
+            f"🔄 نتیجه ادغام: {len(existing_posts)} پست قبلی + "
             f"{len(self.posts)} پست جدید = {len(unique_posts)} پست کل "
-            f"(پس از حذف {len(all_posts) - len(unique_posts)} تکراری)"
+            f"(پس از حذف {duplicate_count} تکراری)"
         )
 
         return unique_posts
@@ -293,11 +388,15 @@ class OutputGenerator:
         if self.append_mode:
             self.logger.info("🔄 append_mode فعال است. تلاش برای ادغام با داده‌های قبلی...")
             merged_posts = self._merge_with_existing_posts()
+
             if len(merged_posts) != len(self.posts):
                 self.logger.info(
                     f"📊 تعداد پست‌ها پس از ادغام: {len(merged_posts)} "
                     f"(قبلاً {len(self.posts)})"
                 )
+            else:
+                self.logger.info(f"📊 تعداد پست‌ها بدون تغییر باقی ماند: {len(self.posts)}")
+
             self.posts = merged_posts
         else:
             self.logger.info("ℹ️ append_mode غیرفعال است. فایل HTML از نو ساخته می‌شود.")
@@ -489,20 +588,44 @@ class OutputGenerator:
         """
         اجرای تمام مراحل تولید خروجی به‌ترتیب.
 
-        ترتیب اجرا:
-            ۱. تولید JSON
+        ترتیب اجرا (اهمیت دارد برای append_mode):
+            ۱. تولید JSON (ذخیره داده‌های جدید)
             ۲. تولید CSV
             ۳. تولید HTML (با ادغام در صورت نیاز)
             ۴. تولید ZIP
+
+        چرا JSON قبل از HTML؟
+            - append_mode ابتدا از JSON می‌خواند
+            - JSON باید قبل از HTML به‌روز شود تا داده‌های جدید در ادغام لحاظ شوند
         """
         self.logger.info("🚀 شروع تولید فایل‌های خروجی...")
+        self.logger.info(f"📊 تعداد پست‌های ورودی: {self._initial_post_count}")
+        self.logger.info(f"📌 append_mode: {self.append_mode}")
 
         try:
+            # ۱. JSON (ابتدا ذخیره شود تا برای ادغام در HTML موجود باشد)
             self.generate_json()
+
+            # ۲. CSV
             self.generate_csv()
+
+            # ۳. HTML (با ادغام در صورت نیاز)
             self.generate_html()
+
+            # ۴. ZIP
             self.create_zip()
+
             self.logger.info("✅ تمام فایل‌های خروجی با موفقیت تولید شدند.")
+
+            # لاگ نهایی تعداد پست‌ها
+            final_count = len(self.posts)
+            if self.append_mode and final_count != self._initial_post_count:
+                self.logger.info(
+                    f"📊 خلاصه نهایی: {self._initial_post_count} پست ورودی → "
+                    f"{final_count} پست خروجی (افزایش {final_count - self._initial_post_count} پست از ادغام)"
+                )
+            else:
+                self.logger.info(f"📊 تعداد نهایی پست‌ها: {final_count}")
 
         except Exception as e:
             self.logger.error(f"❌ خطا در تولید خروجی: {e}")
