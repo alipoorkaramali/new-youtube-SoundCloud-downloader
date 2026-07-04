@@ -14,6 +14,13 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+# اضافه کردن BeautifulSoup برای خواندن فایل HTML قبلی
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+    print("⚠️ BeautifulSoup نصب نیست. برای حالت append_mode لطفاً نصب کنید: pip install beautifulsoup4")
+
 
 class OutputGenerator:
     """
@@ -21,14 +28,16 @@ class OutputGenerator:
     – در صورت حجم بالای ZIP، آن را با دستور `zip -s` به قطعات ۳۰ مگابایتی تقسیم می‌کند.
     – در حالت غیر دیباگ، اسکرین‌شات‌ها از ZIP حذف می‌شوند.
     – نام فایل‌ها با `_sanitize_filename` پاک‌سازی می‌شوند.
+    – قابلیت append_mode: اگر فعال باشد، فایل HTML قبلی را خوانده و با پست‌های جدید ادغام می‌کند.
     """
 
-    def __init__(self, base_dir: Path, channel: str, posts: list, media_map: dict, debug_mode: bool = False):
+    def __init__(self, base_dir: Path, channel: str, posts: list, media_map: dict, debug_mode: bool = False, append_mode: bool = False):
         self.base_dir = base_dir
         self.channel = channel
         self.posts = posts
         self.media_map = media_map
         self.debug_mode = debug_mode
+        self.append_mode = append_mode
         self.logger = logging.getLogger("TelegramScraper")
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -38,6 +47,63 @@ class OutputGenerator:
     @staticmethod
     def _sanitize_filename(name: str) -> str:
         return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+    # ════════════════════════════════════════════════════════════════
+    # ادغام با پست‌های موجود در فایل HTML (برای append_mode)
+    # ════════════════════════════════════════════════════════════════
+    def _merge_with_existing_posts(self) -> list:
+        """
+        اگر append_mode فعال باشد و فایل HTML از قبل وجود داشته باشد،
+        پست‌های آن را خوانده، با self.posts ادغام کرده، تکراری‌ها را حذف
+        و بر اساس msg_id (نزولی) مرتب می‌کند.
+        """
+        if not self.append_mode:
+            return self.posts
+
+        safe_name = self._sanitize_filename(self.channel)
+        html_path = self.base_dir / f"{safe_name}_posts.html"
+        if not html_path.exists():
+            return self.posts
+
+        if BeautifulSoup is None:
+            self.logger.warning("⚠️ BeautifulSoup نصب نیست، append_mode غیرفعال می‌شود.")
+            return self.posts
+
+        try:
+            with open(html_path, 'r', encoding='utf-8') as f:
+                soup = BeautifulSoup(f, 'html.parser')
+
+            existing_posts = []
+            # فرض می‌کنیم هر پست در یک <div class="post"> قرار دارد
+            for div in soup.find_all('div', class_='post'):
+                msg_id = div.get('data-msg-id')
+                if msg_id:
+                    text_div = div.find('div', class_='text')
+                    date_div = div.find('div', class_='date')
+                    existing_posts.append({
+                        'id': msg_id,
+                        'text': text_div.get_text(strip=True) if text_div else '',
+                        'date': date_div.get_text(strip=True) if date_div else ''
+                    })
+
+            # ترکیب با پست‌های جدید
+            all_posts = existing_posts + self.posts
+            # حذف تکراری‌ها بر اساس id
+            seen = set()
+            unique_posts = []
+            for post in all_posts:
+                if post['id'] not in seen:
+                    seen.add(post['id'])
+                    unique_posts.append(post)
+
+            # مرتب‌سازی نزولی بر اساس id (جدیدترین = بزرگترین عدد)
+            unique_posts.sort(key=lambda x: int(x['id']), reverse=True)
+            self.logger.info(f"🔄 append_mode: {len(existing_posts)} پست قبلی + {len(self.posts)} پست جدید = {len(unique_posts)} پست کل")
+            return unique_posts
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در خواندن فایل HTML قبلی: {e}. ادامه با پست‌های جدید.")
+            return self.posts
 
     # ════════════════════════════════════════════════════════════════
     # تولید JSON
@@ -66,9 +132,15 @@ class OutputGenerator:
         self.logger.info(f"📊 CSV: {csv_path.name}")
 
     # ════════════════════════════════════════════════════════════════
-    # تولید HTML
+    # تولید HTML (با پشتیبانی از append_mode)
     # ════════════════════════════════════════════════════════════════
     def generate_html(self):
+        # اگر append_mode فعال باشد، پست‌ها را با فایل قبلی ادغام می‌کنیم
+        if self.append_mode:
+            merged_posts = self._merge_with_existing_posts()
+            # به‌روزرسانی self.posts برای استفاده در بقیه متدها (مثلاً CSV)
+            self.posts = merged_posts
+
         safe_name = self._sanitize_filename(self.channel)
         html_path = self.base_dir / f"{safe_name}_posts.html"
         current_iran = (datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)).strftime('%Y/%m/%d - %H:%M')
