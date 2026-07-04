@@ -11,6 +11,7 @@
 – اسکرین‌شات‌های قبلی در هر اجرا پاکسازی می‌شوند.
 – لاگ‌های جامع برای دیباگ فرآیند ادغام و وضعیت Resume.
 – اصلاح اسکرول: اسکرول روی کانتینر اصلی پیام‌ها (نه document) برای بارگذاری پست‌های قدیمی‌تر.
+– دیباگ اسکرول: اسکرین‌شات از صفحه قبل از هر اسکرول با فلش جهت‌دار برای تحلیل خطاها.
 """
 
 import asyncio
@@ -20,6 +21,7 @@ import random
 import shutil
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
+from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -60,6 +62,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.debug_screenshots = debug_screenshots
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
 
+        # ─── پوشه مخصوص دیباگ اسکرول ──────────────────────────
+        self.scroll_debug_dir = self.base_dir / "scroll_debug"
+        self.scroll_debug_dir.mkdir(parents=True, exist_ok=True)
+
         # ─── جهت اسکرول ──────────────────────────────────────────
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
         if self.scroll_direction not in ['up', 'down']:
@@ -74,7 +80,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.resume_state_file = self.base_dir / "resume_state.json"
         self._resume_data = None
         self._resume_loaded = False
-        self._resume_last_link = None  # برای لاگ‌های دقیق‌تر
+        self._resume_last_link = None
 
         if self.resume:
             self.logger.info("🔄 حالت ادامه (Resume) فعال است.")
@@ -120,6 +126,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
+        self.logger.info(f"🐞 پوشه دیباگ اسکرول: {self.scroll_debug_dir}")
         self.logger.info(
             f"🧭 جهت اسکرول نهایی: "
             f"{'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}"
@@ -137,14 +144,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     async def _download_media(self, items: List[Dict], page, context) -> Tuple[Dict, int]:
         """
         در حالت دیباگ، دانلود رسانه غیرفعال است.
-
-        Args:
-            items (List[Dict]): لیست پست‌ها
-            page: صفحه مرورگر
-            context: زمینه مرورگر
-
-        Returns:
-            Tuple[Dict, int]: نقشه رسانه‌ها و تعداد دانلودها (هر دو ۰ در حالت دیباگ)
         """
         self.logger.info("🐞 حالت دیباگ: دانلود رسانه غیرفعال است.")
         media_map = {}
@@ -156,13 +155,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return media_map, 0
 
     async def _save_debug_screenshot(self, page, name: str) -> None:
-        """
-        ذخیره اسکرین‌شات دیباگ (تمام صفحه).
-
-        Args:
-            page: صفحه مرورگر
-            name (str): نام فایل
-        """
+        """ذخیره اسکرین‌شات دیباگ (تمام صفحه)."""
         if not self.debug_screenshots:
             return
         try:
@@ -172,7 +165,77 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ اسکرول هوشمند روی کانتینر اصلی (اصلاح شده) ═══════════════
+    # ═══════════════ دیباگ اسکرول: فلش جهت‌دار و اسکرین‌شات ═══════════════
+
+    async def _take_scroll_debug_screenshot(self, page, direction: str, attempt: int) -> None:
+        """
+        گرفتن اسکرین‌شات از صفحه با رسم فلش جهت اسکرول.
+        این اسکرین‌شات در پوشه scroll_debug ذخیره می‌شود.
+
+        Args:
+            page: صفحه مرورگر
+            direction (str): 'up' یا 'down'
+            attempt (int): شماره تلاش
+        """
+        if not self.debug_screenshots:
+            return
+
+        try:
+            # ─── رسم فلش روی صفحه با JavaScript ──────────────────
+            arrow_color = "#FF0000" if direction == 'up' else "#00FF00"
+            arrow_symbol = "▲" if direction == 'up' else "▼"
+            arrow_text = "UP" if direction == 'up' else "DOWN"
+
+            await page.evaluate(f"""
+                () => {{
+                    // حذف فلش قبلی اگر وجود دارد
+                    const oldArrow = document.getElementById('scroll_debug_arrow');
+                    if (oldArrow) oldArrow.remove();
+
+                    const arrow = document.createElement('div');
+                    arrow.id = 'scroll_debug_arrow';
+                    arrow.style.position = 'fixed';
+                    arrow.style.left = '50%';
+                    arrow.style.top = '50%';
+                    arrow.style.transform = 'translate(-50%, -50%)';
+                    arrow.style.fontSize = '120px';
+                    arrow.style.color = '{arrow_color}';
+                    arrow.style.fontWeight = 'bold';
+                    arrow.style.textShadow = '0 0 20px rgba(0,0,0,0.8), 0 0 40px rgba(0,0,0,0.5)';
+                    arrow.style.zIndex = '999999';
+                    arrow.style.pointerEvents = 'none';
+                    arrow.style.background = 'rgba(0,0,0,0.3)';
+                    arrow.style.padding = '20px 40px';
+                    arrow.style.borderRadius = '20px';
+                    arrow.style.border = '5px solid {arrow_color}';
+                    arrow.innerHTML = '{arrow_symbol} {arrow_text} {arrow_symbol}';
+                    document.body.appendChild(arrow);
+                }}
+            """)
+
+            # ─── تاخیر برای اطمینان از نمایش فلش ──────────────
+            await human_sleep(0.5, 0.1)
+
+            # ─── گرفتن اسکرین‌شات ──────────────────────────────
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
+            safe_channel = self._sanitize_filename(self.channel)
+            filename = f"{safe_channel}_scroll_{direction}_attempt_{attempt}_{timestamp}.png"
+            path = self.scroll_debug_dir / filename
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات دیباگ اسکرول ذخیره شد: {path.name} (جهت: {direction}, تلاش: {attempt})")
+
+            # ─── حذف فلش ──────────────────────────────────────────
+            await page.evaluate("""
+                () => {
+                    const arrow = document.getElementById('scroll_debug_arrow');
+                    if (arrow) arrow.remove();
+                }
+            """)
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در گرفتن اسکرین‌شات دیباگ اسکرول: {e}")
+
+    # ═══════════════ اسکرول هوشمند روی کانتینر اصلی ═══════════════
 
     async def _smart_scroll(
         self,
@@ -183,10 +246,16 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     ) -> bool:
         """
         اسکرول هوشمند روی کانتینر اصلی پیام‌ها (نه document).
-        - direction: 'up' یا 'down'
-        - step: مقدار پایه (مثبت)
-        - max_attempts: تعداد پله‌ها
-        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
+        در صورت فعال بودن دیباگ، قبل از هر اسکرول از صفحه اسکرین‌شات می‌گیرد.
+
+        Args:
+            page: صفحه مرورگر
+            direction (str): 'up' یا 'down'
+            step (int): مقدار پایه اسکرول
+            max_attempts (int): تعداد پله‌ها
+
+        Returns:
+            bool: True اگر ارتفاع تغییر کرد، False اگر نه
         """
         # سلکتورهای احتمالی کانتینر پیام‌ها در تلگرام وب
         container_selectors = [
@@ -198,18 +267,29 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         ]
         selectors_json = json.dumps(container_selectors)
 
-        # ─── گرفتن ارتفاع اولیه ──────────────────────────────────
-        old_height = await page.evaluate(f"""
+        # ─── یافتن کانتینر و ارتفاع اولیه ──────────────────────
+        result = await page.evaluate(f"""
             (() => {{
                 const selectors = {selectors_json};
                 let el = document.documentElement;
+                let foundSelector = 'document';
                 for (const sel of selectors) {{
                     const found = document.querySelector(sel);
-                    if (found) {{ el = found; break; }}
+                    if (found) {{ el = found; foundSelector = sel; break; }}
                 }}
-                return el.scrollHeight;
+                return {{
+                    scrollHeight: el.scrollHeight,
+                    foundSelector: foundSelector,
+                    hasScrollBy: typeof el.scrollBy === 'function'
+                }};
             }})()
         """)
+
+        old_height = result['scrollHeight']
+        found_selector = result.get('foundSelector', 'unknown')
+        has_scroll_by = result.get('hasScrollBy', False)
+
+        self.logger.debug(f"🔍 کانتینر پیدا شده: {found_selector}, scrollBy موجود: {has_scroll_by}, ارتفاع: {old_height}")
 
         scroll_multipliers = [1, 2, 3.5, 5]
         attempts = min(max_attempts, len(scroll_multipliers))
@@ -220,7 +300,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             if direction == 'up':
                 amount = -amount
 
-            self.logger.debug(f"   اسکرول {amount}px (پله {i+1}) روی کانتینر")
+            # ─── اسکرین‌شات دیباگ قبل از اسکرول ──────────────────
+            await self._take_scroll_debug_screenshot(page, direction, i + 1)
+
+            self.logger.debug(f"   اسکرول {amount}px (پله {i+1}/{attempts}) روی کانتینر: {found_selector}")
 
             # ─── اسکرول و گرفتن ارتفاع جدید ──────────────────────
             new_height = await page.evaluate(f"""
@@ -231,8 +314,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                         const found = document.querySelector(sel);
                         if (found) {{ el = found; break; }}
                     }}
-                    if (el && el.scrollBy) {{
+                    if (el && typeof el.scrollBy === 'function') {{
                         el.scrollBy(0, {amount});
+                    }} else {{
+                        // Fallback: اسکرول روی window
+                        window.scrollBy(0, {amount});
                     }}
                     return el.scrollHeight;
                 }})()
@@ -254,12 +340,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     async def _extract_posts_from_page(self, page) -> List[Dict]:
         """
         استخراج پست‌ها از صفحه با JavaScript.
-
-        Args:
-            page: صفحه مرورگر
-
-        Returns:
-            List[Dict]: لیست پست‌های استخراج‌شده
         """
         return await page.evaluate("""
             () => {
@@ -282,10 +362,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     async def _capture_full_page_screenshot(self, page, name: str = "full_page") -> None:
         """
         گرفتن اسکرین‌شات کامل از کل صفحه.
-
-        Args:
-            page: صفحه مرورگر
-            name (str): نام فایل
         """
         try:
             await page.evaluate("window.scrollTo(0, 0)")
@@ -303,9 +379,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         """
         اجرای والد، سپس اگر تعداد پست‌ها کافی نبود، اسکرول جهت‌دار اضافی انجام می‌دهد.
         همچنین در حالت عادی (بدون start_link و بدون resume) به ابتدا یا انتها می‌پرد.
-
-        Returns:
-            Tuple[List[Dict], Any, Any]: (پست‌ها، context، page)
         """
         # ─── لاگ دقیق برای حالت Resume ──────────────────────────
         if self.resume and self._resume_loaded and self.start_link:
@@ -375,7 +448,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         seen_ids = {item.get('id') for item in items if item.get('id')}
         new_items = []
         no_new_attempts = 0
-        max_attempts = 6  # افزایش تعداد تلاش‌ها
+        max_attempts = 6
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
             scrolled = await self._smart_scroll(page, self.scroll_direction, step=2500, max_attempts=4)
@@ -420,13 +493,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         """
         اجرای اصلی با ذخیرهٔ خلاصه JSON و ذخیره وضعیت ادامه.
         """
-        # اجرای متد run والد
         await super().run()
 
         # ─── ذخیره وضعیت ادامه ──────────────────────────────────
         try:
             if hasattr(self, '_last_items') and self._last_items:
-                # پیدا کردن قدیمی‌ترین پست (کوچکترین msg_id)
                 oldest_item = min(self._last_items, key=lambda x: int(x.get('id', 0)))
                 msg_id = oldest_item.get('id')
                 if msg_id:
@@ -485,9 +556,16 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     shutil.rmtree(self.screenshots_dir)
                     self.logger.info(f"   ✅ پوشه {self.screenshots_dir.name} پاک شد")
 
+                # پوشه scroll_debug را پاک نمی‌کنیم تا اسکرین‌شات‌های قبلی باقی بمانند
+                # اما برای شروع تمیز، می‌توانیم پاک کنیم (اختیاری)
+                # if self.scroll_debug_dir.exists():
+                #     shutil.rmtree(self.scroll_debug_dir)
+                #     self.logger.info(f"   ✅ پوشه {self.scroll_debug_dir.name} پاک شد")
+
                 self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
                 if hasattr(self, 'screenshots_dir'):
                     self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+                self.scroll_debug_dir.mkdir(parents=True, exist_ok=True)
 
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در پاکسازی اسکرین‌شات‌های قبلی: {e}")
@@ -577,6 +655,7 @@ async def main() -> None:
         print(f"🐞 خروجی‌ها در پوشه: {scraper.base_dir}")
         print(f"🐞 اسکرین‌شات‌های دیباگ در: {scraper.debug_screenshots_dir}")
         print(f"🐞 اسکرین‌شات‌های پست‌ها در: {scraper.screenshots_dir}")
+        print(f"🐞 اسکرین‌شات‌های دیباگ اسکرول در: {scraper.scroll_debug_dir}")
     except Exception as e:
         print(f"\n❌ خطا در اجرای دیباگ: {e}")
         import traceback
