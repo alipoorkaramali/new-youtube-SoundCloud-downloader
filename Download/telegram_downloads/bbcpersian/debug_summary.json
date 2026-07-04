@@ -1,0 +1,10 @@
+{
+  "channel": "bbcpersian",
+  "limit": 35,
+  "start_link": "",
+  "scroll_direction": "up",
+  "total_posts": 17,
+  "debug_mode": true,
+  "resume": false,
+  "resume_loaded": false
+}
