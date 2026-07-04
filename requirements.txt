@@ -4,3 +4,5 @@ tqdm
 Jinja2
 cryptography
 playwright
+beautifulsoup4
+lxml
