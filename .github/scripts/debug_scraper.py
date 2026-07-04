@@ -8,12 +8,14 @@
 – اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
 – قابلیت ادامه (Resume) از آخرین نقطه استخراج شده با رفتن دقیق به لینک ذخیره‌شده.
 – در حالت Resume، با استفاده از append_mode در OutputGenerator، فایل HTML قبلی با پست‌های جدید ادغام می‌شود.
+– اسکرین‌شات‌های قبلی در هر اجرا پاکسازی می‌شوند.
 """
 
 import asyncio
 import json
 import sys
 import random
+import shutil  # <-- اضافه شد
 from pathlib import Path
 from typing import List, Dict
 
@@ -52,7 +54,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.resume = getattr(config, 'resume', False)
         self.resume_state_file = self.base_dir / "resume_state.json"
         self._resume_data = None
-        self._resume_loaded = False  # برای لاگ‌گذاری بهتر
+        self._resume_loaded = False
 
         if self.resume:
             self.logger.info("🔄 حالت ادامه (Resume) فعال است.")
@@ -62,9 +64,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                         self._resume_data = json.load(f)
                     last_link = self._resume_data.get('last_post_link')
                     if last_link:
-                        # 🔥 اینجا دقیقاً رفتن به لینک ذخیره‌شده اتفاق می‌افتد
                         self.start_link = last_link
-                        self.scroll_direction = 'up'  # اجباراً به سمت بالا (قدیمی‌تر)
+                        self.scroll_direction = 'up'
                         self._resume_loaded = True
                         self.logger.info(f"🔗 لینک ادامه بارگذاری شد: {last_link}")
                         self.logger.info(f"🧭 جهت اسکرول به‌طور خودکار به 'up' (قدیمی‌تر) تنظیم شد.")
@@ -78,7 +79,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.logger.warning(f"⚠️ فایل وضعیت '{self.resume_state_file}' یافت نشد. ادامه بدون resume.")
                 self.resume = False
 
-        # اگر resume فعال نباشد ولی start_link دستی داشته باشیم، لاگ می‌دهیم
         if self.start_link and not self.resume:
             self.logger.info(f"🔗 لینک شروع دستی: {self.start_link}")
 
@@ -107,24 +107,16 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی (هماهنگ با scraper.py) ═══════════════
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی ═══════════════
     async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
-        """
-        اسکرول هوشمند با سه پله افزایشی.
-        - direction: 'up' یا 'down'
-        - step: مقدار پایه (مثبت)
-        - max_attempts: تعداد پله‌ها
-        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
-        """
         old_height = await page.evaluate("document.documentElement.scrollHeight")
-        scroll_multipliers = [1, 1.8, 2.8]  # پله‌های افزایشی
+        scroll_multipliers = [1, 1.8, 2.8]
 
         for i in range(min(max_attempts, len(scroll_multipliers))):
             multiplier = scroll_multipliers[i]
             amount = int(step * multiplier)
             if direction == 'up':
-                amount = -amount  # منفی = بالا
-            # برای down، amount مثبت می‌ماند
+                amount = -amount
 
             self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
             await page.evaluate(f"window.scrollBy(0, {amount})")
@@ -140,7 +132,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
     # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
     async def _extract_posts_from_page(self, page) -> List[Dict]:
-        """استخراج پست‌ها از صفحه با JavaScript."""
         return await page.evaluate("""
             () => {
                 const posts = [];
@@ -159,7 +150,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
     # ═══════════════ اسکرین‌شات کامل صفحه ═══════════════════
     async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
-        """گرفتن اسکرین‌شات کامل از کل صفحه."""
         try:
             await page.evaluate("window.scrollTo(0, 0)")
             await asyncio.sleep(1)
@@ -170,13 +160,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
+    # ═══════════════ بازنویسی متد استخراج ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
-        """
-        اجرای والد، سپس اگر تعداد پست‌ها کافی نبود، اسکرول جهت‌دار اضافی انجام می‌دهد.
-        همچنین در حالت عادی (بدون start_link و بدون resume) به ابتدا یا انتها می‌پرد.
-        """
-        # ─── لاگ دقیق برای حالت Resume ───
         if self.resume and self._resume_loaded and self.start_link:
             self.logger.info("🔄 ====== حالت ادامه (Resume) ======")
             self.logger.info(f"🔗 رفتن به لینک ذخیره‌شده: {self.start_link}")
@@ -187,7 +172,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"🐞 شروع استخراج با اسکرول جهت‌دار ({self.scroll_direction})...")
 
-        # ۱. اجرای والد (که شامل ورود به کانال و جمع‌آوری اولیه است)
         result = await super()._fetch_posts_from_telegram()
         items, context, page = result
 
@@ -205,12 +189,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await self._capture_full_page_screenshot(page, "final")
             return items, context, page
 
-        # ─── پرش به ابتدا یا انتها در حالت عادی (بدون start_link و resume) ───
-        # این کار فقط زمانی انجام می‌شود که والد از حالت عادی استفاده کرده باشد
-        # (یعنی start_link نداشته باشیم و resume هم فعال نباشد)
         if not self.start_link and not self.resume:
             if self.scroll_direction == 'up':
-                # برای جمع‌آوری قدیمی‌ترها، باید به پایین‌ترین نقطه برویم
                 self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
                 clicked = False
                 scroll_button_selectors = [
@@ -233,37 +213,27 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                         continue
                 if not clicked:
                     self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-            else:  # scroll_direction == 'down'
-                # برای جمع‌آوری جدیدترها، باید به بالای صفحه برویم (قدیمی‌ترین پست‌ها)
+            else:
                 self.logger.info("⬆️ تلاش برای رفتن به بالای صفحه (قدیمی‌ترین پست‌ها)...")
                 await page.evaluate("window.scrollTo(0, 0)")
                 await human_sleep(2, 0.3)
-                # چند اسکرول اضافی برای اطمینان از رسیدن به ابتدا
                 for _ in range(3):
                     await page.evaluate("window.scrollBy(0, -2000)")
                     await human_sleep(1, 0.2)
                 self.logger.info("   ✅ به بالای صفحه رفتیم.")
 
-        # ─── تنظیم ترتیب پیمایش پست‌ها بر اساس جهت ──────────────────────
-        # این بخش توسط خود `scraper.py` مدیریت می‌شود، اما در اینجا نیز برای اطمینان،
-        # ما از متد `super()._fetch_posts_from_telegram()` استفاده کرده‌ایم که خودش
-        # از `scroller` استفاده می‌کند. بنابراین نیازی به تغییر نیست.
-
-        # ۲. اسکرول جهت‌دار اضافی برای دریافت پست‌های بیشتر
         seen_ids = {item.get('id') for item in items if item.get('id')}
         new_items = []
         no_new_attempts = 0
-        max_attempts = 4  # حداکثر ۴ بار اسکرول جهت‌دار
+        max_attempts = 4
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            # اسکرول هوشمند با جهت
             scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
             if not scrolled:
                 no_new_attempts += 1
                 self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
                 continue
 
-            # استخراج پست‌های جدید
             current_items = await self._extract_posts_from_page(page)
             added = 0
             for item in current_items:
@@ -274,7 +244,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     added += 1
             if added > 0:
                 self.logger.info(f"📈 {added} پست جدید در این مرحله اضافه شد (مجموع: {len(seen_ids)})")
-                no_new_attempts = 0  # ریست شمارنده در صورت موفقیت
+                no_new_attempts = 0
             else:
                 no_new_attempts += 1
 
@@ -282,13 +252,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 break
 
         if new_items:
-            # اگر جهت down است، پست‌های جدیدتر را در ابتدا قرار بده
             if self.scroll_direction == 'down':
                 new_items.reverse()
             items.extend(new_items)
             self.logger.info(f"📈 مجموعاً {len(items)} پست (با {len(new_items)} پست جدید)")
 
-        # ۳. اسکرین‌شات کامل صفحه
         await self._capture_full_page_screenshot(page, "final")
         await self._save_debug_screenshot(page, "debug_final")
 
@@ -296,13 +264,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return items, context, page
 
     async def run(self):
-        """اجرای اصلی با ذخیرهٔ خلاصه JSON و ذخیره وضعیت ادامه."""
         await super().run()
 
-        # ========== RESUME: ذخیره وضعیت پس از اتمام ==========
         try:
             if hasattr(self, '_last_items') and self._last_items:
-                # پیدا کردن قدیمی‌ترین پست (کوچکترین msg_id)
                 oldest_item = min(self._last_items, key=lambda x: int(x.get('id', 0)))
                 msg_id = oldest_item.get('id')
                 if msg_id:
@@ -320,7 +285,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره وضعیت ادامه: {e}")
 
-        # ذخیره خلاصه دیباگ (قبلی)
         try:
             debug_json_path = self.base_dir / "debug_summary.json"
             summary = {
@@ -339,8 +303,29 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره خلاصه دیباگ: {e}")
 
+    # ═══════════════ متد اصلی اجرا با پاکسازی اسکرین‌شات‌های قبلی ═══════════════
     async def _run_impl(self):
         """Override برای ذخیرهٔ آیتم‌ها و تولید خروجی."""
+        
+        # ========== 🧹 پاکسازی اسکرین‌شات‌های قبلی ==========
+        if self.debug_screenshots:
+            self.logger.info("🧹 پاکسازی اسکرین‌شات‌های قبلی...")
+            try:
+                if self.debug_screenshots_dir.exists():
+                    shutil.rmtree(self.debug_screenshots_dir)
+                    self.logger.info(f"   ✅ پوشه {self.debug_screenshots_dir.name} پاک شد")
+                
+                if hasattr(self, 'screenshots_dir') and self.screenshots_dir.exists():
+                    shutil.rmtree(self.screenshots_dir)
+                    self.logger.info(f"   ✅ پوشه {self.screenshots_dir.name} پاک شد")
+                
+                self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
+                if hasattr(self, 'screenshots_dir'):
+                    self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در پاکسازی اسکرین‌شات‌های قبلی: {e}")
+        
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
         else:
@@ -348,7 +333,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         items, context, page = await self._fetch_posts_from_telegram()
 
-        # اگر Resume فعال باشد، علامت append_mode را به OutputGenerator ارسال می‌کنیم
         append_mode = self.resume and self._resume_loaded
 
         self._last_items = items
@@ -368,7 +352,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 items,
                 {},
                 debug_mode=self.debug_mode,
-                append_mode=append_mode  # <-- اضافه شد
+                append_mode=append_mode
             )
             gen.run_all()
             self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
