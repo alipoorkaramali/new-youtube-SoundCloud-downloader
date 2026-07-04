@@ -92,7 +92,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       # ════════════════════════════════════════════
-      # ۴. نصب وابستگی‌های پایتون
+      # ۴. نصب وابستگی‌های پایتون (شامل beautifulsoup4 و lxml)
       # ════════════════════════════════════════════
       - name: 📦 Install Python dependencies
         run: |
@@ -182,7 +182,7 @@ jobs:
           "
 
       # ════════════════════════════════════════════
-      # ۱۰. پاکسازی خروجی قبلی
+      # ۱۰. پاکسازی خروجی قبلی (فقط در صورتی که Resume فعال نباشد)
       # ════════════════════════════════════════════
       - name: 🧹 Clean old output for this channel
         if: ${{ !inputs.resume }}
@@ -203,6 +203,7 @@ jobs:
           fi
           echo "DEFAULT_SAVE=$DEFAULT_SAVE" >> $GITHUB_OUTPUT
           echo "::notice title=📌 Smart Save Mode::$MODE_MSG | Debug=${{ inputs.debug_mode }} | Default=$DEFAULT_SAVE"
+
       # ════════════════════════════════════════════
       # ۱۲. اجرای اسکریپر (عادی یا دیباگ)
       # ════════════════════════════════════════════
