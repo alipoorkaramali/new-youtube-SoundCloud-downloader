@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+ماژول اصلی اسکرپر تلگرام
+------------------------
+این ماژول وظیفه استخراج پست‌ها از کانال‌های تلگرام با استفاده از Playwright را بر عهده دارد.
+ویژگی‌ها:
+- پشتیبانی از شروع با لینک مستقیم به یک پست
+- پشتیبانی از حالت Resume (ادامه از آخرین نقطه)
+- استخراج هوشمند متن با روش‌های مقاوم در برابر تغییرات ساختار
+- ذخیره اسکرین‌شات از پست‌ها
+- هماهنگ با debug_scraper.py برای حالت دیباگ
+"""
+
 import asyncio
 import logging
 import random
 import re
 import json
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple, Any
 
 from config_loader import Config
 from playwright_downloader import PlaywrightDownloader
@@ -22,13 +34,29 @@ RESUME_FILE = "resume_state.json"
 
 # ═══════════════════ Human-like sleep ═══════════════════
 async def human_sleep(base: float, jitter: float = 0.4):
+    """
+    خواب با تاخیر انسانی (با جیتر تصادفی).
+
+    Args:
+        base (float): زمان پایه به ثانیه
+        jitter (float): ضریب جیتر (0.4 = ±40%)
+    """
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
 
 class TelegramChannelScraper:
+    """
+    کلاس اصلی اسکرپر تلگرام.
+    """
 
     def __init__(self, config: Config):
+        """
+        سازنده کلاس اسکرپر.
+
+        Args:
+            config (Config): آبجکت پیکربندی از config.yaml
+        """
         self.config = config
         self.channel = config.channel.lstrip('@')
         self.channel_name = getattr(config, 'channel_name', '') or ''
@@ -48,10 +76,32 @@ class TelegramChannelScraper:
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
 
-        # ═══════════════ Resume State ═══════════════════
+        # ═══════════════ Resume State (هماهنگ با debug_scraper) ═══════════════
         self.resume_file = self.base_dir / RESUME_FILE
-        self.resume_data = self._load_resume_state()
+        self.resume = getattr(config, 'resume', False)
+        self._resume_data = None
+        self._resume_loaded = False
+        self._resume_last_link = None
 
+        # بارگذاری وضعیت resume اگر فعال باشد
+        if self.resume:
+            self._resume_data = self._load_resume_state()
+            if self._resume_data:
+                last_link = self._resume_data.get('last_post_link')
+                last_msg_id = self._resume_data.get('last_msg_id')
+                if last_link:
+                    self._resume_last_link = last_link
+                    self._resume_loaded = True
+                    self.logger.info(f"🔄 Resume فعال: last_msg_id={last_msg_id}, total_posts={self._resume_data.get('total_posts', 0)}")
+                    self.logger.info(f"🔗 لینک آخرین پست: {last_link}")
+                else:
+                    self.logger.warning("⚠️ فایل resume موجود است اما 'last_post_link' پیدا نشد.")
+                    self.resume = False
+            else:
+                self.logger.warning("⚠️ فایل resume یافت نشد. اجرا بدون resume.")
+                self.resume = False
+
+        # تنظیم لاگر
         self.logger = logging.getLogger("TelegramScraper")
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -65,32 +115,53 @@ class TelegramChannelScraper:
 
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
         self.logger.info(f"🐞 حالت دیباگ: {'فعال' if self.debug_mode else 'غیرفعال'}")
+        self.logger.info(f"📌 Resume: {'فعال (بارگذاری‌شده)' if self._resume_loaded else 'غیرفعال'}")
 
     # ═══════════════════ Resume State Methods ═══════════════════
+
     def _load_resume_state(self) -> dict:
+        """بارگذاری وضعیت resume از فایل JSON."""
         if self.resume_file.exists():
             try:
                 with open(self.resume_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                self.logger.info(f"📂 وضعیت قبلی بارگذاری شد: آخرین msg_id={data.get('last_msg_id')}, تعداد={data.get('count', 0)}")
+                self.logger.info(f"📂 وضعیت resume بارگذاری شد: {data.get('last_msg_id')}, total={data.get('total_posts', 0)}")
                 return data
-            except Exception:
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در بارگذاری resume: {e}")
                 return {}
         return {}
 
-    def _save_resume_state(self, last_msg_id: str, count: int):
+    def _save_resume_state(self, last_msg_id: str, total_posts: int):
+        """ذخیره وضعیت resume در فایل JSON (هماهنگ با debug_scraper)."""
         try:
+            last_post_link = f"https://t.me/{self.channel}/{last_msg_id}"
+            state = {
+                "last_post_link": last_post_link,
+                "last_msg_id": last_msg_id,
+                "channel": self.channel,
+                "total_posts": total_posts,
+                "timestamp": asyncio.get_event_loop().time()
+            }
             with open(self.resume_file, 'w', encoding='utf-8') as f:
-                json.dump({'last_msg_id': last_msg_id, 'count': count}, f)
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            self.logger.debug(f"💾 Resume state saved: {last_msg_id}, total={total_posts}")
         except Exception as e:
-            self.logger.warning(f"⚠️ ذخیره وضعیت resume ناموفق: {e}")
+            self.logger.warning(f"⚠️ خطا در ذخیره resume: {e}")
 
     def _clear_resume_state(self):
+        """حذف فایل resume (در صورت پایان کامل)."""
         if self.resume_file.exists():
-            self.resume_file.unlink()
+            try:
+                self.resume_file.unlink()
+                self.logger.debug("🗑️ فایل resume حذف شد.")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در حذف resume: {e}")
 
     # ═══════════════════ متد اصلی با Timeout انعطاف‌پذیر ═══════════════════
+
     async def run(self):
+        """اجرای اصلی اسکرپر با زمان‌بندی timeout."""
         timeout = getattr(self.config, 'timeout_seconds', OVERALL_TIMEOUT)
         try:
             await asyncio.wait_for(self._run_impl(), timeout=timeout)
@@ -100,6 +171,7 @@ class TelegramChannelScraper:
             self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
 
     async def _run_impl(self):
+        """پیاده‌سازی اصلی اسکرپر."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر با لینک: {self.start_link} (limit={self.limit})")
         else:
@@ -111,34 +183,48 @@ class TelegramChannelScraper:
             if context:
                 await context.close()
             return
+
         self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
 
         media_map, downloaded = await self._download_media(items, page, context)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
+        # ذخیره وضعیت نهایی (قدیمی‌ترین پست)
+        if items:
+            oldest_item = min(items, key=lambda x: int(x.get('id', 0)))
+            self._save_resume_state(oldest_item['id'], len(items))
+
         gen = OutputGenerator(
             self.base_dir,
             self.channel,
             items,
             media_map,
-            debug_mode=self.debug_mode
+            debug_mode=self.debug_mode,
+            append_mode=self.resume and self._resume_loaded  # هماهنگ با debug_scraper
         )
         gen.run_all()
 
         if context:
             await context.close()
 
-        self._clear_resume_state()
+        # اگر resume فعال نبود، فایل resume را پاک کن
+        if not self.resume:
+            self._clear_resume_state()
+
         self.logger.info("✅ پایان موفقیت‌آمیز.")
 
     # ═══════════════════ متد کمکی: پاک‌سازی نام فایل ═══════════════════
+
     @staticmethod
     def _sanitize_filename(name: str) -> str:
+        """پاک‌سازی نام فایل با حذف کاراکترهای غیرمجاز."""
         return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
     # ═══════════════════ متد واحد برای اسکرین‌شات ═══════════════════
+
     async def _screenshot(self, page, name: str, full_page: bool = True, element=None):
+        """گرفتن اسکرین‌شات از صفحه یا المنت."""
         try:
             if element is not None:
                 if hasattr(element, 'element_handle'):
@@ -160,14 +246,18 @@ class TelegramChannelScraper:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات {name}: {e}")
 
     async def _save_screenshot(self, page, name: str):
+        """ذخیره اسکرین‌شات کامل صفحه."""
         await self._screenshot(page, name, full_page=True)
 
     async def _take_screenshot(self, page, name: str):
+        """ذخیره اسکرین‌شات دیباگ کامل صفحه."""
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
         await self._screenshot(page, name, full_page=True)
 
     # ═══════════════════ رسم صلیب روی المنت ═══════════════════
+
     async def _draw_debug_cross(self, page, element_handle):
+        """رسم صلیب قرمز روی المنت برای دیباگ."""
         try:
             if not element_handle:
                 return
@@ -195,10 +285,18 @@ class TelegramChannelScraper:
         except Exception as e:
             self.logger.debug(f"خطا در رسم صلیب: {e}")
 
-    # ═══════════════════ استخراج پست‌ها با Resume و استخراج هوشمند متن (نسخه نهایی مقاوم) ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
+    # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
+
+    async def _fetch_posts_from_telegram(self) -> Tuple[List[Dict], Any, Any]:
+        """
+        استخراج پست‌ها از کانال تلگرام با پشتیبانی از Resume و start_link.
+
+        Returns:
+            Tuple[List[Dict], Any, Any]: (پست‌ها, context, page)
+        """
         from playwright.async_api import async_playwright
 
+        # ─── راه‌اندازی مرورگر ──────────────────────────────────
         p = await async_playwright().start()
         context = await p.chromium.launch_persistent_context(
             user_data_dir=str(self.profile_dir),
@@ -216,6 +314,7 @@ class TelegramChannelScraper:
             await context.close()
             return [], None, None
 
+        # ─── ورود به کانال یا لینک ──────────────────────────────
         if self.start_link:
             entered = await self._navigate_to_start_link(page)
         else:
@@ -226,8 +325,8 @@ class TelegramChannelScraper:
             return [], None, None
         await self._save_screenshot(page, "initial")
 
-        # پرش به پایین فقط در حالت عادی و بدون resume
-        if not self.start_link and not self.resume_data.get('last_msg_id'):
+        # ─── پرش به پایین (فقط در حالت عادی و بدون resume) ────
+        if not self.start_link and not self._resume_loaded:
             self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
             clicked = False
             scroll_button_selectors = [
@@ -253,20 +352,21 @@ class TelegramChannelScraper:
         elif self.start_link:
             self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.")
         else:
-            self.logger.info(f"ℹ️ حالت Resume: از msg_id={self.resume_data.get('last_msg_id')} ادامه می‌دهیم.")
+            self.logger.info(f"ℹ️ حالت Resume: از msg_id={self._resume_data.get('last_msg_id')} ادامه می‌دهیم.")
 
-        # جمع‌آوری پست‌ها
+        # ─── جمع‌آوری پست‌ها ──────────────────────────────────
         items = []
         seen_ids = set()
         scroll_attempts = 0
 
-        resume_last_id = self.resume_data.get('last_msg_id') if not self.start_link else None
+        # تعیین نقطه شروع برای Resume
+        resume_last_id = self._resume_data.get('last_msg_id') if self._resume_loaded else None
         start_collecting = False
         extra_scroll_count = 0
         max_extra_scrolls = 4
         collected_count = 0
 
-        # اگر resume داریم، ابتدا به پیام مورد نظر برویم
+        # ─── اگر Resume داریم، به پیام مورد نظر برویم ──────────
         if resume_last_id:
             self.logger.info(f"🔄 تلاش برای یافتن پیام resume: {resume_last_id}")
             try:
@@ -287,6 +387,7 @@ class TelegramChannelScraper:
                 start_collecting = True
                 resume_last_id = None
 
+        # ─── اگر start_link داریم، پیام هدف را پیدا کن ──────────
         if self.start_link and self.target_msg_id:
             self.logger.info(f"🎯 پیدا کردن پیام هدف {self.target_msg_id}...")
             try:
@@ -301,10 +402,13 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف: {e}")
 
+        # ─── حلقه اصلی استخراج ──────────────────────────────────
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
             try:
                 messages = await page.locator('div[data-message-id]').all()
-                
+                self.logger.debug(f"🔍 تعداد پیام‌های موجود: {len(messages)}")
+
+                # انتخاب ترتیب بر اساس حالت
                 if self.start_link or resume_last_id:
                     msg_iter = messages
                 else:
@@ -316,6 +420,7 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
+                        # در حالت start_link، فقط بعد از رسیدن به پیام هدف شروع کن
                         if self.start_link and not start_collecting:
                             if msg_id == self.target_msg_id:
                                 start_collecting = True
@@ -323,13 +428,12 @@ class TelegramChannelScraper:
                                 seen_ids.add(msg_id)
                             else:
                                 continue
-                        elif resume_last_id and not start_collecting:
-                            pass
 
+                        # اگر هنوز شروع نکرده‌ایم، ادامه نده
                         if not start_collecting:
                             continue
 
-                        # ═══════════════ استخراج هوشمند متن پست (نسخه نهایی مقاوم) ═══════════════
+                        # ═══════════════ استخراج هوشمند متن پست ═══════════════
                         text = ""
                         try:
                             # روش ۱: selectorهای خاص برای محتوای اصلی
@@ -347,21 +451,21 @@ class TelegramChannelScraper:
                                     if text and len(text) > 3:
                                         break
 
-                            # روش ۲: استفاده از inner_text کل پیام (با try/except جداگانه)
+                            # روش ۲: استفاده از inner_text کل پیام
                             if not text or len(text) < 5:
                                 try:
                                     text = (await msg.inner_text()).strip()[:1000]
                                 except Exception as e:
                                     self.logger.debug(f"   inner_text fallback failed for {msg_id}: {e}")
 
-                            # روش ۳: JavaScript textContent (قوی‌ترین fallback)
+                            # روش ۳: JavaScript textContent
                             if not text or len(text) < 5:
                                 try:
                                     text = (await msg.evaluate("el => el.textContent || ''")).strip()[:1000]
                                 except Exception as e:
                                     self.logger.debug(f"   textContent fallback failed for {msg_id}: {e}")
 
-                            # روش ۴: (اضطراری) استفاده از page.evaluate روی خود المنت با innerText
+                            # روش ۴: (اضطراری) استفاده از page.evaluate
                             if not text or len(text) < 5:
                                 try:
                                     text = (await page.evaluate(f"""
@@ -373,11 +477,10 @@ class TelegramChannelScraper:
                                 except Exception as e:
                                     self.logger.debug(f"   emergency evaluate failed for {msg_id}: {e}")
 
-                            # تمیز کردن نهایی (حذف فاصله‌های اضافی)
+                            # تمیز کردن نهایی
                             if text:
                                 text = re.sub(r'\s+', ' ', text).strip()[:1000]
 
-                            # اگر باز هم خالی بود، لاگ هشدار
                             if not text or len(text) < 2:
                                 self.logger.debug(f"⚠️ متن پست {msg_id} خالی یا بسیار کوتاه است.")
 
@@ -403,20 +506,24 @@ class TelegramChannelScraper:
                         seen_ids.add(msg_id)
                         collected_count += 1
 
-                        if start_collecting and collected_count % 3 == 0:
-                            self._save_resume_state(msg_id, collected_count)
+                        # ذخیره وضعیت هر ۳ پست (برای ادامه در صورت شکست)
+                        if collected_count % 3 == 0:
+                            self._save_resume_state(msg_id, len(items))
 
                         if len(items) >= self.limit:
                             break
+
                     except Exception as e:
                         self.logger.debug(f"خطا در پردازش پیام: {e}")
                         continue
+
             except Exception as e:
                 self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
 
             if len(items) >= self.limit:
                 break
 
+            # ─── اسکرول به بالا ──────────────────────────────────
             old_height = await page.evaluate("document.documentElement.scrollHeight")
             await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
             await human_sleep(2.5, 0.5)
@@ -424,9 +531,12 @@ class TelegramChannelScraper:
 
             if new_height == old_height:
                 scroll_attempts += 1
+                self.logger.debug(f"⚠️ ارتفاع صفحه تغییر نکرد. تلاش {scroll_attempts}/{MAX_SCROLL_ATTEMPTS}")
             else:
                 scroll_attempts = 0
+                self.logger.debug(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
 
+            # ─── اگر start_collecting فعال نشده، اسکرول اضافی ──
             if not start_collecting:
                 extra_scroll_count += 1
                 if extra_scroll_count <= max_extra_scrolls:
@@ -442,15 +552,19 @@ class TelegramChannelScraper:
                     start_collecting = True
                     resume_last_id = None
 
+            # ─── تاخیر برای جلوگیری از بارگذاری بیش از حد ──────
             if len(items) % 5 == 0 and len(items) > 0:
                 await human_sleep(1.5, 0.3)
 
+        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
         items = items[:self.limit]
         self.logger.info(f"📊 {len(items)} پست جمع‌آوری شد.")
 
+        # ─── اسکرین‌شات نهایی ──────────────────────────────────
         await self._save_screenshot(page, "final")
         await self._capture_post_screenshots(page, items)
 
+        # ─── اسکرول به اولین پست ──────────────────────────────
         if items:
             first_id = items[0]['id']
             try:
@@ -462,7 +576,17 @@ class TelegramChannelScraper:
         return items, context, page
 
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
+
     async def _search_and_enter_channel(self, page) -> bool:
+        """
+        جستجوی کانال و ورود به آن.
+
+        Args:
+            page: صفحه مرورگر
+
+        Returns:
+            bool: موفقیت‌آمیز بودن عملیات
+        """
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -476,6 +600,7 @@ class TelegramChannelScraper:
                     break
             except Exception:
                 continue
+
         if not search_input:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
@@ -494,25 +619,14 @@ class TelegramChannelScraper:
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
 
-        self.logger.info("🕐 مرحله اول انتظار (۱۰ ثانیه)...")
-        await human_sleep(10, 0.5)
-        if await self._check_text_on_page(page, search_term):
-            found = True
-            self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله اول یافت شد.")
-
-        if not found:
-            self.logger.info("🕑 مرحله دوم انتظار (۱۵ ثانیه)...")
-            await human_sleep(15, 0.5)
+        # انتظار با چند مرحله
+        for wait_time, stage in [(10, "اول"), (15, "دوم"), (20, "سوم")]:
+            self.logger.info(f"🕐 مرحله {stage} انتظار ({wait_time} ثانیه)...")
+            await human_sleep(wait_time, 0.5)
             if await self._check_text_on_page(page, search_term):
                 found = True
-                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله دوم یافت شد.")
-
-        if not found:
-            self.logger.info("🕒 مرحله سوم انتظار (۲۰ ثانیه)...")
-            await human_sleep(20, 0.5)
-            if await self._check_text_on_page(page, search_term):
-                found = True
-                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله سوم یافت شد.")
+                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله {stage} یافت شد.")
+                break
 
         if not found:
             self.logger.info("📑 کلیک روی تب Channels (در صورت وجود)...")
@@ -545,7 +659,17 @@ class TelegramChannelScraper:
         return await self._click_search_result(page, search_term)
 
     # ═══════════════════ متد جستجو با لینک ═══════════════════
+
     async def _navigate_to_start_link(self, page) -> bool:
+        """
+        رفتن به لینک مستقیم یک پست.
+
+        Args:
+            page: صفحه مرورگر
+
+        Returns:
+            bool: موفقیت‌آمیز بودن عملیات
+        """
         self.logger.info(f"🔗 تلاش برای رفتن به لینک: {self.start_link}")
 
         try:
@@ -574,6 +698,7 @@ class TelegramChannelScraper:
                         break
                 except Exception:
                     continue
+
             if not search_input:
                 self.logger.error("❌ نوار جستجو پیدا نشد.")
                 return False
@@ -651,6 +776,7 @@ class TelegramChannelScraper:
                     self.logger.warning(f"⚠️ تلاش {attempt+1} برای بارگذاری پیام‌ها ناموفق: {e}")
                     if attempt < 2:
                         await human_sleep(3, 0.5)
+
             self.logger.error("❌ پس از کلیک، پیام‌ها پیدا نشدند.")
             await self._take_screenshot(page, "no_messages_after_click")
             return False
@@ -665,10 +791,13 @@ class TelegramChannelScraper:
                 return True
             else:
                 self.logger.warning(f"❌ تلاش {retry+1} ناموفق بود.")
+
         return False
 
     # ═══════════════════ متد کمکی: بررسی وجود عبارت ═══════════════════
+
     async def _check_text_on_page(self, page, term: str) -> bool:
+        """بررسی وجود یک عبارت در صفحه."""
         try:
             return await page.evaluate(f'''(t) => {{
                 const bodyText = document.body.innerText || '';
@@ -678,12 +807,15 @@ class TelegramChannelScraper:
             return False
 
     # ═══════════════════ کلیک روی نتیجه جستجو ═══════════════════
+
     async def _click_search_result(self, page, search_term: str) -> bool:
+        """کلیک روی نتیجه جستجو برای ورود به کانال."""
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
             'div[class*="ListItem"]', 'div[class*="search-result"]'
         ]
+
         for sel in click_selectors:
             try:
                 loc = page.locator(sel).first
@@ -731,7 +863,9 @@ class TelegramChannelScraper:
         return False
 
     # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
+
     async def _capture_post_screenshots(self, page, items: List[Dict]):
+        """گرفتن اسکرین‌شات از هر پست به‌صورت جداگانه."""
         self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
         for idx, item in enumerate(items):
             msg_id = item['id']
@@ -758,8 +892,20 @@ class TelegramChannelScraper:
 
         self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
 
-    # ═══════════════════ دانلود رسانه‌ها با quiet_base ═══════════════════
-    async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
+    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
+
+    async def _download_media(self, items: List[Dict], page, context) -> Tuple[Dict, int]:
+        """
+        دانلود رسانه‌های مرتبط با پست‌ها.
+
+        Args:
+            items (List[Dict]): لیست پست‌ها
+            page: صفحه مرورگر
+            context: زمینه مرورگر
+
+        Returns:
+            Tuple[Dict, int]: (نقشه رسانه‌ها, تعداد دانلودها)
+        """
         post_ids = [str(item['id']) for item in items]
         media_map = {}
 
