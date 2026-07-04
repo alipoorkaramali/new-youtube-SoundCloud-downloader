@@ -1,0 +1,50 @@
+2026-07-04 20:37:14,493 [WARNING] ⚠️ فایل resume یافت نشد. اجرا بدون resume.
+2026-07-04 20:37:14,493 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-07-04 20:37:14,493 [INFO] 🐞 حالت دیباگ: فعال
+2026-07-04 20:37:14,493 [INFO] 📌 Resume: غیرفعال
+2026-07-04 20:37:14,493 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-07-04 20:37:14,494 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-07-04 20:37:14,494 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
+2026-07-04 20:37:14,494 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=35)
+2026-07-04 20:37:14,494 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
+2026-07-04 20:37:22,631 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-07-04 20:37:24,546 [INFO] 🔍 در حال جستجوی: @bbcpersian
+2026-07-04 20:37:25,825 [INFO] ⏳ منتظر نتایج...
+2026-07-04 20:37:25,825 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
+2026-07-04 20:37:31,928 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
+2026-07-04 20:37:31,928 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-07-04 20:37:39,195 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-07-04 20:37:39,410 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
+2026-07-04 20:37:39,461 [INFO]    ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...
+2026-07-04 20:37:44,631 [INFO] 🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره 1...
+2026-07-04 20:37:49,136 [INFO] 🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره 2...
+2026-07-04 20:37:53,439 [INFO] 🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره 3...
+2026-07-04 20:37:53,441 [WARNING] ⚠️ اسکرول قوی‌تر انجام شد (تلاش 3)
+2026-07-04 20:37:58,395 [INFO] 🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره 4...
+2026-07-04 20:37:58,398 [WARNING] ⚠️ اسکرول قوی‌تر انجام شد (تلاش 4)
+2026-07-04 20:38:02,884 [WARNING] ⚠️ پس از 4 اسکرول اضافی، نقطه شروع پیدا نشد. ادامه با پست‌های موجود...
+2026-07-04 20:38:11,288 [INFO] 📊 23 پست جمع‌آوری شد.
+2026-07-04 20:38:11,443 [INFO] 📸 گرفتن اسکرین‌شات از 23 پست...
+2026-07-04 20:38:20,021 [INFO]    10/23 اسکرین‌شات گرفته شد.
+2026-07-04 20:38:28,956 [INFO]    20/23 اسکرین‌شات گرفته شد.
+2026-07-04 20:39:01,473 [WARNING] ⚠️ خطا در اسکرین‌شات پست 285694: Locator.screenshot: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("[data-message-id=\"285694\"]").first
+
+2026-07-04 20:39:01,474 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 23
+2026-07-04 20:39:01,539 [INFO] 📥 والد 23 پست تحویل داد.
+2026-07-04 20:39:01,539 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: 'DebugTelegramChannelScraper' object has no attribute 'resume_data'
+Traceback (most recent call last):
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 168, in run
+    await asyncio.wait_for(self._run_impl(), timeout=timeout)
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 270, in _run_impl
+    items, context, page = await self._fetch_posts_from_telegram()
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 172, in _fetch_posts_from_telegram
+    is_normal_start = not self.start_link and not self.resume_data.get('last_msg_id')
+                                                  ^^^^^^^^^^^^^^^^
+AttributeError: 'DebugTelegramChannelScraper' object has no attribute 'resume_data'
+2026-07-04 20:39:01,551 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
