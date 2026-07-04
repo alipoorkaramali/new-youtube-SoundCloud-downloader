@@ -76,7 +76,20 @@ class TelegramChannelScraper:
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
 
-        # ═══════════════ Resume State (هماهنگ با debug_scraper) ═══════════════
+        # ═══════════════ راه‌اندازی لاگر (قبل از هر چیز دیگر) ═══════════════
+        # این کار ضروری است زیرا متدهای Resume از self.logger استفاده می‌کنند
+        self.logger = logging.getLogger("TelegramScraper")
+        self.logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        fh = logging.FileHandler(self.base_dir / "scraper.log", encoding='utf-8')
+        fh.setFormatter(formatter)
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        if not self.logger.handlers:
+            self.logger.addHandler(fh)
+            self.logger.addHandler(ch)
+
+        # ═══════════════ Resume State (بعد از لاگر) ═══════════════
         self.resume_file = self.base_dir / RESUME_FILE
         self.resume = getattr(config, 'resume', False)
         self._resume_data = None
@@ -100,18 +113,6 @@ class TelegramChannelScraper:
             else:
                 self.logger.warning("⚠️ فایل resume یافت نشد. اجرا بدون resume.")
                 self.resume = False
-
-        # تنظیم لاگر
-        self.logger = logging.getLogger("TelegramScraper")
-        self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-        fh = logging.FileHandler(self.base_dir / "scraper.log", encoding='utf-8')
-        fh.setFormatter(formatter)
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        if not self.logger.handlers:
-            self.logger.addHandler(fh)
-            self.logger.addHandler(ch)
 
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
         self.logger.info(f"🐞 حالت دیباگ: {'فعال' if self.debug_mode else 'غیرفعال'}")
