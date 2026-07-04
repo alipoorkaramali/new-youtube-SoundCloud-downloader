@@ -10,6 +10,7 @@
 – در حالت Resume، با استفاده از append_mode در OutputGenerator، فایل HTML قبلی با پست‌های جدید ادغام می‌شود.
 – اسکرین‌شات‌های قبلی در هر اجرا پاکسازی می‌شوند.
 – لاگ‌های جامع برای دیباگ فرآیند ادغام و وضعیت Resume.
+– اصلاح اسکرول: اسکرول روی کانتینر اصلی پیام‌ها (نه document) برای بارگذاری پست‌های قدیمی‌تر.
 """
 
 import asyncio
@@ -171,46 +172,85 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی ═══════════════
+    # ═══════════════ اسکرول هوشمند روی کانتینر اصلی (اصلاح شده) ═══════════════
 
     async def _smart_scroll(
         self,
         page,
         direction: str,
-        step: int = 1200,
-        max_attempts: int = 3
+        step: int = 2000,
+        max_attempts: int = 6
     ) -> bool:
         """
-        اسکرول هوشمند با سه پله افزایشی.
-
-        Args:
-            page: صفحه مرورگر
-            direction (str): 'up' یا 'down'
-            step (int): مقدار پایه (مثبت)
-            max_attempts (int): تعداد پله‌ها
-
-        Returns:
-            bool: True اگر ارتفاع تغییر کرد، False اگر نه
+        اسکرول هوشمند روی کانتینر اصلی پیام‌ها (نه document).
+        - direction: 'up' یا 'down'
+        - step: مقدار پایه (مثبت)
+        - max_attempts: تعداد پله‌ها
+        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
         """
-        old_height = await page.evaluate("document.documentElement.scrollHeight")
-        scroll_multipliers = [1, 1.8, 2.8]
+        # سلکتورهای احتمالی کانتینر پیام‌ها در تلگرام وب
+        container_selectors = [
+            'div.messages-container',
+            'div.chat-messages',
+            'div[class*="message-list"]',
+            'div[class*="chat-container"]',
+            'div[class*="scroll"]'
+        ]
+        container_js = """
+        () => {
+            const selectors = %s;
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el) return el;
+            }
+            return document.documentElement;
+        }
+        """ % str(container_selectors)
 
-        for i in range(min(max_attempts, len(scroll_multipliers))):
+        # گرفتن ارتفاع اولیه
+        old_height = await page.evaluate(f"""
+            (() => {{
+                const el = ({container_js});
+                return el.scrollHeight;
+            }})()
+        """)
+
+        scroll_multipliers = [1, 2, 3.5, 5]  # افزایشی‌تر
+        attempts = min(max_attempts, len(scroll_multipliers))
+
+        for i in range(attempts):
             multiplier = scroll_multipliers[i]
             amount = int(step * multiplier)
             if direction == 'up':
                 amount = -amount
 
-            self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
-            await page.evaluate(f"window.scrollBy(0, {amount})")
-            await human_sleep(1.2, 0.3)
+            self.logger.debug(f"   اسکرول {amount}px (پله {i+1}) روی کانتینر")
 
-            new_height = await page.evaluate("document.documentElement.scrollHeight")
+            # اسکرول روی کانتینر (نه window)
+            await page.evaluate(f"""
+                (() => {{
+                    const el = ({container_js});
+                    el.scrollBy(0, {amount});
+                }})()
+            """)
+
+            await human_sleep(1.5, 0.3)
+
+            # بررسی ارتفاع جدید
+            new_height = await page.evaluate(f"""
+                (() => {{
+                    const el = ({container_js});
+                    return el.scrollHeight;
+                }})()
+            """)
+
             if new_height != old_height:
-                self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
+                self.logger.info(f"✅ ارتفاع کانتینر تغییر کرد: {old_height} → {new_height}")
                 return True
 
-        self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
+            self.logger.debug(f"   ارتفاع کانتینر تغییری نکرد (تلاش {i+1}/{attempts})")
+
+        self.logger.info(f"⚠️ ارتفاع کانتینر پس از {attempts} اسکرول تغییر نکرد.")
         return False
 
     # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
@@ -339,10 +379,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         seen_ids = {item.get('id') for item in items if item.get('id')}
         new_items = []
         no_new_attempts = 0
-        max_attempts = 4
+        max_attempts = 6  # افزایش تعداد تلاش‌ها
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=2500, max_attempts=4)
             if not scrolled:
                 no_new_attempts += 1
                 self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
