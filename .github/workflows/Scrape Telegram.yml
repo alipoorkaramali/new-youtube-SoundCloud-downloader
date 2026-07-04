@@ -143,7 +143,7 @@ jobs:
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
       # ════════════════════════════════════════════
-      # ۹. به‌روزرسانی فایل تنظیمات با ورودی‌ها (شامل resume)
+      # ۹. به‌روزرسانی فایل تنظیمات با ورودی‌ها (با تبدیل صحیح بولین)
       # ════════════════════════════════════════════
       - name: ⚙️ Update config.yaml with inputs
         run: |
@@ -158,7 +158,7 @@ jobs:
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
           
-          # start_link: اگر خالی بود، کلید را حذف می‌کنیم (یا خالی می‌گذاریم)
+          # start_link: اگر خالی بود، کلید را حذف می‌کنیم
           start_link = '${{ github.event.inputs.start_link }}'.strip()
           if start_link:
               c['start_link'] = start_link
@@ -168,8 +168,13 @@ jobs:
           # scroll_direction
           c['scroll_direction'] = '${{ github.event.inputs.scroll_direction }}' or 'up'
           
-          # 🔄 resume: اضافه شد
-          c['resume'] = ${{ github.event.inputs.resume == 'true' }}
+          # 🔄 resume: تبدیل رشته به بولین (رفع خطای true/True)
+          resume_val = '${{ github.event.inputs.resume }}'.lower() == 'true'
+          c['resume'] = resume_val
+          
+          # debug_mode (اختیاری، برای هماهنگی)
+          debug_val = '${{ github.event.inputs.debug_mode }}'.lower() == 'true'
+          c['debug_mode'] = debug_val
           
           # ذخیره فایل
           with open('config/config.yaml', 'w') as f:
