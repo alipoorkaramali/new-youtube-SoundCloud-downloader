@@ -15,16 +15,29 @@ on:
         description: 'لینک مستقیم به یک پست (اختیاری، مثال: https://t.me/example/123)'
         required: false
         default: ''
+      scroll_direction:
+        description: 'جهت اسکرول: up = پست‌های قدیمی‌تر (بالا)، down = پست‌های جدیدتر (پایین)'
+        required: false
+        default: 'up'
+        type: choice
+        options:
+          - 'up'
+          - 'down'
       limit:
         description: 'تعداد پست‌ها'
         required: false
-        default: '15'
+        default: '35'
       max_media_mb:
         description: 'حداکثر حجم رسانه (MB)'
         required: false
         default: '80'
       debug_mode:
         description: 'حالت دیباگ (اسکرین‌شات از هر مرحله)'
+        type: boolean
+        required: false
+        default: false
+      resume:
+        description: 'ادامه از آخرین نقطه (اگر فعال باشد، start_link و scroll_direction نادیده گرفته می‌شوند)'
         type: boolean
         required: false
         default: false
@@ -105,39 +118,72 @@ jobs:
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
+          
+      # ════════════════════════════════════════════
+      # ۷. رمزگشایی پروفایل مرورگر
+      # ════════════════════════════════════════════
+      - name: 🔓 Decrypt browser profile
+        run: |
+          if [ ! -f config/browser_profile.tar.gz.gpg ]; then
+            echo "❌ فایل config/browser_profile.tar.gz.gpg یافت نشد!"
+            exit 1
+          fi
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
+              --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
+          if [ ! -s config/browser_profile.tar.gz ]; then
+            echo "❌ رمزگشایی پروفایل ناموفق بود یا فایل خالی است"
+            exit 1
+          fi
+          echo "✅ پروفایل با موفقیت رمزگشایی شد"
 
       # ════════════════════════════════════════════
-      # ۷. استخراج پروفایل مرورگر
+      # ۸. استخراج پروفایل مرورگر
       # ════════════════════════════════════════════
       - name: 📂 Extract browser profile
         run: tar -xzf config/browser_profile.tar.gz -C config/
 
       # ════════════════════════════════════════════
-      # ۸. به‌روزرسانی فایل تنظیمات با ورودی‌ها
+      # ۹. به‌روزرسانی فایل تنظیمات با ورودی‌ها (شامل resume)
       # ════════════════════════════════════════════
       - name: ⚙️ Update config.yaml with inputs
         run: |
           python -c "
           import yaml
           with open('config/config.yaml', 'r') as f:
-              c = yaml.safe_load(f)
+              c = yaml.safe_load(f) or {}
+          
+          # پارامترهای اجباری
           c['channel'] = '${{ github.event.inputs.channel }}' or 'unknown'
-          c['channel_name'] = '${{ github.event.inputs.channel_name }}'
-          c['start_link'] = '${{ github.event.inputs.start_link }}'
+          c['channel_name'] = '${{ github.event.inputs.channel_name }}' or ''
           c['limit'] = ${{ github.event.inputs.limit }}
           c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
+          
+          # start_link: اگر خالی بود، کلید را حذف می‌کنیم (یا خالی می‌گذاریم)
+          start_link = '${{ github.event.inputs.start_link }}'.strip()
+          if start_link:
+              c['start_link'] = start_link
+          else:
+              c.pop('start_link', None)
+          
+          # scroll_direction
+          c['scroll_direction'] = '${{ github.event.inputs.scroll_direction }}' or 'up'
+          
+          # 🔄 resume: اضافه شد
+          c['resume'] = ${{ github.event.inputs.resume == 'true' }}
+          
+          # ذخیره فایل
           with open('config/config.yaml', 'w') as f:
               yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
           "
 
       # ════════════════════════════════════════════
-      # ۸.۵ پاکسازی خروجی قبلی
+      # ۱۰. پاکسازی خروجی قبلی
       # ════════════════════════════════════════════
       - name: 🧹 Clean old output for this channel
         run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
 
       # ════════════════════════════════════════════
-      # ۸.۶ تعیین حالت ذخیره‌سازی هوشمند (پیش‌فرض بر اساس debug_mode) با لاگ واضح
+      # ۱۱. تعیین حالت ذخیره‌سازی هوشمند (پیش‌فرض بر اساس debug_mode)
       # ════════════════════════════════════════════
       - name: 🤖 Smart Save Mode (Default based on debug_mode)
         id: save_mode
@@ -153,7 +199,7 @@ jobs:
           echo "::notice title=📌 Smart Save Mode::$MODE_MSG | Debug=${{ inputs.debug_mode }} | Default=$DEFAULT_SAVE"
 
       # ════════════════════════════════════════════
-      # ۹. اجرای اسکریپر (عادی یا دیباگ)
+      # ۱۲. اجرای اسکریپر (عادی یا دیباگ)
       # ════════════════════════════════════════════
       - name: 🚀 Run Telegram Scraper
         if: ${{ !inputs.debug_mode }}
@@ -166,7 +212,7 @@ jobs:
         timeout-minutes: 35
 
       # ════════════════════════════════════════════
-      # ۱۰. پاکسازی آرتیفکت‌های قدیمی دیباگ
+      # ۱۳. پاکسازی آرتیفکت‌های قدیمی دیباگ
       # ════════════════════════════════════════════
       - name: 🧹 Delete old debug screenshots artifacts
         if: ${{ inputs.save_to == 'artifact' }}
@@ -180,7 +226,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ════════════════════════════════════════════
-      # ۱۱. آپلود اسکرین‌شات‌های دیباگ
+      # ۱۴. آپلود اسکرین‌شات‌های دیباگ
       # ════════════════════════════════════════════
       - name: 📤 Upload debug screenshots
         if: ${{ inputs.save_to == 'artifact' && inputs.debug_mode }}
@@ -190,7 +236,7 @@ jobs:
           path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots/
 
       # ════════════════════════════════════════════
-      # ۱۲. بررسی خروجی (همیشه)
+      # ۱۵. بررسی خروجی (همیشه)
       # ════════════════════════════════════════════
       - name: 📊 Verify output
         if: ${{ always() }}
@@ -203,7 +249,7 @@ jobs:
           echo "✅ Output directory is ready"
 
       # ════════════════════════════════════════════
-      # ۱۲.۵ تنظیم Git LFS
+      # ۱۶. تنظیم Git LFS
       # ════════════════════════════════════════════
       - name: 🐘 Setup Git LFS track for media & zip
         if: ${{ !inputs.debug_mode }}
@@ -213,14 +259,18 @@ jobs:
           git add .gitattributes
 
       # ════════════════════════════════════════════
-      # ۱۳. کامیت و آپلود نتایج (با منطق هوشمند و لاگ اضافی)
+      # ۱۷. کامیت و آپلود نتایج
       # ════════════════════════════════════════════
+      - name: 🔄 Pull latest changes before staging
+        if: ${{ inputs.save_to == 'repository' }}
+        run: |
+          git config pull.rebase true
+          git pull --rebase --autostash origin ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ─────────────────────────────────────────────
-      # ۱۳-الف: Stage کردن فایل‌ها با git add صریح
-      # ─────────────────────────────────────────────
       - name: 🗃 Stage all generated files for commit
-        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        if: ${{ inputs.save_to == 'repository' }}
         run: |
           echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
           ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
@@ -228,31 +278,21 @@ jobs:
           git add -f .gitattributes
           echo "📋 وضعیت فایل‌های staged:"
           git status --short
-
-      # ─────────────────────────────────────────────
-      # ۱۳-ب: Commit و Push با git-auto-commit-action
-      # ─────────────────────────────────────────────
+          
       - name: 💾 Commit and push results
-        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
+        if: ${{ inputs.save_to == 'repository' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }})"
+          commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }}, direction=${{ github.event.inputs.scroll_direction }}, resume=${{ github.event.inputs.resume }})"
           file_pattern: "Download/telegram_downloads/**"
           branch: ${{ github.ref_name }}
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           add_options: "--force"
-
-      # ─────────────────────────────────────────────
-      # ۱۳-ج: لاگ تأیید فعال شدن Commit (اختیاری)
-      # ─────────────────────────────────────────────
-      - name: 📝 Commit mode status
-        if: ${{ inputs.save_to == 'repository' || (inputs.save_to == 'artifact' && steps.save_mode.outputs.DEFAULT_SAVE == 'repository') }}
-        run: |
-          echo "::notice title=📤 Commit Mode Activated::save_to=${{ inputs.save_to }}, default=${{ steps.save_mode.outputs.DEFAULT_SAVE }}"
+          push_options: "--force-with-lease"
 
       # ════════════════════════════════════════════
-      # ۱۴. پاکسازی آرتیفکت‌های قدیمی پست‌ها
+      # ۱۸. پاکسازی آرتیفکت‌های قدیمی پست‌ها
       # ════════════════════════════════════════════
       - name: 🧹 Delete old post screenshots artifacts
         if: ${{ inputs.save_to == 'artifact' }}
@@ -266,7 +306,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ════════════════════════════════════════════
-      # ۱۵. آپلود اسکرین‌شات‌های هر پست (همیشه)
+      # ۱۹. آپلود اسکرین‌شات‌های هر پست (همیشه)
       # ════════════════════════════════════════════
       - name: 📸 Upload post screenshots
         uses: actions/upload-artifact@v4
