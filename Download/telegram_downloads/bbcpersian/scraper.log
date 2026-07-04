@@ -221,3 +221,89 @@
 2026-07-04 13:28:41,959 [INFO] 🔗 آخرین پست (قدیمی‌ترین) برای ادامه‌ی بعدی: https://t.me/bbcpersian/285598
 2026-07-04 13:28:41,959 [INFO] 📊 تعداد کل پست‌های جمع‌آوری‌شده تا الان: 32
 2026-07-04 13:28:41,959 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
+2026-07-04 13:37:49,456 [INFO] 📂 وضعیت resume بارگذاری شد: 285598, total=32
+2026-07-04 13:37:49,456 [INFO] 🔄 Resume فعال: last_msg_id=285598, total_posts=32
+2026-07-04 13:37:49,456 [INFO] 🔗 لینک آخرین پست: https://t.me/bbcpersian/285598
+2026-07-04 13:37:49,456 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-07-04 13:37:49,456 [INFO] 🐞 حالت دیباگ: فعال
+2026-07-04 13:37:49,456 [INFO] 📌 Resume: فعال (بارگذاری‌شده)
+2026-07-04 13:37:49,456 [INFO] 🔄 حالت ادامه (Resume) فعال است.
+2026-07-04 13:37:49,457 [INFO] 🔗 لینک ادامه بارگذاری شد: https://t.me/bbcpersian/285598
+2026-07-04 13:37:49,457 [INFO] 📌 آخرین msg_id: 285598
+2026-07-04 13:37:49,457 [INFO] 🧭 جهت اسکرول به‌طور خودکار به 'up' (قدیمی‌تر) تنظیم شد.
+2026-07-04 13:37:49,457 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-07-04 13:37:49,457 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-07-04 13:37:49,457 [INFO] 🧭 جهت اسکرول نهایی: بالا (قدیمی‌تر)
+2026-07-04 13:37:49,457 [INFO] 📌 وضعیت Resume: فعال=True, بارگذاری‌شده=True
+2026-07-04 13:37:49,457 [INFO] 🧹 پاکسازی اسکرین‌شات‌های قبلی...
+2026-07-04 13:37:49,457 [INFO]    ✅ پوشه debug_screenshots پاک شد
+2026-07-04 13:37:49,459 [INFO]    ✅ پوشه post_screenshots پاک شد
+2026-07-04 13:37:49,459 [INFO] 🚀 شروع اسکریپر دیباگ با لینک: https://t.me/bbcpersian/285598 (limit=90)
+2026-07-04 13:37:49,460 [INFO] 🔄 ====== حالت ادامه (Resume) ======
+2026-07-04 13:37:49,460 [INFO] 🔗 رفتن به لینک ذخیره‌شده: https://t.me/bbcpersian/285598
+2026-07-04 13:37:49,460 [INFO] 🧭 اسکرول به سمت بالا (قدیمی‌تر) برای دریافت پست‌های قبل از نقطه‌ی توقف
+2026-07-04 13:37:49,460 [INFO] ==================================================
+2026-07-04 13:37:49,460 [INFO] 🐞 شروع استخراج با اسکرول جهت‌دار (up)...
+2026-07-04 13:37:57,534 [INFO] 🔗 تلاش برای رفتن به لینک: https://t.me/bbcpersian/285598
+2026-07-04 13:37:57,534 [INFO] 🎯 شناسه پیام هدف: 285598
+2026-07-04 13:37:58,647 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-07-04 13:38:03,001 [INFO] 🔍 لینک تایپ شد: https://t.me/bbcpersian/285598
+2026-07-04 13:38:04,513 [INFO] ⏳ منتظر نتایج جستجو...
+2026-07-04 13:38:20,352 [INFO] ✅ روی اولین نتیجه با سلکتور 'div[class*="message"] a' کلیک شد.
+2026-07-04 13:38:20,845 [INFO] ✅ صفحه پیام‌ها با موفقیت بارگذاری شد.
+2026-07-04 13:38:21,337 [INFO] ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.
+2026-07-04 13:38:21,337 [INFO] 🔄 تلاش برای یافتن پیام resume: 285598
+2026-07-04 13:38:22,506 [INFO] ✅ پیام resume پیدا شد. جمع‌آوری از این نقطه به بالا شروع می‌شود.
+2026-07-04 13:38:22,507 [INFO] 🎯 پیدا کردن پیام هدف 285598...
+2026-07-04 13:38:23,661 [INFO] ✅ پیام هدف به بالای صفحه منتقل شد.
+2026-07-04 13:38:57,492 [INFO] 📊 45 پست جمع‌آوری شد.
+2026-07-04 13:38:57,633 [INFO] 📸 گرفتن اسکرین‌شات از 45 پست...
+2026-07-04 13:39:28,179 [WARNING] ⚠️ خطا در اسکرین‌شات پست 285567: Locator.screenshot: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("[data-message-id=\"285567\"]").first
+
+2026-07-04 13:39:40,281 [INFO]    10/45 اسکرین‌شات گرفته شد.
+2026-07-04 13:39:50,150 [INFO]    20/45 اسکرین‌شات گرفته شد.
+2026-07-04 13:39:59,365 [INFO]    30/45 اسکرین‌شات گرفته شد.
+2026-07-04 13:40:08,998 [INFO]    40/45 اسکرین‌شات گرفته شد.
+2026-07-04 13:40:13,629 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 45
+2026-07-04 13:40:13,700 [INFO] 📥 والد 45 پست تحویل داد.
+2026-07-04 13:40:13,727 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: Page.evaluate: TypeError: el.scrollBy is not a function
+    at eval (eval at evaluate (:303:30), <anonymous>:12:24)
+    at eval (eval at evaluate (:303:30), <anonymous>:13:19)
+    at eval (<anonymous>)
+    at UtilityScript.evaluate (<anonymous>:303:30)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+Traceback (most recent call last):
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 168, in run
+    await asyncio.wait_for(self._run_impl(), timeout=timeout)
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 506, in _run_impl
+    items, context, page = await self._fetch_posts_from_telegram()
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 385, in _fetch_posts_from_telegram
+    scrolled = await self._smart_scroll(page, self.scroll_direction, step=2500, max_attempts=4)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 230, in _smart_scroll
+    await page.evaluate(f"""
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 9284, in evaluate
+    await self._impl_obj.evaluate(
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_page.py", line 472, in evaluate
+    return await self._main_frame.evaluate(expression, arg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_frame.py", line 345, in evaluate
+    await self._channel.send(
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 563, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.evaluate: TypeError: el.scrollBy is not a function
+    at eval (eval at evaluate (:303:30), <anonymous>:12:24)
+    at eval (eval at evaluate (:303:30), <anonymous>:13:19)
+    at eval (<anonymous>)
+    at UtilityScript.evaluate (<anonymous>:303:30)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+2026-07-04 13:40:13,754 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json

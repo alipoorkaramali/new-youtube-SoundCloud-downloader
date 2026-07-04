@@ -1,11 +1,11 @@
 {
   "channel": "bbcpersian",
   "limit": 90,
-  "start_link": "https://t.me/bbcpersian/285630",
+  "start_link": "https://t.me/bbcpersian/285598",
   "scroll_direction": "up",
-  "total_posts": 32,
+  "total_posts": 0,
   "debug_mode": true,
   "resume": true,
   "resume_loaded": true,
-  "resume_last_link": "https://t.me/bbcpersian/285630"
+  "resume_last_link": "https://t.me/bbcpersian/285598"
 }
