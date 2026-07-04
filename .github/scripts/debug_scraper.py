@@ -7,7 +7,7 @@
 – رسانه‌ها را دانلود نمی‌کند (فقط لاگ).
 – اسکرین‌شات‌های کامل صفحه برای تحلیل بهتر ذخیره می‌کند.
 – قابلیت ادامه (Resume) از آخرین نقطه استخراج شده با رفتن دقیق به لینک ذخیره‌شده.
-– در حالت Resume، فایل HTML قبلی را با پست‌های جدید ادغام کرده و مرتب‌سازی می‌کند.
+– در حالت Resume، با استفاده از append_mode در OutputGenerator، فایل HTML قبلی با پست‌های جدید ادغام می‌شود.
 """
 
 import asyncio
@@ -169,52 +169,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.info(f"📸 اسکرین‌شات کامل صفحه ذخیره شد: {path.name}")
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
-
-    # ═══════════════ ادغام با فایل HTML موجود (برای Resume) ═══════════════
-    def _merge_with_existing_posts(self, new_items: List[Dict]) -> List[Dict]:
-        """
-        اگر فایل HTML از قبل وجود داشته باشد، پست‌های آن را خوانده و با پست‌های جدید ادغام می‌کند.
-        سپس همه را بر اساس msg_id مرتب می‌کند (جدیدترین = بزرگترین id).
-        """
-        html_path = self.base_dir / f"{self.channel}_posts.html"
-        if not html_path.exists():
-            return new_items
-
-        try:
-            from bs4 import BeautifulSoup
-            with open(html_path, 'r', encoding='utf-8') as f:
-                soup = BeautifulSoup(f, 'html.parser')
-            
-            existing_posts = []
-            # فرض می‌کنیم هر پست در یک <div class="post"> قرار دارد
-            for div in soup.find_all('div', class_='post'):
-                msg_id = div.get('data-msg-id')
-                if msg_id:
-                    text_div = div.find('div', class_='text')
-                    date_div = div.find('div', class_='date')
-                    existing_posts.append({
-                        'id': msg_id,
-                        'text': text_div.get_text(strip=True) if text_div else '',
-                        'date': date_div.get_text(strip=True) if date_div else ''
-                    })
-            
-            # ترکیب با پست‌های جدید
-            all_posts = existing_posts + new_items
-            # حذف تکراری‌ها بر اساس id
-            seen = set()
-            unique_posts = []
-            for post in all_posts:
-                if post['id'] not in seen:
-                    seen.add(post['id'])
-                    unique_posts.append(post)
-            
-            # مرتب‌سازی نزولی بر اساس id (جدیدترین = بزرگترین عدد)
-            unique_posts.sort(key=lambda x: int(x['id']), reverse=True)
-            self.logger.info(f"🔄 {len(existing_posts)} پست قبلی + {len(new_items)} پست جدید = {len(unique_posts)} پست کل")
-            return unique_posts
-        except Exception as e:
-            self.logger.warning(f"⚠️ خطا در خواندن فایل HTML قبلی: {e}. ادامه با پست‌های جدید.")
-            return new_items
 
     # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
@@ -394,10 +348,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         items, context, page = await self._fetch_posts_from_telegram()
 
-        # ========== RESUME: ادغام با پست‌های قبلی از فایل HTML ==========
-        if self.resume and self._resume_loaded:
-            self.logger.info("🔄 ادغام پست‌های جدید با فایل HTML موجود...")
-            items = self._merge_with_existing_posts(items)
+        # اگر Resume فعال باشد، علامت append_mode را به OutputGenerator ارسال می‌کنیم
+        append_mode = self.resume and self._resume_loaded
 
         self._last_items = items
 
@@ -415,7 +367,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.channel,
                 items,
                 {},
-                debug_mode=self.debug_mode
+                debug_mode=self.debug_mode,
+                append_mode=append_mode  # <-- اضافه شد
             )
             gen.run_all()
             self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
