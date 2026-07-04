@@ -10,8 +10,8 @@
 – در حالت Resume، با استفاده از append_mode در OutputGenerator، فایل HTML قبلی با پست‌های جدید ادغام می‌شود.
 – اسکرین‌شات‌های قبلی در هر اجرا پاکسازی می‌شوند.
 – لاگ‌های جامع برای دیباگ فرآیند ادغام و وضعیت Resume.
-– اصلاح اسکرول: اسکرول روی کانتینر اصلی پیام‌ها (نه document) برای بارگذاری پست‌های قدیمی‌تر.
-– دیباگ اسکرول: اسکرین‌شات از صفحه قبل از هر اسکرول با فلش جهت‌دار برای تحلیل خطاها.
+– اسکرول انسانی‌تر با زمان انتظار بیشتر و حرکت‌های تدریجی.
+– در صورت شکست اسکرول، یک اسکرول کوچک در جهت مخالف برای شبیه‌سازی رفتار انسانی.
 """
 
 import asyncio
@@ -171,24 +171,17 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         """
         گرفتن اسکرین‌شات از صفحه با رسم فلش جهت اسکرول.
         این اسکرین‌شات در پوشه scroll_debug ذخیره می‌شود.
-
-        Args:
-            page: صفحه مرورگر
-            direction (str): 'up' یا 'down'
-            attempt (int): شماره تلاش
         """
         if not self.debug_screenshots:
             return
 
         try:
-            # ─── رسم فلش روی صفحه با JavaScript ──────────────────
             arrow_color = "#FF0000" if direction == 'up' else "#00FF00"
             arrow_symbol = "▲" if direction == 'up' else "▼"
             arrow_text = "UP" if direction == 'up' else "DOWN"
 
             await page.evaluate(f"""
                 () => {{
-                    // حذف فلش قبلی اگر وجود دارد
                     const oldArrow = document.getElementById('scroll_debug_arrow');
                     if (oldArrow) oldArrow.remove();
 
@@ -213,10 +206,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 }}
             """)
 
-            # ─── تاخیر برای اطمینان از نمایش فلش ──────────────
             await human_sleep(0.5, 0.1)
 
-            # ─── گرفتن اسکرین‌شات ──────────────────────────────
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
             safe_channel = self._sanitize_filename(self.channel)
             filename = f"{safe_channel}_scroll_{direction}_attempt_{attempt}_{timestamp}.png"
@@ -224,7 +215,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await page.screenshot(path=path, full_page=True)
             self.logger.info(f"📸 اسکرین‌شات دیباگ اسکرول ذخیره شد: {path.name} (جهت: {direction}, تلاش: {attempt})")
 
-            # ─── حذف فلش ──────────────────────────────────────────
             await page.evaluate("""
                 () => {
                     const arrow = document.getElementById('scroll_debug_arrow');
@@ -235,27 +225,21 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در گرفتن اسکرین‌شات دیباگ اسکرول: {e}")
 
-    # ═══════════════ اسکرول هوشمند روی کانتینر اصلی ═══════════════
+    # ═══════════════ اسکرول هوشمند انسانی (نسخه نهایی) ═══════════════
 
     async def _smart_scroll(
         self,
         page,
         direction: str,
-        step: int = 2000,
-        max_attempts: int = 6
+        step: int = 1500,
+        max_attempts: int = 8
     ) -> bool:
         """
-        اسکرول هوشمند روی کانتینر اصلی پیام‌ها (نه document).
-        در صورت فعال بودن دیباگ، قبل از هر اسکرول از صفحه اسکرین‌شات می‌گیرد.
-
-        Args:
-            page: صفحه مرورگر
-            direction (str): 'up' یا 'down'
-            step (int): مقدار پایه اسکرول
-            max_attempts (int): تعداد پله‌ها
-
-        Returns:
-            bool: True اگر ارتفاع تغییر کرد، False اگر نه
+        اسکرول هوشمند انسانی با حرکت‌های تدریجی و زمان انتظار بیشتر.
+        - direction: 'up' یا 'down'
+        - step: مقدار پایه اسکرول (کمتر برای حرکت نرم‌تر)
+        - max_attempts: تعداد پله‌ها
+        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
         """
         # سلکتورهای احتمالی کانتینر پیام‌ها در تلگرام وب
         container_selectors = [
@@ -263,7 +247,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             'div.chat-messages',
             'div[class*="message-list"]',
             'div[class*="chat-container"]',
-            'div[class*="scroll"]'
+            'div[class*="scroll"]',
+            'div[class*="messages"]'
         ]
         selectors_json = json.dumps(container_selectors)
 
@@ -289,24 +274,27 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         found_selector = result.get('foundSelector', 'unknown')
         has_scroll_by = result.get('hasScrollBy', False)
 
-        self.logger.debug(f"🔍 کانتینر پیدا شده: {found_selector}, scrollBy موجود: {has_scroll_by}, ارتفاع: {old_height}")
+        self.logger.info(f"🔍 کانتینر پیدا شده: {found_selector}, scrollBy: {has_scroll_by}, ارتفاع اولیه: {old_height}")
 
-        scroll_multipliers = [1, 2, 3.5, 5]
+        # ضرایب اسکرول نرم و تدریجی (شروع با حرکت‌های کوچک)
+        scroll_multipliers = [0.4, 0.8, 1.2, 2.0, 3.0, 4.0, 5.0, 6.0]
         attempts = min(max_attempts, len(scroll_multipliers))
 
         for i in range(attempts):
             multiplier = scroll_multipliers[i]
             amount = int(step * multiplier)
+
+            # اگر جهت بالا باشد، مقدار را منفی می‌کنیم
             if direction == 'up':
                 amount = -amount
 
             # ─── اسکرین‌شات دیباگ قبل از اسکرول ──────────────────
             await self._take_scroll_debug_screenshot(page, direction, i + 1)
 
-            self.logger.debug(f"   اسکرول {amount}px (پله {i+1}/{attempts}) روی کانتینر: {found_selector}")
+            self.logger.debug(f"   اسکرول {amount}px (پله {i+1}/{attempts})")
 
-            # ─── اسکرول و گرفتن ارتفاع جدید ──────────────────────
-            new_height = await page.evaluate(f"""
+            # ─── اسکرول روی کانتینر ──────────────────────────────
+            await page.evaluate(f"""
                 (() => {{
                     const selectors = {selectors_json};
                     let el = document.documentElement;
@@ -317,22 +305,60 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     if (el && typeof el.scrollBy === 'function') {{
                         el.scrollBy(0, {amount});
                     }} else {{
-                        // Fallback: اسکرول روی window
                         window.scrollBy(0, {amount});
+                    }}
+                }})()
+            """)
+
+            # ─── زمان انتظار طولانی‌تر برای لودینگ تنبل ──────────
+            # ۳ تا ۴ ثانیه صبر می‌کنیم تا محتوای جدید بارگذاری شود
+            await human_sleep(3.5, 0.5)
+
+            # ─── بررسی ارتفاع جدید ──────────────────────────────
+            new_height = await page.evaluate(f"""
+                (() => {{
+                    const selectors = {selectors_json};
+                    let el = document.documentElement;
+                    for (const sel of selectors) {{
+                        const found = document.querySelector(sel);
+                        if (found) {{ el = found; break; }}
                     }}
                     return el.scrollHeight;
                 }})()
             """)
 
-            await human_sleep(1.5, 0.3)
-
             if new_height != old_height:
                 self.logger.info(f"✅ ارتفاع کانتینر تغییر کرد: {old_height} → {new_height}")
                 return True
 
-            self.logger.debug(f"   ارتفاع کانتینر تغییری نکرد (تلاش {i+1}/{attempts})")
+            self.logger.debug(f"   ارتفاع تغییری نکرد (تلاش {i+1}/{attempts})")
 
-        self.logger.info(f"⚠️ ارتفاع کانتینر پس از {attempts} اسکرول تغییر نکرد.")
+            # ─── اگر ارتفاع تغییر نکرد، یک اسکرول کوچک در جهت مخالف ──
+            # برای شبیه‌سازی رفتار انسانی و تحریک بارگذاری
+            if i < attempts - 1:  # اگر آخرین تلاش نبود
+                reverse_amount = 150 if direction == 'up' else -150  # اسکرول کوچک برعکس
+                self.logger.debug(f"   🔄 اسکرول برعکس {reverse_amount}px (شبیه‌سازی رفتار انسانی)")
+
+                await page.evaluate(f"""
+                    (() => {{
+                        const selectors = {selectors_json};
+                        let el = document.documentElement;
+                        for (const sel of selectors) {{
+                            const found = document.querySelector(sel);
+                            if (found) {{ el = found; break; }}
+                        }}
+                        if (el && typeof el.scrollBy === 'function') {{
+                            el.scrollBy(0, {reverse_amount});
+                        }} else {{
+                            window.scrollBy(0, {reverse_amount});
+                        }}
+                    }})()
+                """)
+
+                # زمان انتظار کوتاه بعد از اسکرول برعکس
+                await human_sleep(1.0, 0.2)
+
+        self.logger.warning(f"⚠️ ارتفاع کانتینر پس از {attempts} اسکرول تغییر نکرد.")
         return False
 
     # ═══════════════ استخراج پست‌ها با JavaScript ═══════════════════
@@ -408,6 +434,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         # اگر به تعداد کافی پست داریم، ادامه نده
         if len(items) >= self.limit:
             await self._capture_full_page_screenshot(page, "final")
+            self.logger.info(f"ℹ️ تعداد پست‌ها ({len(items)}) به حد نصاب ({self.limit}) رسیده است. اسکرول انجام نمی‌شود.")
             return items, context, page
 
         # ─── پرش به ابتدا یا انتها (فقط در حالت عادی) ──────────
@@ -448,15 +475,22 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         seen_ids = {item.get('id') for item in items if item.get('id')}
         new_items = []
         no_new_attempts = 0
-        max_attempts = 6
+        max_attempts = 8  # افزایش تعداد تلاش‌ها
+
+        self.logger.info(f"🔄 شروع اسکرول جهت‌دار برای دریافت پست‌های بیشتر (حداکثر {max_attempts} تلاش)...")
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
-            scrolled = await self._smart_scroll(page, self.scroll_direction, step=2500, max_attempts=4)
+            self.logger.info(f"⏳ تلاش {no_new_attempts + 1}/{max_attempts} برای اسکرول...")
+
+            # اسکرول با تنظیمات انسانی
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1500, max_attempts=6)
+
             if not scrolled:
                 no_new_attempts += 1
                 self.logger.info(f"⏳ اسکرول نتیجه‌ای نداشت ({no_new_attempts}/{max_attempts})")
                 continue
 
+            # استخراج پست‌های جدید
             current_items = await self._extract_posts_from_page(page)
             added = 0
             for item in current_items:
@@ -465,11 +499,12 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     seen_ids.add(item_id)
                     new_items.append(item)
                     added += 1
+
             if added > 0:
                 self.logger.info(f"📈 {added} پست جدید در این مرحله اضافه شد (مجموع: {len(seen_ids)})")
-                no_new_attempts = 0
+                no_new_attempts = 0  # ریست شمارنده در صورت موفقیت
             else:
-                no_new_attempts += 1
+                self.logger.debug(f"ℹ️ پست جدیدی در این مرحله پیدا نشد. ({no_new_attempts + 1}/{max_attempts})")
 
             if len(seen_ids) >= self.limit:
                 break
@@ -555,12 +590,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 if hasattr(self, 'screenshots_dir') and self.screenshots_dir.exists():
                     shutil.rmtree(self.screenshots_dir)
                     self.logger.info(f"   ✅ پوشه {self.screenshots_dir.name} پاک شد")
-
-                # پوشه scroll_debug را پاک نمی‌کنیم تا اسکرین‌شات‌های قبلی باقی بمانند
-                # اما برای شروع تمیز، می‌توانیم پاک کنیم (اختیاری)
-                # if self.scroll_debug_dir.exists():
-                #     shutil.rmtree(self.scroll_debug_dir)
-                #     self.logger.info(f"   ✅ پوشه {self.scroll_debug_dir.name} پاک شد")
 
                 self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
                 if hasattr(self, 'screenshots_dir'):
