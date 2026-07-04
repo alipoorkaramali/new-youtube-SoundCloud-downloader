@@ -76,6 +76,12 @@ class TelegramChannelScraper:
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
 
+        # ═══════════════ ذخیره جهت اسکرول (برای هماهنگی با debug) ═══════════════
+        self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
+        if self.scroll_direction not in ['up', 'down']:
+            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
+            self.scroll_direction = 'up'
+
         # ═══════════════ راه‌اندازی لاگر (قبل از هر چیز دیگر) ═══════════════
         # این کار ضروری است زیرا متدهای Resume از self.logger استفاده می‌کنند
         self.logger = logging.getLogger("TelegramScraper")
@@ -117,6 +123,7 @@ class TelegramChannelScraper:
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
         self.logger.info(f"🐞 حالت دیباگ: {'فعال' if self.debug_mode else 'غیرفعال'}")
         self.logger.info(f"📌 Resume: {'فعال (بارگذاری‌شده)' if self._resume_loaded else 'غیرفعال'}")
+        self.logger.info(f"🧭 جهت اسکرول: {self.scroll_direction}")
 
     # ═══════════════════ Resume State Methods ═══════════════════
 
@@ -327,29 +334,34 @@ class TelegramChannelScraper:
         await self._save_screenshot(page, "initial")
 
         # ─── پرش به پایین (فقط در حالت عادی و بدون resume) ────
+        # هماهنگی با debug_scraper: اگر debug_mode فعال و scroll_direction == 'up' باشد، پرش انجام نمی‌شود
         if not self.start_link and not self._resume_loaded:
-            self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
-            clicked = False
-            scroll_button_selectors = [
-                'button[title="Go to bottom"]',
-                'div[class*="scroll-to-bottom"]',
-                'div[class*="ScrollButton"]',
-                '[aria-label="Scroll to bottom"]',
-                'button:has(svg[class*="arrow-down"])',
-            ]
-            for sel in scroll_button_selectors:
-                try:
-                    btn = page.locator(sel).first
-                    if await btn.count() > 0:
-                        await btn.click(timeout=5000)
-                        self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                        clicked = True
-                        await human_sleep(3.5, 0.4)
-                        break
-                except Exception:
-                    continue
-            if not clicked:
-                self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
+            # از self.debug_mode و self.scroll_direction استفاده می‌کنیم
+            if not self.debug_mode or self.scroll_direction == 'down':
+                self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+                clicked = False
+                scroll_button_selectors = [
+                    'button[title="Go to bottom"]',
+                    'div[class*="scroll-to-bottom"]',
+                    'div[class*="ScrollButton"]',
+                    '[aria-label="Scroll to bottom"]',
+                    'button:has(svg[class*="arrow-down"])',
+                ]
+                for sel in scroll_button_selectors:
+                    try:
+                        btn = page.locator(sel).first
+                        if await btn.count() > 0:
+                            await btn.click(timeout=5000)
+                            self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                            clicked = True
+                            await human_sleep(3.5, 0.4)
+                            break
+                    except Exception:
+                        continue
+                if not clicked:
+                    self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
+            else:
+                self.logger.info(f"🔄 حالت Debug با جهت '{self.scroll_direction}' → پرش به پایین غیرفعال شد.")
         elif self.start_link:
             self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.")
         else:
