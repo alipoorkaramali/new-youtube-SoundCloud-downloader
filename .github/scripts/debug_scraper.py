@@ -46,6 +46,12 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
             self.scroll_direction = 'up'
 
+        # ═══════════════ مقداردهی resume_data (رفع AttributeError) ═══════════════
+        if not hasattr(self, 'resume_data') or self.resume_data is None:
+            self.resume_data = {}
+        if 'last_msg_id' not in self.resume_data:
+            self.resume_data['last_msg_id'] = None
+
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
         self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
@@ -150,7 +156,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
 
-        # ۱. اجرای منطق اصلی والد
+        # ۱. اجرای منطق اصلی والد (که اکنون پرش شرطی دارد)
         items, context, page = await super()._fetch_posts_from_telegram()
 
         if not page:
@@ -163,6 +169,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
 
+        # اگر به حد کافی رسیده‌ایم، نیازی به اسکرول اضافی نیست
         if len(items) >= self.limit:
             self.logger.info("✅ به حد limit رسیدیم. نیازی به اسکرول اضافی نیست.")
             await self._capture_full_page_screenshot(page, "final")
@@ -170,8 +177,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         # ─── تشخیص حالت ─────────────────────────────
         is_normal_start = not self.start_link and not self.resume_data.get('last_msg_id')
-        is_specific_start = bool(self.start_link or self.resume_data.get('last_msg_id'))
-
         # بررسی موقعیت صفحه
         at_bottom = await self._is_at_bottom(page)
 
@@ -182,6 +187,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             return items, context, page
 
         # تعیین تعداد تلاش
+        is_specific_start = bool(self.start_link or self.resume_data.get('last_msg_id'))
         max_attempts = 2 if is_specific_start else 3
         self.logger.info(f"🔁 اسکرول اضافی فعال — حداکثر {max_attempts} تلاش")
 
