@@ -62,7 +62,13 @@ class OutputGenerator:
 
         safe_name = self._sanitize_filename(self.channel)
         html_path = self.base_dir / f"{safe_name}_posts.html"
+
+        # 🔍 لاگ مسیر برای دیباگ
+        self.logger.info(f"🔍 جستجوی فایل HTML قبلی در: {html_path}")
+
         if not html_path.exists():
+            self.logger.warning(f"⚠️ فایل HTML قبلی وجود ندارد: {html_path}")
+            self.logger.info("ℹ️ ادامه بدون ادغام (فقط پست‌های جدید ذخیره می‌شوند).")
             return self.posts
 
         if BeautifulSoup is None:
@@ -75,7 +81,10 @@ class OutputGenerator:
 
             existing_posts = []
             # فرض می‌کنیم هر پست در یک <div class="post"> قرار دارد
-            for div in soup.find_all('div', class_='post'):
+            post_divs = soup.find_all('div', class_='post')
+            self.logger.info(f"📄 تعداد div های با کلاس 'post' در HTML: {len(post_divs)}")
+
+            for div in post_divs:
                 msg_id = div.get('data-msg-id')
                 if msg_id:
                     text_div = div.find('div', class_='text')
@@ -85,6 +94,10 @@ class OutputGenerator:
                         'text': text_div.get_text(strip=True) if text_div else '',
                         'date': date_div.get_text(strip=True) if date_div else ''
                     })
+                else:
+                    self.logger.debug(f"⚠️ div با کلاس 'post' فاقد attribute 'data-msg-id' است: {div}")
+
+            self.logger.info(f"📄 {len(existing_posts)} پست از فایل HTML قبلی استخراج شد.")
 
             # ترکیب با پست‌های جدید
             all_posts = existing_posts + self.posts
@@ -95,14 +108,17 @@ class OutputGenerator:
                 if post['id'] not in seen:
                     seen.add(post['id'])
                     unique_posts.append(post)
+                else:
+                    self.logger.debug(f"⏭️ پست تکراری حذف شد: id={post['id']}")
 
             # مرتب‌سازی نزولی بر اساس id (جدیدترین = بزرگترین عدد)
             unique_posts.sort(key=lambda x: int(x['id']), reverse=True)
-            self.logger.info(f"🔄 append_mode: {len(existing_posts)} پست قبلی + {len(self.posts)} پست جدید = {len(unique_posts)} پست کل")
+            self.logger.info(f"🔄 append_mode: {len(existing_posts)} پست قبلی + {len(self.posts)} پست جدید = {len(unique_posts)} پست کل (پس از حذف تکراری‌ها)")
             return unique_posts
 
         except Exception as e:
-            self.logger.warning(f"⚠️ خطا در خواندن فایل HTML قبلی: {e}. ادامه با پست‌های جدید.")
+            self.logger.warning(f"⚠️ خطا در خواندن فایل HTML قبلی: {e}", exc_info=True)
+            self.logger.info("ℹ️ ادامه بدون ادغام (فقط پست‌های جدید ذخیره می‌شوند).")
             return self.posts
 
     # ════════════════════════════════════════════════════════════════
@@ -137,9 +153,14 @@ class OutputGenerator:
     def generate_html(self):
         # اگر append_mode فعال باشد، پست‌ها را با فایل قبلی ادغام می‌کنیم
         if self.append_mode:
+            self.logger.info("🔄 append_mode فعال است. تلاش برای ادغام با فایل HTML قبلی...")
             merged_posts = self._merge_with_existing_posts()
+            if len(merged_posts) != len(self.posts):
+                self.logger.info(f"📊 تعداد پست‌ها پس از ادغام: {len(merged_posts)} (قبلاً {len(self.posts)})")
             # به‌روزرسانی self.posts برای استفاده در بقیه متدها (مثلاً CSV)
             self.posts = merged_posts
+        else:
+            self.logger.info("ℹ️ append_mode غیرفعال است. فایل HTML از نو ساخته می‌شود.")
 
         safe_name = self._sanitize_filename(self.channel)
         html_path = self.base_dir / f"{safe_name}_posts.html"
@@ -147,7 +168,7 @@ class OutputGenerator:
         html = self._build_html_content(current_iran)
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html)
-        self.logger.info(f"🌐 HTML: {html_path.name}")
+        self.logger.info(f"🌐 HTML ذخیره شد: {html_path.name} (تعداد پست‌ها: {len(self.posts)})")
 
     # ════════════════════════════════════════════════════════════════
     # ساخت محتوای HTML با قالب (جستجوی خودکار در چند مسیر)
