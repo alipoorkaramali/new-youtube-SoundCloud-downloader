@@ -1,8 +1,8 @@
-PyYAML
-aiohttp
-tqdm
-Jinja2
-cryptography
-playwright
-beautifulsoup4
-lxml
+PyYAML>=6.0
+aiohttp>=3.9.0
+tqdm>=4.66.0
+Jinja2>=3.1.0
+cryptography>=41.0.0
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
