@@ -138,7 +138,15 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 return scrollTop + clientHeight >= scrollHeight - 100;
             }
         """)
-
+    # ═══════════════ بررسی بالای صفحه (کمکی) ═══════════════════
+    async def _is_at_top(self, page) -> bool:
+        """بررسی میکند که آیا صفحه به بالاترین نقطه رسیده است (با ۱۰۰px تحمل)."""
+        return await page.evaluate("""
+            () => {
+                const scrollTop = document.documentElement.scrollTop;
+                return scrollTop <= 100;
+            }
+        """)
     # ═══════════════ اسکرین‌شات کامل صفحه ═══════════════════
     async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
         """گرفتن اسکرین‌شات کامل از کل صفحه."""
@@ -185,10 +193,27 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.info("ℹ️ در انتهای کانال هستیم و direction=down است. اسکرول اضافی لغو شد.")
             await self._capture_full_page_screenshot(page, "final")
             return items, context, page
-
+            
         # تعیین تعداد تلاش
         is_specific_start = bool(self.start_link or self.resume_data.get('last_msg_id'))
         max_attempts = 2 if is_specific_start else 3
+
+        # ─── بررسی وضعیت صفحه قبل از اسکرول ──────────────
+        at_top = await self._is_at_top(page)
+        at_bottom = await self._is_at_bottom(page)
+
+        # اگر در جهت up هستیم و در بالای صفحه قرار داریم، اسکرول اضافی لازم نیست
+        if self.scroll_direction == 'up' and at_top:
+            self.logger.info("ℹ️ در بالاترین نقطه هستیم و جهت up است. اسکرول اضافی لغو شد.")
+            await self._capture_full_page_screenshot(page, "final")
+            return items, context, page
+
+        # اگر در جهت down هستیم و در پایین صفحه قرار داریم، اسکرول اضافی لازم نیست
+        if self.scroll_direction == 'down' and at_bottom:
+            self.logger.info("ℹ️ در پایین‌ترین نقطه هستیم و جهت down است. اسکرول اضافی لغو شد.")
+            await self._capture_full_page_screenshot(page, "final")
+            return items, context, page
+
         self.logger.info(f"🔁 اسکرول اضافی فعال — حداکثر {max_attempts} تلاش")
 
         # ─── اسکرول اضافی ─────────────────────────────
@@ -203,6 +228,49 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
             attempt_counter += 1
+
+            # ─── اسکرین‌شات قبل از اسکرول ──────────────
+            try:
+                screenshot_name = f"extra_scroll_{self.scroll_direction}_attempt_{attempt_counter}"
+                path = extra_scroll_dir / f"{screenshot_name}.png"
+                await page.screenshot(path=path, full_page=True)
+                self.logger.info(f"📸 اسکرین‌شات اسکرول اضافی ذخیره شد: {path.name}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در اسکرین‌شات اسکرول اضافی: {e}")
+
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
+
+            if not scrolled:
+                no_new_attempts += 1
+                self.logger.debug(f"   بدون تغییر ارتفاع ({no_new_attempts}/{max_attempts})")
+                
+                # ─── پس از اسکرول ناموفق، دوباره موقعیت را بررسی کن ──
+                if self.scroll_direction == 'up':
+                    if await self._is_at_top(page):
+                        self.logger.info("ℹ️ به بالای صفحه رسیدیم. اسکرول اضافی متوقف می‌شود.")
+                        break
+                elif self.scroll_direction == 'down':
+                    if await self._is_at_bottom(page):
+                        self.logger.info("ℹ️ به پایین صفحه رسیدیم. اسکرول اضافی متوقف می‌شود.")
+                        break
+                
+                await human_sleep(0.8, 0.2)
+                continue
+
+            current_items = await self._extract_posts_from_page(page)
+            added = 0
+            for item in current_items:
+                iid = item.get('id')
+                if iid and iid not in seen_ids:
+                    seen_ids.add(iid)
+                    new_items.append(item)
+                    added += 1
+
+            if added > 0:
+                no_new_attempts = 0
+                self.logger.info(f"📈 {added} پست جدید اضافه شد (مجموع: {len(seen_ids)})")
+            else:
+                no_new_attempts += 1
 
             # ─── اسکرین‌شات قبل از اسکرول ──────────────
             try:
