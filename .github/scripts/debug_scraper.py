@@ -169,7 +169,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         """گرفتن اسکرین‌شات کامل از کل صفحه."""
         try:
             await page.evaluate("window.scrollTo(0, 0)")
-            await asyncio.sleep(1.5)  # افزایش زمان برای اطمینان از بارگذاری کامل
+            await asyncio.sleep(1.5)
             safe_channel = self._sanitize_filename(self.channel)
             path = self.screenshots_dir / f"{safe_channel}_{name}.png"
             await page.screenshot(path=path, full_page=True)
@@ -288,39 +288,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.logger.info(f"📈 {added} پست جدید اضافه شد (مجموع: {len(seen_ids)})")
             else:
                 no_new_attempts += 1
-
-            # ─── اسکرین‌شات قبل از اسکرول ──────────────
-            try:
-                screenshot_name = f"extra_scroll_{self.scroll_direction}_attempt_{attempt_counter}"
-                path = extra_scroll_dir / f"{screenshot_name}.png"
-                await page.screenshot(path=path, full_page=True)
-                self.logger.info(f"📸 اسکرین‌شات اسکرول اضافی ذخیره شد: {path.name}")
-            except Exception as e:
-                self.logger.warning(f"⚠️ خطا در اسکرین‌شات اسکرول اضافی: {e}")
-
-            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
-
-            if not scrolled:
-                no_new_attempts += 1
-                self.logger.debug(f"   بدون تغییر ارتفاع ({no_new_attempts}/{max_attempts})")
-                await human_sleep(0.8, 0.2)
-                continue
-
-            current_items = await self._extract_posts_from_page(page)
-            added = 0
-            for item in current_items:
-                iid = item.get('id')
-                if iid and iid not in seen_ids:
-                    seen_ids.add(iid)
-                    new_items.append(item)
-                    added += 1
-
-            if added > 0:
-                no_new_attempts = 0
-                self.logger.info(f"📈 {added} پست جدید اضافه شد (مجموع: {len(seen_ids)})")
-            else:
-                no_new_attempts += 1
-
         # اضافه کردن پست‌های جدید
         if new_items:
             # اگر جهت down است، پست‌های جدید (که جدیدتر هستند) را در ابتدا قرار بده
@@ -391,7 +358,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.channel,
                 items,
                 {},
-                debug_mode=self.debug_mode
+                debug_mode=self.debug_mode,
+                append_mode=self.resume and self._resume_loaded  # ← اضافه شد
             )
             gen.run_all()
             self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
