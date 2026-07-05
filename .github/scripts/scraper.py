@@ -113,6 +113,20 @@ class TelegramChannelScraper:
                     self._resume_loaded = True
                     self.logger.info(f"🔄 Resume فعال: last_msg_id={last_msg_id}, total_posts={self._resume_data.get('total_posts', 0)}")
                     self.logger.info(f"🔗 لینک آخرین پست: {last_link}")
+
+                    # ═══════════════ تبدیل Resume به start_link ═══════════════
+                    # مقدار start_link را با لینک آخرین پست بازنویسی می‌کنیم
+                    self.start_link = last_link
+                    self.logger.info(f"🔄 Resume به عنوان start_link تنظیم شد: {self.start_link}")
+
+                    # استخراج target_msg_id برای استفاده در _navigate_to_start_link
+                    try:
+                        parts = self.start_link.rstrip('/').split('/')
+                        if parts and parts[-1].isdigit():
+                            self.target_msg_id = parts[-1]
+                            self.logger.info(f"🎯 شناسه پیام هدف از resume: {self.target_msg_id}")
+                    except Exception as e:
+                        self.logger.debug(f"خطا در استخراج target_msg_id از resume: {e}")
                 else:
                     self.logger.warning("⚠️ فایل resume موجود است اما 'last_post_link' پیدا نشد.")
                     self.resume = False
