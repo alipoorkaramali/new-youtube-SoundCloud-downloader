@@ -916,6 +916,12 @@ class TelegramChannelScraper:
                 safe_channel = self._sanitize_filename(self.channel)
                 safe_msg_id = self._sanitize_filename(str(msg_id))
                 path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                
+                # اگر فایل اسکرین‌شات قبلاً وجود دارد، از گرفتن مجدد صرف‌نظر کن
+                if path.exists():
+                    self.logger.debug(f"⏭️ اسکرین‌شات پست {msg_id} قبلاً وجود دارد، رد می‌شود.")
+                    continue
+                
                 await locator.screenshot(path=path)
                 self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
 
