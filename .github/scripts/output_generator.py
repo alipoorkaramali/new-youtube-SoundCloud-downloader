@@ -522,12 +522,11 @@ class OutputGenerator:
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, self.base_dir)
 
-                        # حذف اسکرین‌شات‌ها در حالت غیر دیباگ
-                        if not self.debug_mode:
-                            if arcname.startswith("post_screenshots/") or \
-                               arcname.startswith("debug_screenshots/"):
-                                self.logger.debug(f"⏭️ حذف اسکرین‌شات از ZIP: {arcname}")
-                                continue
+                        # همیشه اسکرین‌شات‌ها را از ZIP حذف کن (حتی در حالت دیباگ)
+                        if arcname.startswith("post_screenshots/") or \
+                           arcname.startswith("debug_screenshots/"):
+                            self.logger.debug(f"⏭️ حذف اسکرین‌شات از ZIP: {arcname}")
+                            continue
 
                         zipf.write(file_path, arcname)
 
