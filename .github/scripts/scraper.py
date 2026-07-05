@@ -978,6 +978,12 @@ class TelegramChannelScraper:
                 locator = page.locator(f'[data-message-id="{msg_id}"]').first
                 if await locator.count() == 0:
                     self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
+                    # اسکرین‌شات خطا برای بررسی وضعیت صفحه
+                    await self._capture_error_screenshot(
+                        page,
+                        "post_not_found",
+                        f"post_id={msg_id} not found in DOM"
+                    )
                     continue
 
                 await locator.scroll_into_view_if_needed()
