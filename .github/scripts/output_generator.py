@@ -588,38 +588,51 @@ class OutputGenerator:
         """
         اجرای تمام مراحل تولید خروجی به‌ترتیب.
 
-        ترتیب اجرا (اهمیت دارد برای append_mode):
-            ۱. تولید JSON (ذخیره داده‌های جدید)
-            ۲. تولید CSV
-            ۳. تولید HTML (با ادغام در صورت نیاز)
-            ۴. تولید ZIP
-
-        چرا JSON قبل از HTML؟
-            - append_mode ابتدا از JSON می‌خواند
-            - JSON باید قبل از HTML به‌روز شود تا داده‌های جدید در ادغام لحاظ شوند
+        تغییر مهم: در حالت append_mode، ابتدا ادغام انجام می‌شود و سپس همه‌ی فایل‌ها
+        با داده‌های کامل تولید می‌شوند تا از دست رفتن پست‌های قبلی جلوگیری شود.
         """
         self.logger.info("🚀 شروع تولید فایل‌های خروجی...")
         self.logger.info(f"📊 تعداد پست‌های ورودی: {self._initial_post_count}")
         self.logger.info(f"📌 append_mode: {self.append_mode}")
 
         try:
-            # ۱. JSON (ابتدا ذخیره شود تا برای ادغام در HTML موجود باشد)
+            # ─── مرحله ۰: ادغام با داده‌های قبلی (اگر append_mode فعال باشد) ───
+            if self.append_mode:
+                merged_posts = self._merge_with_existing_posts()
+                if len(merged_posts) != len(self.posts):
+                    self.logger.info(
+                        f"📊 تعداد پست‌ها پس از ادغام: {len(merged_posts)} "
+                        f"(قبلاً {len(self.posts)})"
+                    )
+                    self.posts = merged_posts
+                else:
+                    self.logger.info(f"📊 تعداد پست‌ها بدون تغییر باقی ماند: {len(self.posts)}")
+            else:
+                self.logger.info("ℹ️ append_mode غیرفعال است. بدون ادغام ادامه می‌یابد.")
+
+            # ─── مرحله ۱: تولید JSON (با داده‌های کامل) ───
             self.generate_json()
 
-            # ۲. CSV
+            # ─── مرحله ۲: تولید CSV ───
             self.generate_csv()
 
-            # ۳. HTML (با ادغام در صورت نیاز)
+            # ─── مرحله ۳: تولید HTML ───
+            # از آنجا که قبلاً ادغام انجام شده، دیگر نیازی به ادغام مجدد در generate_html نیست.
+            # بنابراین append_mode را موقتاً غیرفعال می‌کنیم تا دوباره ادغام نکند.
+            original_append_mode = self.append_mode
+            if original_append_mode:
+                self.append_mode = False  # جلوگیری از ادغام مجدد
             self.generate_html()
+            self.append_mode = original_append_mode  # بازگردانی
 
-            # ۴. ZIP
+            # ─── مرحله ۴: تولید ZIP ───
             self.create_zip()
 
             self.logger.info("✅ تمام فایل‌های خروجی با موفقیت تولید شدند.")
 
             # لاگ نهایی تعداد پست‌ها
             final_count = len(self.posts)
-            if self.append_mode and final_count != self._initial_post_count:
+            if original_append_mode and final_count != self._initial_post_count:
                 self.logger.info(
                     f"📊 خلاصه نهایی: {self._initial_post_count} پست ورودی → "
                     f"{final_count} پست خروجی (افزایش {final_count - self._initial_post_count} پست از ادغام)"
