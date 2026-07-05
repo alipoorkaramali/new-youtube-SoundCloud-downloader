@@ -196,7 +196,23 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         no_new_attempts = 0
         new_items = []
 
+        # ─── ایجاد پوشه برای اسکرین‌شات‌های اسکرول اضافی ──
+        extra_scroll_dir = self.debug_screenshots_dir / "extra_scroll"
+        extra_scroll_dir.mkdir(parents=True, exist_ok=True)
+        attempt_counter = 0
+
         while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
+            attempt_counter += 1
+
+            # ─── اسکرین‌شات قبل از اسکرول ──────────────
+            try:
+                screenshot_name = f"extra_scroll_{self.scroll_direction}_attempt_{attempt_counter}"
+                path = extra_scroll_dir / f"{screenshot_name}.png"
+                await page.screenshot(path=path, full_page=True)
+                self.logger.info(f"📸 اسکرین‌شات اسکرول اضافی ذخیره شد: {path.name}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در اسکرین‌شات اسکرول اضافی: {e}")
+
             scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
 
             if not scrolled:
