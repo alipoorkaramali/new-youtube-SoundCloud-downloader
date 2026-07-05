@@ -18,6 +18,7 @@ import logging
 import random
 import re
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 
@@ -306,7 +307,38 @@ class TelegramChannelScraper:
             }''', element_handle)
         except Exception as e:
             self.logger.debug(f"خطا در رسم صلیب: {e}")
+    # ═══════════════════ اسکرین‌شات خطا برای دیباگ ═══════════════════
+    async def _capture_error_screenshot(self, page, error_type: str, description: str = ""):
+        """
+        گرفتن اسکرین‌شات از صفحه در هنگام بروز خطا برای دیباگ.
 
+        Args:
+            page: صفحه مرورگر
+            error_type (str): نوع خطا (مانند 'target_not_found', 'scroll_failed')
+            description (str): توضیح تکمیلی
+        """
+        try:
+            # ایجاد پوشه‌ی error_screenshots در کنار سایر پوشه‌ها
+            error_dir = self.debug_screenshots_dir / "error_screenshots"
+            error_dir.mkdir(parents=True, exist_ok=True)
+
+            # ایجاد نام فایل با timestamp و نوع خطا
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_channel = self._sanitize_filename(self.channel)
+            safe_error = self._sanitize_filename(error_type)
+            filename = f"{safe_channel}_{safe_error}_{timestamp}.png"
+
+            # در صورت وجود توضیح، به نام فایل اضافه کن
+            if description:
+                safe_desc = self._sanitize_filename(description)[:50]  # محدود کردن طول
+                filename = f"{safe_channel}_{safe_error}_{safe_desc}_{timestamp}.png"
+
+            path = error_dir / filename
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات خطا ذخیره شد: {path.name}")
+            self.logger.info(f"   نوع خطا: {error_type} | توضیح: {description}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات خطا: {e}")
     # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
 
     async def _fetch_posts_from_telegram(self) -> Tuple[List[Dict], Any, Any]:
@@ -412,6 +444,7 @@ class TelegramChannelScraper:
         # ─── اگر start_link داریم، پیام هدف را پیدا کن ──────────
         if self.start_link and self.target_msg_id:
             self.logger.info(f"🎯 پیدا کردن پیام هدف {self.target_msg_id}...")
+            target_found = False
             try:
                 target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
                 if await target_locator.count() > 0:
@@ -419,10 +452,54 @@ class TelegramChannelScraper:
                     await page.evaluate("window.scrollBy(0, -150)")
                     await human_sleep(1, 0.3)
                     self.logger.info("✅ پیام هدف به بالای صفحه منتقل شد.")
+                    target_found = True
                 else:
-                    self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد.")
+                    self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد. تلاش با اسکرول...")
+                    # اسکرول به بالا برای پیدا کردن target
+                    for scroll_attempt in range(3):
+                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                        await human_sleep(1.5, 0.3)
+                        target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
+                        if await target_locator.count() > 0:
+                            await target_locator.scroll_into_view_if_needed()
+                            await page.evaluate("window.scrollBy(0, -150)")
+                            await human_sleep(1, 0.3)
+                            self.logger.info(f"✅ پیام هدف در اسکرول {scroll_attempt+1} پیدا شد.")
+                            target_found = True
+                            break
+
+                    # اگر پس از اسکرول‌ها پیدا نشد، اسکرین‌شات خطا بگیر
+                    if not target_found:
+                        description = f"target_{self.target_msg_id}_not_found_after_{scroll_attempt+1}_scrolls"
+                        await self._capture_error_screenshot(
+                            page,
+                            "target_not_found",
+                            f"target_id={self.target_msg_id} not found after scrolling"
+                        )
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف: {e}")
+                # در صورت بروز Exception، اسکرین‌شات خطا بگیر
+                await self._capture_error_screenshot(
+                    page,
+                    "target_scroll_exception",
+                    f"{str(e)[:100]}"
+                )
+
+            # اگر target پیدا نشد، از جدیدترین پست‌ها شروع کن
+            if not target_found:
+                self.logger.warning("⚠️ پیام هدف پیدا نشد. از جدیدترین پست‌ها شروع می‌کنیم.")
+                start_collecting = True
+                # پرش به پایین برای رفتن به جدیدترین پست‌ها
+                try:
+                    scroll_button = page.locator('button[title="Go to bottom"]').first
+                    if await scroll_button.count() > 0:
+                        await scroll_button.click(timeout=5000)
+                        await human_sleep(3, 0.4)
+                        self.logger.info("⬇️ به جدیدترین پست‌ها رفتیم.")
+                    else:
+                        self.logger.info("ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
+                except Exception:
+                    self.logger.info("ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
 
         # ─── حلقه اصلی استخراج ──────────────────────────────────
         while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
