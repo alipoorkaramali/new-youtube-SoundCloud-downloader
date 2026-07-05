@@ -257,12 +257,16 @@ jobs:
       # ════════════════════════════════════════════
       # ۱۶. تنظیم Git LFS
       # ════════════════════════════════════════════
-      - name: 🐘 Setup Git LFS track for media, zip & screenshots
-        if: ${{ always() }}  # حتی در حالت دیباگ هم LFS را تنظیم کن
+      - name: 🐘 Setup Git LFS track for media & screenshots (ignore missing files)
+        if: ${{ always() }}
         run: |
           git lfs install
-          git lfs track "Download/telegram_downloads/**/media/*"
-          git lfs track "Download/telegram_downloads/**/post_screenshots/*"
+          # ایجاد دایرکتوری‌ها در صورت عدم وجود (برای جلوگیری از خطای no such file)
+          mkdir -p "Download/telegram_downloads/${{ github.event.inputs.channel }}/media"
+          mkdir -p "Download/telegram_downloads/${{ github.event.inputs.channel }}/post_screenshots"
+          # تنظیم LFS با --force برای بازنویسی قوانین قبلی و نادیده‌گیری خطاها
+          git lfs track --force "Download/telegram_downloads/**/media/*" || true
+          git lfs track --force "Download/telegram_downloads/**/post_screenshots/*" || true
           git add .gitattributes
 
       # ════════════════════════════════════════════
@@ -281,8 +285,9 @@ jobs:
         run: |
           echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
           ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
-          git add -f "Download/telegram_downloads/${{ github.event.inputs.channel }}/**"
-          git add -f .gitattributes
+          # فقط فایل‌هایی که واقعاً وجود دارند را stage کن
+          git add "Download/telegram_downloads/${{ github.event.inputs.channel }}/**" 2>/dev/null || true
+          git add .gitattributes
           echo "📋 وضعیت فایل‌های staged:"
           git status --short
           
