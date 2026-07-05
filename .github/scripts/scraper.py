@@ -444,11 +444,9 @@ class TelegramChannelScraper:
                 messages = await page.locator('div[data-message-id]').all()
                 self.logger.debug(f"🔍 تعداد پیام‌های موجود: {len(messages)}")
 
-                # انتخاب ترتیب بر اساس حالت
-                if self.start_link or resume_last_id:
-                    msg_iter = messages
-                else:
-                    msg_iter = reversed(messages)
+                # همیشه از ترتیب معکوس استفاده می‌کنیم (جدید → قدیمی)
+                # این کار باعث می‌شود در حالت resume، پست‌های جدیدتر قبل از نقطه شروع رد شوند
+                msg_iter = reversed(messages)
 
                 for msg in msg_iter:
                     try:
