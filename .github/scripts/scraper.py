@@ -403,25 +403,11 @@ class TelegramChannelScraper:
             extra_scroll_count = 0    # نیازی به اسکرول اضافی نیست
 
         # ─── اگر Resume داریم، به پیام مورد نظر برویم ──────────
+        # ─── Resume به start_link تبدیل شده است، نیازی به جستجوی جداگانه نیست ──
+        # اگر resume_last_id وجود دارد، فقط برای لاگ نگه داشته می‌شود، اما عملیات اضافی انجام نمی‌شود.
         if resume_last_id:
-            self.logger.info(f"🔄 تلاش برای یافتن پیام resume: {resume_last_id}")
-            try:
-                target_locator = page.locator(f'[data-message-id="{resume_last_id}"]').first
-                if await target_locator.count() > 0:
-                    await target_locator.scroll_into_view_if_needed()
-                    await page.evaluate("window.scrollBy(0, -150)")
-                    await human_sleep(1, 0.3)
-                    self.logger.info("✅ پیام resume پیدا شد. جمع‌آوری از این نقطه به بالا شروع می‌شود.")
-                    start_collecting = True
-                    seen_ids.add(resume_last_id)
-                else:
-                    self.logger.warning("⚠️ پیام resume پیدا نشد. از جدیدترین پست‌ها شروع می‌کنیم.")
-                    start_collecting = True
-                    resume_last_id = None
-            except Exception as e:
-                self.logger.warning(f"⚠️ خطا در یافتن پیام resume: {e}")
-                start_collecting = True
-                resume_last_id = None
+            self.logger.info(f"🔄 Resume از پیام {resume_last_id} ادامه می‌یابد (از طریق start_link).")
+            # هیچ عملیات دیگری انجام نمی‌شود – منطق start_link کار را انجام می‌دهد.
 
         # ─── اگر start_link داریم، پیام هدف را پیدا کن ──────────
         if self.start_link and self.target_msg_id:
