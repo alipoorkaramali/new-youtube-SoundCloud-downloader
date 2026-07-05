@@ -446,11 +446,18 @@ class TelegramChannelScraper:
                                 start_collecting = True
                                 self.logger.info(f"🎯 به پیام هدف رسیدیم (ID: {msg_id})، شروع جمع‌آوری...")
                                 seen_ids.add(msg_id)
+                                continue  # خود پیام هدف را جمع نمی‌کنیم (قبلاً اسکرپ شده)
                             else:
                                 continue
 
                         # اگر هنوز شروع نکرده‌ایم، ادامه نده
                         if not start_collecting:
+                            continue
+
+                        # ═══════════════ فقط پست‌های قدیمی‌تر از نقطه شروع را جمع کن ═══════════════
+                        # در حالت start_link، فقط پست‌هایی با ID کوچکتر از target_msg_id را قبول کن
+                        if self.start_link and int(msg_id) >= int(self.target_msg_id):
+                            self.logger.debug(f"⏭️ پست {msg_id} جدیدتر یا مساوی هدف است، رد می‌شود.")
                             continue
 
                         # ═══════════════ استخراج هوشمند متن پست ═══════════════
