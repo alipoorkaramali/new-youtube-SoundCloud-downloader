@@ -52,6 +52,23 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         if 'last_msg_id' not in self.resume_data:
             self.resume_data['last_msg_id'] = None
 
+        # ═══════════════ تبدیل Resume به start_link ═══════════════
+        # اگر resume فعال است و فایل معتبری بارگذاری شده، از last_post_link به عنوان start_link استفاده کن
+        if self.resume and self._resume_loaded and self._resume_data and 'last_post_link' in self._resume_data:
+            self.start_link = self._resume_data['last_post_link']
+            self.logger.info(f"🔄 Resume با لینک: {self.start_link} (همانند start_link)")
+            # استخراج target_msg_id برای استفاده در _navigate_to_start_link
+            try:
+                parts = self.start_link.rstrip('/').split('/')
+                if parts and parts[-1].isdigit():
+                    self.target_msg_id = parts[-1]
+                    self.logger.info(f"🎯 شناسه پیام هدف از resume: {self.target_msg_id}")
+            except Exception as e:
+                self.logger.debug(f"خطا در استخراج target_msg_id از resume: {e}")
+        else:
+            # اگر resume فعال نبود یا فایل معتبر نبود، start_link را همان مقدار config نگه دار
+            pass
+
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
         self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
