@@ -600,6 +600,13 @@ class TelegramChannelScraper:
                     start_collecting = True
                     seen_ids.add(self.target_msg_id)
                     self.logger.info(f"🎯 شروع جمع‌آوری از پیام هدف {self.target_msg_id}")
+                    
+                    # ─── اسکرول اولیه برای بارگذاری پست‌های قدیمی‌تر ───
+                    self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                    for scroll_step in range(3):
+                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                        await human_sleep(1.5, 0.3)
+                        self.logger.debug(f"   اسکرول {scroll_step+1}/3 انجام شد")
                 else:
                     self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد. تلاش با اسکرول...")
                     # اسکرول به بالا برای پیدا کردن target
