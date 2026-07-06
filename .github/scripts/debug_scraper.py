@@ -48,7 +48,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         # ═══════════════ غیرفعال کردن auto_resume در حالت دیباگ ═══════════════
         # در حالت دیباگ، فقط یک دور اجرا می‌شود و auto_resume نادیده گرفته می‌شود
-        self.auto_resume = False
+        #self.auto_resume = False
 
         # ═══════════════ مقداردهی resume_data (رفع AttributeError) ═══════════════
         if not hasattr(self, 'resume_data') or self.resume_data is None:
