@@ -1,24 +1,43 @@
-2026-07-06 10:19:26,279 [INFO] 🔁 auto_resume مقدار دریافت شده از config: True
-2026-07-06 10:19:26,279 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-07-06 10:19:26,279 [INFO] 🐞 حالت دیباگ: فعال
-2026-07-06 10:19:26,279 [INFO] 📌 Resume: غیرفعال
-2026-07-06 10:19:26,279 [INFO] 🧭 جهت اسکرول: up
-2026-07-06 10:19:26,279 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
-2026-07-06 10:19:26,279 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
-2026-07-06 10:19:26,279 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
-2026-07-06 10:19:26,279 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=135)
-2026-07-06 10:19:26,279 [INFO] 🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...
-2026-07-06 10:19:26,279 [INFO] 📌 دور 1 از 15
-2026-07-06 10:19:26,279 [INFO] 📊 پست‌های جمع‌آوری‌شده تا اینجا: 0/135
-2026-07-06 10:19:26,279 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: DebugTelegramChannelScraper._fetch_posts_from_telegram() got an unexpected keyword argument 'existing_seen_ids'
+2026-07-06 10:26:35,373 [INFO] 🔁 auto_resume مقدار دریافت شده از config: True
+2026-07-06 10:26:35,374 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-07-06 10:26:35,374 [INFO] 🐞 حالت دیباگ: فعال
+2026-07-06 10:26:35,374 [INFO] 📌 Resume: غیرفعال
+2026-07-06 10:26:35,374 [INFO] 🧭 جهت اسکرول: up
+2026-07-06 10:26:35,374 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-07-06 10:26:35,374 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-07-06 10:26:35,374 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
+2026-07-06 10:26:35,374 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=135)
+2026-07-06 10:26:35,374 [INFO] 🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...
+2026-07-06 10:26:35,374 [INFO] 📌 دور 1 از 15
+2026-07-06 10:26:35,374 [INFO] 📊 پست‌های جمع‌آوری‌شده تا اینجا: 0/135
+2026-07-06 10:26:35,374 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
+2026-07-06 10:26:38,748 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-07-06 10:26:40,557 [INFO] 🔍 در حال جستجوی: @bbcpersian
+2026-07-06 10:26:42,571 [INFO] ⏳ منتظر نتایج...
+2026-07-06 10:26:42,572 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
+2026-07-06 10:26:53,451 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
+2026-07-06 10:26:53,451 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-07-06 10:27:00,735 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-07-06 10:27:00,943 [INFO] 🔄 حالت Debug با جهت 'up' → پرش به پایین غیرفعال شد.
+2026-07-06 10:27:24,636 [INFO] 📊 11 پست جمع‌آوری شد.
+2026-07-06 10:27:24,840 [INFO] 📸 گرفتن اسکرین‌شات از 11 پست...
+2026-07-06 10:27:34,673 [INFO]    10/11 اسکرین‌شات گرفته شد.
+2026-07-06 10:27:36,735 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 11
+2026-07-06 10:27:36,821 [INFO] 📥 والد 11 پست تحویل داد.
+2026-07-06 10:27:36,843 [INFO] ℹ️ در بالاترین نقطه هستیم و جهت up است. اسکرول اضافی لغو شد.
+2026-07-06 10:27:38,549 [INFO] 📸 اسکرین‌شات کامل صفحه ذخیره شد: bbcpersian_final.png
+2026-07-06 10:27:38,549 [INFO] 📈 11 پست جدید در این دور اضافه شد
+2026-07-06 10:27:38,549 [INFO] 📊 مجموع پست‌ها تا اینجا: 11/135
+2026-07-06 10:27:38,551 [INFO] 📌 به بالای صفحه رسیدیم. شروع دور بعدی...
+2026-07-06 10:27:38,551 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: name 'HOME_URL' is not defined
 Traceback (most recent call last):
   File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 194, in run
     await asyncio.wait_for(self._run_impl(), timeout=timeout)
   File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 377, in _run_impl
-    items, context, page = await self._fetch_posts_from_telegram(
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: DebugTelegramChannelScraper._fetch_posts_from_telegram() got an unexpected keyword argument 'existing_seen_ids'
-2026-07-06 10:19:26,309 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 405, in _run_impl
+    await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                    ^^^^^^^^
+NameError: name 'HOME_URL' is not defined
+2026-07-06 10:27:38,562 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
