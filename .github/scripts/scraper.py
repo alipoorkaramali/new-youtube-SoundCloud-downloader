@@ -79,6 +79,12 @@ class TelegramChannelScraper:
         self.auto_resume = getattr(config, 'auto_resume', False)  # ← اضافه شد
         self.save_screenshots = getattr(config, 'save_screenshots', True)  # ← اضافه شد
         
+        # ─── تعداد تلاش‌های اسکرول بر اساس وضعیت save_screenshots ───
+        if not self.save_screenshots:
+            self.max_scroll_attempts = 12  # بیشتر از ۸ (برای بارگذاری کامل‌تر)
+        else:
+            self.max_scroll_attempts = MAX_SCROLL_ATTEMPTS  # ۸
+        
         # ═══════════════ ذخیره جهت اسکرول (برای هماهنگی با debug) ═══════════════
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
         if self.scroll_direction not in ['up', 'down']:
@@ -659,8 +665,18 @@ class TelegramChannelScraper:
                     self.logger.info("ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
 
         # ─── حلقه اصلی استخراج ──────────────────────────────────
-        while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
+        while len(items) < self.limit and scroll_attempts < self.max_scroll_attempts:
             try:
+                # اطمینان از بارگذاری حداقل یک پست جدید
+                try:
+                    await page.wait_for_selector(
+                        'div[data-message-id]', 
+                        state='attached', 
+                        timeout=2000  # ۲ ثانیه صبر کن
+                    )
+                except Exception:
+                    self.logger.debug("⏳ هیچ پست جدیدی در این مرحله بارگذاری نشد.")
+                
                 messages = await page.locator('div[data-message-id]').all()
                 self.logger.debug(f"🔍 تعداد پیام‌های موجود: {len(messages)}")
 
@@ -784,15 +800,29 @@ class TelegramChannelScraper:
             if len(items) >= self.limit:
                 break
 
-            # ─── اسکرول به بالا ──────────────────────────────────
+            # ─── اسکرول به بالا (تدریجی) ──────────────────────
             old_height = await page.evaluate("document.documentElement.scrollHeight")
-            await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
-            await human_sleep(2.5, 0.5)
+            
+            # تعداد مراحل اسکرول
+            scroll_steps = 3
+            step_amount = SCROLL_UP // scroll_steps  # -400 هر مرحله
+            
+            for step in range(scroll_steps):
+                await page.evaluate(f"window.scrollBy(0, {step_amount})")
+                # مکث کوتاه بین هر مرحله
+                await human_sleep(0.8, 0.2)
+            
+            # اگر اسکرین‌شات غیرفعال است، زمان بیشتری برای بارگذاری نهایی بده
+            if self.save_screenshots:
+                await human_sleep(0.5, 0.2)
+            else:
+                await human_sleep(1.5, 0.3)  # بیشتر برای بارگذاری کامل
+            
             new_height = await page.evaluate("document.documentElement.scrollHeight")
-
+            
             if new_height == old_height:
                 scroll_attempts += 1
-                self.logger.debug(f"⚠️ ارتفاع صفحه تغییر نکرد. تلاش {scroll_attempts}/{MAX_SCROLL_ATTEMPTS}")
+                self.logger.debug(f"⚠️ ارتفاع صفحه تغییر نکرد. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
             else:
                 scroll_attempts = 0
                 self.logger.debug(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
