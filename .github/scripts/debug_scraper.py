@@ -73,6 +73,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             # اگر resume فعال نبود یا فایل معتبر نبود، start_link را همان مقدار config نگه دار
             pass
 
+        # ═══════════════ لاگ وضعیت save_screenshots (اختیاری) ═══════════════
+        self.logger.info(f"🖼️ ذخیره اسکرین‌شات: {'فعال' if self.save_screenshots else 'غیرفعال'}")
+
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
         self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
         self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
@@ -89,7 +92,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return media_map, 0
 
     async def _save_debug_screenshot(self, page, name: str):
-        if not self.debug_screenshots:
+        if not self.debug_screenshots or not self.save_screenshots:
             return
         try:
             self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -170,7 +173,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         """)
     # ═══════════════ اسکرین‌شات کامل صفحه ═══════════════════
     async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
-        """گرفتن اسکرین‌شات کامل از کل صفحه."""
+        """گرفتن اسکرین‌شات کامل از کل صفحه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            return
         try:
             await page.evaluate("window.scrollTo(0, 0)")
             await asyncio.sleep(1.5)
@@ -205,7 +210,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         # اگر به حد کافی رسیده‌ایم، نیازی به اسکرول اضافی نیست
         if len(items) >= self.limit:
             self.logger.info("✅ به حد limit رسیدیم. نیازی به اسکرول اضافی نیست.")
-            await self._capture_full_page_screenshot(page, "final")
+            if self.save_screenshots:
+                await self._capture_full_page_screenshot(page, "final")
             return items, context, page
 
         # ─── تشخیص حالت ─────────────────────────────
@@ -216,7 +222,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         # در حالت عادی + direction=down یا در انتها بودن + direction=down → غیرفعال
         if (is_normal_start or at_bottom) and self.scroll_direction == 'down':
             self.logger.info("ℹ️ در انتهای کانال هستیم و direction=down است. اسکرول اضافی لغو شد.")
-            await self._capture_full_page_screenshot(page, "final")
+            if self.save_screenshots:
+                await self._capture_full_page_screenshot(page, "final")
             return items, context, page
             
         # تعیین تعداد تلاش
@@ -230,13 +237,15 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         # اگر در جهت up هستیم و در بالای صفحه قرار داریم، اسکرول اضافی لازم نیست
         if self.scroll_direction == 'up' and at_top:
             self.logger.info("ℹ️ در بالاترین نقطه هستیم و جهت up است. اسکرول اضافی لغو شد.")
-            await self._capture_full_page_screenshot(page, "final")
+            if self.save_screenshots:
+                await self._capture_full_page_screenshot(page, "final")
             return items, context, page
 
         # اگر در جهت down هستیم و در پایین صفحه قرار داریم، اسکرول اضافی لازم نیست
         if self.scroll_direction == 'down' and at_bottom:
             self.logger.info("ℹ️ در پایین‌ترین نقطه هستیم و جهت down است. اسکرول اضافی لغو شد.")
-            await self._capture_full_page_screenshot(page, "final")
+            if self.save_screenshots:
+                await self._capture_full_page_screenshot(page, "final")
             return items, context, page
 
         self.logger.info(f"🔁 اسکرول اضافی فعال — حداکثر {max_attempts} تلاش")
@@ -314,8 +323,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.resume_data['last_msg_id'] = items[0].get('id')
             self.logger.debug(f"📌 last_msg_id به‌روزرسانی شد: {self.resume_data['last_msg_id']}")
 
-        await self._capture_full_page_screenshot(page, "final")
-        await self._save_debug_screenshot(page, "debug_final")
+        if self.save_screenshots:
+            await self._capture_full_page_screenshot(page, "final")
+            await self._save_debug_screenshot(page, "debug_final")
+        else:
+            self.logger.info("⏭️ اسکرین‌شات‌های دیباگ غیرفعال هستند.")
 
         # لاگ نهایی
         self.logger.info(f"🐞 استخراج تمام شد — {len(items)} پست (جهت: {self.scroll_direction})")
