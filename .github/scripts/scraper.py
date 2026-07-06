@@ -418,35 +418,45 @@ class TelegramChannelScraper:
         """)
     # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
 
-    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False) -> Tuple[List[Dict], Any, Any]:
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: Any = None, existing_page: Any = None) -> Tuple[List[Dict], Any, Any]:
         """
         استخراج پست‌ها از کانال تلگرام با پشتیبانی از Resume و start_link.
 
         Args:
             existing_seen_ids (set): مجموعه‌ی شناسه‌های پست‌های قبلی (برای جلوگیری از تکرار)
             keep_browser_open (bool): اگر True باشد، مرورگر بعد از پایان بسته نمی‌شود
+            existing_context (Any): context موجود از دور قبل (اختیاری)
+            existing_page (Any): page موجود از دور قبل (اختیاری)
 
         Returns:
             Tuple[List[Dict], Any, Any]: (پست‌ها, context, page)
         """
         from playwright.async_api import async_playwright
 
-        # ─── راه‌اندازی مرورگر ──────────────────────────────────
-        p = await async_playwright().start()
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=str(self.profile_dir),
-            headless=False,
-            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-            viewport={"width": 1366, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-        )
-        page = await context.new_page()
+        # ─── اگر context و page از قبل وجود دارند، از آن‌ها استفاده کن ──
+        if existing_context is not None and existing_page is not None:
+            context = existing_context
+            page = existing_page
+            p = None  # برای اینکه در انتها بسته نشود
+            self.logger.info("♻️ استفاده مجدد از context و page موجود")
+        else:
+            # ─── راه‌اندازی مرورگر ──────────────────────────────────
+            p = await async_playwright().start()
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                headless=False,
+                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                viewport={"width": 1366, "height": 900},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+            )
+            page = await context.new_page()
 
         try:
             await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
         except Exception as e:
             self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
-            await context.close()
+            if existing_context is None:
+                await context.close()
             return [], None, None
 
         # ─── ورود به کانال یا لینک ──────────────────────────────
@@ -456,7 +466,8 @@ class TelegramChannelScraper:
             entered = await self._search_and_enter_channel(page)
 
         if not entered:
-            await context.close()
+            if existing_context is None:
+                await context.close()
             return [], None, None
         await self._save_screenshot(page, "initial")
 
@@ -763,12 +774,15 @@ class TelegramChannelScraper:
             except Exception:
                 pass
 
-        # اگر keep_browser_open فعال باشد، مرورگر را نبند
-        if not keep_browser_open and context:
-            await context.close()
+        # اگر keep_browser_open فعال باشد یا از context موجود استفاده شده باشد، مرورگر را نبند
+        if (keep_browser_open or existing_context is not None) and context:
+            # مرورگر را باز نگه دار
+            pass
+        else:
+            if context:
+                await context.close()
 
         return items, context, page
-
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
 
     async def _search_and_enter_channel(self, page) -> bool:
