@@ -233,11 +233,20 @@ class TelegramChannelScraper:
                 self._resume_loaded = True
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
-            # اجرای یک دور اسکرپ
-            items, context, page = await self._fetch_posts_from_telegram(
-                existing_seen_ids=global_seen_ids,
-                keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
-            )
+            # اجرای یک دور اسکرپ (با keep_browser_open اگر دور بعدی هم وجود دارد)
+            if rounds == 1:
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
+                )
+            else:
+                # در دورهای بعدی، از context و page موجود استفاده کن
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit),
+                    existing_context=context,
+                    existing_page=page
+                )
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
