@@ -1,52 +1,41 @@
-2026-07-06 08:14:42,625 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-07-06 08:14:42,625 [INFO] 🐞 حالت دیباگ: فعال
-2026-07-06 08:14:42,625 [INFO] 📌 Resume: غیرفعال
-2026-07-06 08:14:42,625 [INFO] 🧭 جهت اسکرول: up
-2026-07-06 08:14:42,625 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
-2026-07-06 08:14:42,625 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
-2026-07-06 08:14:42,625 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
-2026-07-06 08:14:42,625 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=135)
-2026-07-06 08:14:42,625 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
-2026-07-06 08:14:49,964 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-07-06 08:14:51,889 [INFO] 🔍 در حال جستجوی: @bbcpersian
-2026-07-06 08:14:53,593 [INFO] ⏳ منتظر نتایج...
-2026-07-06 08:14:53,594 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
-2026-07-06 08:14:59,763 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
-2026-07-06 08:14:59,763 [INFO] ✅ نتایج جستجو ظاهر شدند.
-2026-07-06 08:15:08,370 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-07-06 08:15:08,601 [INFO] 🔄 حالت Debug با جهت 'up' → پرش به پایین غیرفعال شد.
-2026-07-06 08:15:31,480 [INFO] 📊 17 پست جمع‌آوری شد.
-2026-07-06 08:15:31,732 [INFO] 📸 گرفتن اسکرین‌شات از 17 پست...
-2026-07-06 08:15:41,928 [INFO]    10/17 اسکرین‌شات گرفته شد.
-2026-07-06 08:15:49,460 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 17
-2026-07-06 08:15:49,750 [INFO] 📥 والد 17 پست تحویل داد.
-2026-07-06 08:15:49,751 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: Page.evaluate: Target page, context or browser has been closed
-Traceback (most recent call last):
-  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 191, in run
-    await asyncio.wait_for(self._run_impl(), timeout=timeout)
-  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
-    return fut.result()
-           ^^^^^^^^^^^^
-  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 348, in _run_impl
-    items, context, page = await self._fetch_posts_from_telegram()
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 210, in _fetch_posts_from_telegram
-    at_bottom = await self._is_at_bottom(page)
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 154, in _is_at_bottom
-    return await page.evaluate("""
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 9284, in evaluate
-    await self._impl_obj.evaluate(
-  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_page.py", line 472, in evaluate
-    return await self._main_frame.evaluate(expression, arg)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_frame.py", line 345, in evaluate
-    await self._channel.send(
-  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 69, in send
-    return await self._connection.wrap_api_call(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 563, in wrap_api_call
-    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-playwright._impl._errors.TargetClosedError: Page.evaluate: Target page, context or browser has been closed
-2026-07-06 08:15:49,757 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
+2026-07-06 08:20:34,432 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-07-06 08:20:34,432 [INFO] 🐞 حالت دیباگ: فعال
+2026-07-06 08:20:34,432 [INFO] 📌 Resume: غیرفعال
+2026-07-06 08:20:34,432 [INFO] 🧭 جهت اسکرول: up
+2026-07-06 08:20:34,432 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-07-06 08:20:34,432 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-07-06 08:20:34,432 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
+2026-07-06 08:20:34,432 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=135)
+2026-07-06 08:20:34,432 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
+2026-07-06 08:20:38,910 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-07-06 08:20:40,931 [INFO] 🔍 در حال جستجوی: @bbcpersian
+2026-07-06 08:20:43,033 [INFO] ⏳ منتظر نتایج...
+2026-07-06 08:20:43,034 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
+2026-07-06 08:20:55,401 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
+2026-07-06 08:20:55,401 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-07-06 08:21:03,083 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-07-06 08:21:03,269 [INFO] 🔄 حالت Debug با جهت 'up' → پرش به پایین غیرفعال شد.
+2026-07-06 08:21:25,058 [INFO] 📊 11 پست جمع‌آوری شد.
+2026-07-06 08:21:25,229 [INFO] 📸 گرفتن اسکرین‌شات از 11 پست...
+2026-07-06 08:21:36,057 [INFO]    10/11 اسکرین‌شات گرفته شد.
+2026-07-06 08:21:36,792 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 11
+2026-07-06 08:21:36,861 [INFO] 📥 والد 11 پست تحویل داد.
+2026-07-06 08:21:36,895 [INFO] ℹ️ در بالاترین نقطه هستیم و جهت up است. اسکرول اضافی لغو شد.
+2026-07-06 08:21:38,601 [INFO] 📸 اسکرین‌شات کامل صفحه ذخیره شد: bbcpersian_final.png
+2026-07-06 08:21:38,601 [INFO] 📥 11 پست استخراج شد (حالت دیباگ).
+2026-07-06 08:21:38,601 [INFO] 🚀 شروع تولید فایل‌های خروجی...
+2026-07-06 08:21:38,601 [INFO] 📊 تعداد پست‌های ورودی: 11
+2026-07-06 08:21:38,601 [INFO] 📌 append_mode: False
+2026-07-06 08:21:38,601 [INFO] ℹ️ append_mode غیرفعال است. بدون ادغام ادامه می‌یابد.
+2026-07-06 08:21:38,601 [INFO] 📄 JSON: bbcpersian_posts.json (11 پست)
+2026-07-06 08:21:38,602 [INFO] 📊 CSV: bbcpersian_posts.csv (11 پست)
+2026-07-06 08:21:38,602 [INFO] ℹ️ append_mode غیرفعال است. فایل HTML از نو ساخته می‌شود.
+2026-07-06 08:21:38,628 [INFO] 🌐 HTML: bbcpersian_posts.html (11 پست)
+2026-07-06 08:21:38,633 [INFO] 📦 حجم فایل ZIP: 0.0 MB
+2026-07-06 08:21:38,633 [INFO] ℹ️ حجم ZIP کمتر از 30MB است – تقسیم نیاز نیست
+2026-07-06 08:21:38,633 [INFO] ✅ فایل ZIP آماده شد: bbcpersian_archive.zip
+2026-07-06 08:21:38,633 [INFO] ✅ تمام فایل‌های خروجی با موفقیت تولید شدند.
+2026-07-06 08:21:38,633 [INFO] 📊 تعداد نهایی پست‌ها: 11
+2026-07-06 08:21:38,633 [INFO] 🐞 فایل‌های خروجی دیباگ در: Download/telegram_downloads/bbcpersian
+2026-07-06 08:21:38,762 [INFO] ✅ پایان موفقیت‌آمیز دیباگ.
+2026-07-06 08:21:38,762 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
