@@ -77,7 +77,8 @@ class TelegramChannelScraper:
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
         self.auto_resume = getattr(config, 'auto_resume', False)  # ← اضافه شد
-
+        self.save_screenshots = getattr(config, 'save_screenshots', True)  # ← اضافه شد
+        
         # ═══════════════ ذخیره جهت اسکرول (برای هماهنگی با debug) ═══════════════
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
         if self.scroll_direction not in ['up', 'down']:
@@ -381,11 +382,16 @@ class TelegramChannelScraper:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات {name}: {e}")
 
     async def _save_screenshot(self, page, name: str):
-        """ذخیره اسکرین‌شات کامل صفحه."""
+        """ذخیره اسکرین‌شات کامل صفحه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            self.logger.debug(f"⏭️ اسکرین‌شات {name} غیرفعال است.")
+            return
         await self._screenshot(page, name, full_page=True)
 
     async def _take_screenshot(self, page, name: str):
-        """ذخیره اسکرین‌شات دیباگ کامل صفحه."""
+        """ذخیره اسکرین‌شات دیباگ کامل صفحه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            return
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
         await self._screenshot(page, name, full_page=True)
 
@@ -422,18 +428,14 @@ class TelegramChannelScraper:
     # ═══════════════════ اسکرین‌شات خطا برای دیباگ ═══════════════════
     async def _capture_error_screenshot(self, page, error_type: str, description: str = ""):
         """
-        گرفتن اسکرین‌شات از صفحه در هنگام بروز خطا برای دیباگ.
-
-        Args:
-            page: صفحه مرورگر
-            error_type (str): نوع خطا (مانند 'target_not_found', 'scroll_failed')
-            description (str): توضیح تکمیلی
+        گرفتن اسکرین‌شات از صفحه در هنگام بروز خطا برای دیباگ (فقط در صورت فعال بودن).
         """
+        if not self.save_screenshots:
+            return
         try:
-            # ایجاد پوشه‌ی error_screenshots در کنار سایر پوشه‌ها
             error_dir = self.debug_screenshots_dir / "error_screenshots"
             error_dir.mkdir(parents=True, exist_ok=True)
-
+ 
             # ایجاد نام فایل با timestamp و نوع خطا
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_channel = self._sanitize_filename(self.channel)
@@ -513,7 +515,8 @@ class TelegramChannelScraper:
             if existing_context is None:
                 await context.close()
             return [], None, None
-        await self._save_screenshot(page, "initial")
+        if self.save_screenshots:
+            await self._save_screenshot(page, "initial")
 
         # ─── پرش به پایین (فقط در حالت عادی و بدون resume) ────
         # هماهنگی با debug_scraper: اگر debug_mode فعال و scroll_direction == 'up' باشد، پرش انجام نمی‌شود
@@ -820,8 +823,11 @@ class TelegramChannelScraper:
         self.logger.info(f"📊 {len(items)} پست جمع‌آوری شد.")
 
         # ─── اسکرین‌شات نهایی ──────────────────────────────────
-        await self._save_screenshot(page, "final")
-        await self._capture_post_screenshots(page, items)
+        if self.save_screenshots:
+            await self._save_screenshot(page, "final")
+            await self._capture_post_screenshots(page, items)
+        else:
+            self.logger.info("⏭️ اسکرین‌شات‌ها غیرفعال هستند.")
 
         # ─── اسکرول به اولین پست ──────────────────────────────
         if items:
@@ -877,7 +883,8 @@ class TelegramChannelScraper:
         await human_sleep(0.2, 0.1)
         await search_input.type(self.channel, delay=random.randint(80, 150))
         self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
-        await self._take_screenshot(page, "search_input_filled")
+        if self.save_screenshots:
+            await self._take_screenshot(page, "search_input_filled")
         await human_sleep(1.5, 0.3)
         await page.keyboard.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
@@ -914,13 +921,16 @@ class TelegramChannelScraper:
 
         if not found:
             self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۴۵+ ثانیه).")
-            await self._take_screenshot(page, "search_failed")
+            if self.save_screenshots:
+                await self._take_screenshot(page, "search_failed")
             return False
 
         self.logger.info("✅ نتایج جستجو ظاهر شدند.")
-        await self._take_screenshot(page, f"search_results_{self.channel}")
+        if self.save_screenshots:
+            await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
-        await self._take_screenshot(page, "before_click_final")
+        if self.save_screenshots:
+            await self._take_screenshot(page, "before_click_final")
 
         return await self._click_search_result(page, search_term)
 
@@ -975,12 +985,13 @@ class TelegramChannelScraper:
             await human_sleep(0.2, 0.1)
             await search_input.type(self.start_link, delay=random.randint(80, 150))
             self.logger.info(f"🔍 لینک تایپ شد: {self.start_link}")
-            await self._take_screenshot(page, "search_link_filled")
-            await human_sleep(1.5, 0.3)
+            if self.save_screenshots:
+                await self._take_screenshot(page, "search_link_filled")
             await page.keyboard.press("Enter")
             self.logger.info("⏳ منتظر نتایج جستجو...")
             await human_sleep(5, 0.5)
-            await self._take_screenshot(page, "search_results_loaded")
+            if self.save_screenshots:
+                await self._take_screenshot(page, "search_results_loaded")
 
             clicked = False
             result_selectors = [
@@ -1021,7 +1032,8 @@ class TelegramChannelScraper:
                         }
                     }''')
                     await human_sleep(2, 0.3)
-                    await self._take_screenshot(page, "after_js_click")
+                    if self.save_screenshots:
+                        await self._take_screenshot(page, "after_js_click")
                     self.logger.info("✅ کلیک با JavaScript انجام شد.")
                     clicked = True
                 except Exception as e:
@@ -1029,14 +1041,15 @@ class TelegramChannelScraper:
 
             if not clicked:
                 self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
-                await self._take_screenshot(page, "click_result_failed")
+                if self.save_screenshots:
+                    await self._take_screenshot(page, "click_result_failed")
                 return False
-
             for attempt in range(3):
                 try:
                     await page.wait_for_selector('div[data-message-id]', timeout=15000)
                     self.logger.info("✅ صفحه پیام‌ها با موفقیت بارگذاری شد.")
-                    await self._take_screenshot(page, "messages_page_loaded")
+                    if self.save_screenshots:
+                        await self._take_screenshot(page, "messages_page_loaded")
                     return True
                 except Exception as e:
                     self.logger.warning(f"⚠️ تلاش {attempt+1} برای بارگذاری پیام‌ها ناموفق: {e}")
@@ -1044,7 +1057,8 @@ class TelegramChannelScraper:
                         await human_sleep(3, 0.5)
 
             self.logger.error("❌ پس از کلیک، پیام‌ها پیدا نشدند.")
-            await self._take_screenshot(page, "no_messages_after_click")
+            if self.save_screenshots:
+                await self._take_screenshot(page, "no_messages_after_click")
             return False
 
         for retry in range(2):
@@ -1125,14 +1139,19 @@ class TelegramChannelScraper:
             self.logger.debug("JavaScript generic click: %s", e)
 
         self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
-        await self._take_screenshot(page, "click_failed")
+        if self.save_screenshots:
+            await self._take_screenshot(page, "click_failed")
         return False
 
     # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
 
     async def _capture_post_screenshots(self, page, items: List[Dict]):
-        """گرفتن اسکرین‌شات از هر پست به‌صورت جداگانه."""
+        """گرفتن اسکرین‌شات از هر پست به‌صورت جداگانه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            self.logger.info("⏭️ ذخیره اسکرین‌شات پست‌ها غیرفعال است.")
+            return
         self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
+   
         for idx, item in enumerate(items):
             msg_id = item['id']
             try:
