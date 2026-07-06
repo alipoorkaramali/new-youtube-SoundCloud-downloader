@@ -46,6 +46,11 @@ on:
         type: boolean
         required: false
         default: false
+      save_screenshots:
+        description: 'ذخیره اسکرین‌شات‌ها (اگر غیرفعال باشد، سرعت اسکرپ افزایش می‌یابد و حجم خروجی کاهش می‌یابد)'
+        type: boolean
+        required: false
+        default: true
       save_to:
         description: 'محل ذخیره‌سازی خروجی‌ها (در صورت انتخاب دستی، override می‌شود)'
         required: true
@@ -180,6 +185,9 @@ jobs:
           # 🔄 auto_resume: ادامه خودکار تا رسیدن به limit
           auto_resume_val = '${{ github.event.inputs.auto_resume }}'.lower() == 'true'
           c['auto_resume'] = auto_resume_val
+          # 🖼️ save_screenshots: ذخیره اسکرین‌شات‌ها
+          save_screenshots_val = '${{ github.event.inputs.save_screenshots }}'.lower() == 'true'
+          c['save_screenshots'] = save_screenshots_val          
           print(f'✅ auto_resume set to: {auto_resume_val}')  # ← با کوتیشن تکی
           
           # debug_mode (اختیاری، برای هماهنگی)
