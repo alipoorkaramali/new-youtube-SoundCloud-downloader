@@ -370,12 +370,27 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
             # اگر دور اول نیست و all_items خالی نیست، resume_point را تنظیم کن
             if rounds > 1 and all_items:
-                oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                # پیدا کردن قدیمی‌ترین پستی که اسکرین‌شات آن موجود است
+                oldest_post = None
+                sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))  # مرتب‌سازی صعودی
+                for item in sorted_items:
+                    msg_id = item['id']
+                    safe_channel = self._sanitize_filename(self.channel)
+                    safe_msg_id = self._sanitize_filename(str(msg_id))
+                    screenshot_path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                    if screenshot_path.exists():
+                        oldest_post = item
+                        break
+                
+                if oldest_post is None:
+                    # اگر هیچ اسکرین‌شاتی وجود نداشت، از قدیمی‌ترین پست استفاده کن (فال‌بک)
+                    oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                    self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_post['id']}")
+                
                 resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
                 self.start_link = resume_link
                 self.target_msg_id = oldest_post['id']
                 self._resume_loaded = True
-                # مقداردهی _resume_data برای جلوگیری از خطا در والد
                 if self._resume_data is None:
                     self._resume_data = {}
                 self._resume_data['last_msg_id'] = self.target_msg_id
