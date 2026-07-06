@@ -76,6 +76,7 @@ class TelegramChannelScraper:
 
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
+        self.auto_resume = getattr(config, 'auto_resume', False)  # ← اضافه شد
 
         # ═══════════════ ذخیره جهت اسکرول (برای هماهنگی با debug) ═══════════════
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
@@ -194,37 +195,99 @@ class TelegramChannelScraper:
             self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
 
     async def _run_impl(self):
-        """پیاده‌سازی اصلی اسکرپر."""
+        """پیاده‌سازی اصلی اسکرپر با پشتیبانی از auto_resume."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر با لینک: {self.start_link} (limit={self.limit})")
         else:
             self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
 
-        items, context, page = await self._fetch_posts_from_telegram()
-        if not items:
+        all_items = []
+        global_seen_ids = set()
+        rounds = 0
+        # محاسبه تعداد دورهای مورد نیاز بر اساس limit
+        # هر دور تقریباً ۳۰-۵۰ پست جمع می‌کند، بنابراین limit/30 + 2 دور امن است
+        max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
+        # اگر auto_resume فعال باشد، حلقه‌ی چنددوره‌ای اجرا می‌شود
+        if self.auto_resume:
+            self.logger.info("🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...")
+        else:
+            max_rounds = 1  # فقط یک دور
+
+        context = None
+        page = None
+
+        while len(all_items) < self.limit and rounds < max_rounds:
+            rounds += 1
+            self.logger.info(f"📌 دور {rounds} از {max_rounds if self.auto_resume else '1'}")
+            self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
+
+            # اگر دور اول نیست، resume_point را تنظیم کن
+            if rounds > 1 and all_items:
+                oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
+                self.start_link = resume_link
+                self.target_msg_id = oldest_post['id']
+                self._resume_loaded = True
+                self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
+
+            # اجرای یک دور اسکرپ
+            items, context, page = await self._fetch_posts_from_telegram(
+                existing_seen_ids=global_seen_ids,
+                keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
+            )
+            if not items:
+                self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
+                break
+
+            # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
+            new_items_count = 0
+            for item in items:
+                if item['id'] not in global_seen_ids:
+                    global_seen_ids.add(item['id'])
+                    all_items.append(item)
+                    new_items_count += 1
+
+            self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
+            self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
+
+            # اگر به limit رسیدیم یا دور آخر است، پردازش نهایی را انجام بده
+            if len(all_items) >= self.limit or rounds >= max_rounds or not self.auto_resume:
+                break
+
+            # اگر به انتهای کانال رسیدیم و هنوز به limit نرسیدیم، ادامه بده
+            # (تشخیص با _is_at_top)
+            if hasattr(self, '_is_at_top') and await self._is_at_top(page):
+                self.logger.info("📌 به بالای صفحه رسیدیم. شروع دور بعدی...")
+                # به صفحه اصلی برویم و دوباره جستجو کنیم
+                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+                continue
+
+        # ─── پردازش نهایی ──────────────────────────────────
+        if not all_items:
             self.logger.warning("هیچ پستی دریافت نشد.")
             if context:
                 await context.close()
             return
 
-        self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
+        self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
 
-        media_map, downloaded = await self._download_media(items, page, context)
+        media_map, downloaded = await self._download_media(all_items, page, context)
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
         # ذخیره وضعیت نهایی (قدیمی‌ترین پست)
-        if items:
-            oldest_item = min(items, key=lambda x: int(x.get('id', 0)))
-            self._save_resume_state(oldest_item['id'], len(items))
+        if all_items:
+            oldest_item = min(all_items, key=lambda x: int(x.get('id', 0)))
+            self._save_resume_state(oldest_item['id'], len(all_items))
 
         gen = OutputGenerator(
             self.base_dir,
             self.channel,
-            items,
+            all_items,
             media_map,
             debug_mode=self.debug_mode,
-            append_mode=self.resume and self._resume_loaded  # هماهنگ با debug_scraper
+            append_mode=self.resume and self._resume_loaded
         )
         gen.run_all()
 
@@ -236,7 +299,6 @@ class TelegramChannelScraper:
             self._clear_resume_state()
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
-
     # ═══════════════════ متد کمکی: پاک‌سازی نام فایل ═══════════════════
 
     @staticmethod
@@ -339,11 +401,24 @@ class TelegramChannelScraper:
             self.logger.info(f"   نوع خطا: {error_type} | توضیح: {description}")
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات خطا: {e}")
+    # ═══════════════════ بررسی بالای صفحه (کمکی) ═══════════════════
+    async def _is_at_top(self, page) -> bool:
+        """بررسی میکند که آیا صفحه به بالاترین نقطه رسیده است (با ۱۰۰px تحمل)."""
+        return await page.evaluate("""
+            () => {
+                const scrollTop = document.documentElement.scrollTop;
+                return scrollTop <= 100;
+            }
+        """)
     # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
 
-    async def _fetch_posts_from_telegram(self) -> Tuple[List[Dict], Any, Any]:
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False) -> Tuple[List[Dict], Any, Any]:
         """
         استخراج پست‌ها از کانال تلگرام با پشتیبانی از Resume و start_link.
+
+        Args:
+            existing_seen_ids (set): مجموعه‌ی شناسه‌های پست‌های قبلی (برای جلوگیری از تکرار)
+            keep_browser_open (bool): اگر True باشد، مرورگر بعد از پایان بسته نمی‌شود
 
         Returns:
             Tuple[List[Dict], Any, Any]: (پست‌ها, context, page)
@@ -415,7 +490,11 @@ class TelegramChannelScraper:
 
         # ─── جمع‌آوری پست‌ها ──────────────────────────────────
         items = []
-        seen_ids = set()
+        # اگر مجموعه‌ی شناسه‌های قبلی ارسال شده، از آن استفاده کن
+        if existing_seen_ids is not None:
+            seen_ids = existing_seen_ids.copy()
+        else:
+            seen_ids = set()
         scroll_attempts = 0
 
         # تعیین نقطه شروع برای Resume
@@ -677,6 +756,10 @@ class TelegramChannelScraper:
                 await human_sleep(1, 0.3)
             except Exception:
                 pass
+
+        # اگر keep_browser_open فعال باشد، مرورگر را نبند
+        if not keep_browser_open and context:
+            await context.close()
 
         return items, context, page
 
