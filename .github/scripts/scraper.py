@@ -552,6 +552,10 @@ class TelegramChannelScraper:
                     await human_sleep(1, 0.3)
                     self.logger.info("✅ پیام هدف به بالای صفحه منتقل شد.")
                     target_found = True
+                    # بلافاصله start_collecting را فعال کن تا اسکرول اضافی انجام نشود
+                    start_collecting = True
+                    seen_ids.add(self.target_msg_id)
+                    self.logger.info(f"🎯 شروع جمع‌آوری از پیام هدف {self.target_msg_id}")
                 else:
                     self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد. تلاش با اسکرول...")
                     # اسکرول به بالا برای پیدا کردن target
