@@ -259,17 +259,17 @@ class TelegramChannelScraper:
                 self._resume_data['last_msg_id'] = self.target_msg_id
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
-            # اجرای یک دور اسکرپ (با keep_browser_open اگر دور بعدی هم وجود دارد)
+            # اجرای یک دور اسکرپ (مرورگر همیشه باز نگه داشته می‌شود تا دانلود انجام شود)
             if rounds == 1:
                 items, context, page = await self._fetch_posts_from_telegram(
                     existing_seen_ids=global_seen_ids,
-                    keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
+                    keep_browser_open=True  # همیشه True
                 )
             else:
                 # در دورهای بعدی، از context و page موجود استفاده کن
                 items, context, page = await self._fetch_posts_from_telegram(
                     existing_seen_ids=global_seen_ids,
-                    keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit),
+                    keep_browser_open=True,  # همیشه True
                     existing_context=context,
                     existing_page=page
                 )
