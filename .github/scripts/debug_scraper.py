@@ -46,6 +46,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
             self.scroll_direction = 'up'
 
+        # ═══════════════ غیرفعال کردن auto_resume در حالت دیباگ ═══════════════
+        # در حالت دیباگ، فقط یک دور اجرا می‌شود و auto_resume نادیده گرفته می‌شود
+        self.auto_resume = False
+
         # ═══════════════ مقداردهی resume_data (رفع AttributeError) ═══════════════
         if not hasattr(self, 'resume_data') or self.resume_data is None:
             self.resume_data = {}
@@ -353,13 +357,16 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.logger.info(f"📥 {len(items)} پست استخراج شد (حالت دیباگ).")
 
         try:
+            # اگر auto_resume فعال است (که در دیباگ غیرفعال است)، append_mode نباید true باشد
+            append_mode = self.resume and self._resume_loaded and not self.auto_resume
+
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
                 items,
                 {},
                 debug_mode=self.debug_mode,
-                append_mode=self.resume and self._resume_loaded  # ← اضافه شد
+                append_mode=append_mode
             )
             gen.run_all()
             self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
