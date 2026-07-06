@@ -1140,19 +1140,28 @@ class TelegramChannelScraper:
                     )
                     continue
 
-                await locator.scroll_into_view_if_needed()
-                await human_sleep(0.5, 0.2)
-
                 safe_channel = self._sanitize_filename(self.channel)
                 safe_msg_id = self._sanitize_filename(str(msg_id))
                 path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
                 
-                # اگر فایل اسکرین‌شات قبلاً وجود دارد، از گرفتن مجدد صرف‌نظر کن
                 if path.exists():
                     self.logger.debug(f"⏭️ اسکرین‌شات پست {msg_id} قبلاً وجود دارد، رد می‌شود.")
                     continue
                 
-                await locator.screenshot(path=path)
+                # اسکرول به المنت و گرفتن اسکرین‌شات با مدیریت خطا
+                try:
+                    await locator.scroll_into_view_if_needed()
+                    await human_sleep(0.5, 0.2)
+                    await locator.screenshot(path=path, timeout=30000)
+                except Exception as e:
+                    self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {str(e)[:100]}")
+                    # اسکرین‌شات خطا برای بررسی وضعیت صفحه
+                    await self._capture_error_screenshot(
+                        page,
+                        "screenshot_failed",
+                        f"post_id={msg_id} - {str(e)[:50]}"
+                    )
+                    continue
                 self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
 
                 if (idx + 1) % 10 == 0:
