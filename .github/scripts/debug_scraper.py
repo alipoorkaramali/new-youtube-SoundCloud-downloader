@@ -181,12 +181,15 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False) -> tuple[List[Dict], any, any]:
         self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
 
         # ۱. اجرای منطق اصلی والد (با keep_browser_open=True تا مرورگر بسته نشود)
-        items, context, page = await super()._fetch_posts_from_telegram(keep_browser_open=True)
+        # والد خودش بستن مرورگر را بر اساس keep_browser_open مدیریت می‌کند
+        items, context, page = await super()._fetch_posts_from_telegram(
+            existing_seen_ids=existing_seen_ids,
+            keep_browser_open=True  # همیشه باز نگه دار تا دیباگ بتواند اسکرول اضافی انجام دهد
+        )
 
         if not page:
             self.logger.error("❌ صفحه دریافت نشد.")
@@ -238,6 +241,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.logger.info(f"🔁 اسکرول اضافی فعال — حداکثر {max_attempts} تلاش")
 
         # ─── اسکرول اضافی ─────────────────────────────
+        # برای جلوگیری از تکرار، از مجموعه‌ی شناسه‌های موجود استفاده می‌کنیم
         seen_ids = {item.get('id') for item in items if item.get('id')}
         no_new_attempts = 0
         new_items = []
@@ -292,6 +296,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.logger.info(f"📈 {added} پست جدید اضافه شد (مجموع: {len(seen_ids)})")
             else:
                 no_new_attempts += 1
+
         # اضافه کردن پست‌های جدید
         if new_items:
             # اگر جهت down است، پست‌های جدید (که جدیدتر هستند) را در ابتدا قرار بده
@@ -302,11 +307,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         # ─── به‌روزرسانی resume_data برای ادامه‌ی هوشمند ───
         if items:
-            # اگر جهت up باشد (به سمت قدیمی‌تر)، جدیدترین پیام در انتهای لیست است
-            # اگر جهت down باشد، قدیمی‌ترین پیام در ابتدای لیست است
             if self.scroll_direction == 'up':
                 self.resume_data['last_msg_id'] = items[-1].get('id')
-            else:  # down
+            else:
                 self.resume_data['last_msg_id'] = items[0].get('id')
             self.logger.debug(f"📌 last_msg_id به‌روزرسانی شد: {self.resume_data['last_msg_id']}")
 
@@ -317,7 +320,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         self.logger.info(f"🐞 استخراج تمام شد — {len(items)} پست (جهت: {self.scroll_direction})")
 
         return items, context, page
-
+        
     async def run(self):
         """اجرای اصلی با ذخیرهٔ خلاصه JSON."""
         await super().run()
