@@ -180,7 +180,7 @@ jobs:
           # 🔄 auto_resume: ادامه خودکار تا رسیدن به limit
           auto_resume_val = '${{ github.event.inputs.auto_resume }}'.lower() == 'true'
           c['auto_resume'] = auto_resume_val
-          print(f"✅ auto_resume set to: {auto_resume_val}")  # ← اضافه شد
+          print(f"✅ auto_resume set to: {auto_resume_val}")  # ← اصلاح شد
           
           # debug_mode (اختیاری، برای هماهنگی)
           debug_val = '${{ github.event.inputs.debug_mode }}'.lower() == 'true'
