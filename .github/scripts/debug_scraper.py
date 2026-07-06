@@ -18,7 +18,7 @@ from typing import List, Dict
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config_loader import load_config
-from scraper import TelegramChannelScraper
+from scraper import TelegramChannelScraper, HOME_URL  # ← اضافه شد
 from output_generator import OutputGenerator
 
 
