@@ -181,16 +181,17 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False) -> tuple[List[Dict], any, any]:
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: any = None, existing_page: any = None) -> tuple[List[Dict], any, any]:
         self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
 
         # ۱. اجرای منطق اصلی والد (با keep_browser_open=True تا مرورگر بسته نشود)
         # والد خودش بستن مرورگر را بر اساس keep_browser_open مدیریت می‌کند
         items, context, page = await super()._fetch_posts_from_telegram(
             existing_seen_ids=existing_seen_ids,
-            keep_browser_open=True  # همیشه باز نگه دار تا دیباگ بتواند اسکرول اضافی انجام دهد
+            keep_browser_open=True,  # همیشه باز نگه دار تا دیباگ بتواند اسکرول اضافی انجام دهد
+            existing_context=existing_context,  # ← اضافه شد
+            existing_page=existing_page         # ← اضافه شد
         )
-
         if not page:
             self.logger.error("❌ صفحه دریافت نشد.")
             return items, context, page
@@ -377,10 +378,19 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
             # اجرای یک دور اسکرپ (با keep_browser_open اگر دور بعدی هم وجود دارد)
-            items, context, page = await self._fetch_posts_from_telegram(
-                existing_seen_ids=global_seen_ids,
-                keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
-            )
+            if rounds == 1:
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
+                )
+            else:
+                # در دورهای بعدی، از context و page موجود استفاده کن
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit),
+                    existing_context=context,
+                    existing_page=page
+                )
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
