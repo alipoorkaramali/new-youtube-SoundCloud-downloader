@@ -41,6 +41,11 @@ on:
         type: boolean
         required: false
         default: false
+      auto_resume:
+        description: 'ادامه خودکار تا رسیدن به limit در یک اجرا (اگر فعال باشد، پس از اتمام هر دور، به‌طور خودکار از آخرین پست ادامه می‌دهد تا به limit برسد)'
+        type: boolean
+        required: false
+        default: false
       save_to:
         description: 'محل ذخیره‌سازی خروجی‌ها (در صورت انتخاب دستی، override می‌شود)'
         required: true
@@ -171,6 +176,10 @@ jobs:
           # 🔄 resume: تبدیل رشته به بولین (رفع خطای true/True)
           resume_val = '${{ github.event.inputs.resume }}'.lower() == 'true'
           c['resume'] = resume_val
+          
+          # 🔄 auto_resume: ادامه خودکار تا رسیدن به limit
+          auto_resume_val = '${{ github.event.inputs.auto_resume }}'.lower() == 'true'
+          c['auto_resume'] = auto_resume_val
           
           # debug_mode (اختیاری، برای هماهنگی)
           debug_val = '${{ github.event.inputs.debug_mode }}'.lower() == 'true'
