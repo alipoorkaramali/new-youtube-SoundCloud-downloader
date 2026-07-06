@@ -226,11 +226,30 @@ class TelegramChannelScraper:
 
             # اگر دور اول نیست، resume_point را تنظیم کن
             if rounds > 1 and all_items:
-                oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                # پیدا کردن قدیمی‌ترین پستی که اسکرین‌شات آن موجود است
+                oldest_post = None
+                sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))
+                for item in sorted_items:
+                    msg_id = item['id']
+                    safe_channel = self._sanitize_filename(self.channel)
+                    safe_msg_id = self._sanitize_filename(str(msg_id))
+                    screenshot_path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                    if screenshot_path.exists():
+                        oldest_post = item
+                        break
+                
+                if oldest_post is None:
+                    # فال‌بک: از قدیمی‌ترین پست استفاده کن
+                    oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                    self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_post['id']}")
+                
                 resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
                 self.start_link = resume_link
                 self.target_msg_id = oldest_post['id']
                 self._resume_loaded = True
+                if self._resume_data is None:
+                    self._resume_data = {}
+                self._resume_data['last_msg_id'] = self.target_msg_id
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
             # اجرای یک دور اسکرپ (با keep_browser_open اگر دور بعدی هم وجود دارد)
@@ -288,9 +307,25 @@ class TelegramChannelScraper:
         self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
         self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
 
-        # ذخیره وضعیت نهایی (قدیمی‌ترین پست)
+        # ذخیره وضعیت نهایی (قدیمی‌ترین پستی که اسکرین‌شات موفق دارد)
         if all_items:
-            oldest_item = min(all_items, key=lambda x: int(x.get('id', 0)))
+            # پیدا کردن قدیمی‌ترین پستی که اسکرین‌شات آن موجود است
+            oldest_item = None
+            sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))  # مرتب‌سازی صعودی
+            for item in sorted_items:
+                msg_id = item['id']
+                safe_channel = self._sanitize_filename(self.channel)
+                safe_msg_id = self._sanitize_filename(str(msg_id))
+                screenshot_path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                if screenshot_path.exists():
+                    oldest_item = item
+                    break
+            
+            if oldest_item is None:
+                # اگر هیچ اسکرین‌شاتی وجود نداشت، از قدیمی‌ترین پست استفاده کن (فال‌بک)
+                oldest_item = min(all_items, key=lambda x: int(x.get('id', 0)))
+                self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_item['id']}")
+            
             self._save_resume_state(oldest_item['id'], len(all_items))
 
         # اگر auto_resume فعال است، append_mode نباید true باشد (چون ادغام قبلاً در سطح داده انجام شده)
