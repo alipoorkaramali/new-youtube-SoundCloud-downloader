@@ -185,8 +185,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
         self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
 
-        # ۱. اجرای منطق اصلی والد (که اکنون پرش شرطی دارد)
-        items, context, page = await super()._fetch_posts_from_telegram()
+        # ۱. اجرای منطق اصلی والد (با keep_browser_open=True تا مرورگر بسته نشود)
+        items, context, page = await super()._fetch_posts_from_telegram(keep_browser_open=True)
 
         if not page:
             self.logger.error("❌ صفحه دریافت نشد.")
