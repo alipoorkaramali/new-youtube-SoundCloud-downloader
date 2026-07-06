@@ -281,13 +281,16 @@ class TelegramChannelScraper:
             oldest_item = min(all_items, key=lambda x: int(x.get('id', 0)))
             self._save_resume_state(oldest_item['id'], len(all_items))
 
+        # اگر auto_resume فعال است، append_mode نباید true باشد (چون ادغام قبلاً در سطح داده انجام شده)
+        append_mode = self.resume and self._resume_loaded and not self.auto_resume
+
         gen = OutputGenerator(
             self.base_dir,
             self.channel,
             all_items,
             media_map,
             debug_mode=self.debug_mode,
-            append_mode=self.resume and self._resume_loaded
+            append_mode=append_mode
         )
         gen.run_all()
 
