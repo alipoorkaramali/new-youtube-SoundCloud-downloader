@@ -375,6 +375,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.start_link = resume_link
                 self.target_msg_id = oldest_post['id']
                 self._resume_loaded = True
+                # مقداردهی _resume_data برای جلوگیری از خطا در والد
+                if self._resume_data is None:
+                    self._resume_data = {}
+                self._resume_data['last_msg_id'] = self.target_msg_id
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
             # اجرای یک دور اسکرپ (با keep_browser_open اگر دور بعدی هم وجود دارد)
