@@ -339,31 +339,88 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ خطا در ذخیره خلاصه دیباگ: {e}")
 
     async def _run_impl(self):
-        """Override برای ذخیرهٔ آیتم‌ها و تولید خروجی."""
+        """Override برای ذخیرهٔ آیتم‌ها و تولید خروجی با پشتیبانی از auto_resume."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
         else:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ برای @{self.channel} (limit={self.limit})")
 
-        items, context, page = await self._fetch_posts_from_telegram()
-        self._last_items = items
+        all_items = []
+        global_seen_ids = set()
+        rounds = 0
+        # محاسبه تعداد دورهای مورد نیاز بر اساس limit
+        max_rounds = max(15, (self.limit // 30) + 2) if self.auto_resume else 1
 
-        if not items:
+        if self.auto_resume:
+            self.logger.info("🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...")
+        else:
+            max_rounds = 1
+
+        context = None
+        page = None
+
+        while len(all_items) < self.limit and rounds < max_rounds:
+            rounds += 1
+            self.logger.info(f"📌 دور {rounds} از {max_rounds if self.auto_resume else '1'}")
+            self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
+
+            # اگر دور اول نیست و all_items خالی نیست، resume_point را تنظیم کن
+            if rounds > 1 and all_items:
+                oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
+                self.start_link = resume_link
+                self.target_msg_id = oldest_post['id']
+                self._resume_loaded = True
+                self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
+
+            # اجرای یک دور اسکرپ (با keep_browser_open اگر دور بعدی هم وجود دارد)
+            items, context, page = await self._fetch_posts_from_telegram(
+                existing_seen_ids=global_seen_ids,
+                keep_browser_open=(rounds < max_rounds and len(all_items) < self.limit)
+            )
+            if not items:
+                self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
+                break
+
+            # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
+            new_items_count = 0
+            for item in items:
+                if item['id'] not in global_seen_ids:
+                    global_seen_ids.add(item['id'])
+                    all_items.append(item)
+                    new_items_count += 1
+
+            self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
+            self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
+
+            if len(all_items) >= self.limit or rounds >= max_rounds or not self.auto_resume:
+                break
+
+            # اگر به بالای صفحه رسیدیم و هنوز به limit نرسیدیم، ادامه بده
+            if hasattr(self, '_is_at_top') and await self._is_at_top(page):
+                self.logger.info("📌 به بالای صفحه رسیدیم. شروع دور بعدی...")
+                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+                continue
+
+        # ─── پردازش نهایی ──────────────────────────────────
+        self._last_items = all_items
+
+        if not all_items:
             self.logger.warning("هیچ پستی دریافت نشد.")
             if context:
                 await context.close()
             return
 
-        self.logger.info(f"📥 {len(items)} پست استخراج شد (حالت دیباگ).")
+        self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
 
+        # در دیباگ، رسانه‌ها دانلود نمی‌شوند
         try:
-            # اگر auto_resume فعال است (که در دیباگ غیرفعال است)، append_mode نباید true باشد
             append_mode = self.resume and self._resume_loaded and not self.auto_resume
-
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
-                items,
+                all_items,
                 {},
                 debug_mode=self.debug_mode,
                 append_mode=append_mode
@@ -377,7 +434,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await context.close()
 
         self.logger.info("✅ پایان موفقیت‌آمیز دیباگ.")
-
 
 async def main():
     print("🐞 ========================================")
