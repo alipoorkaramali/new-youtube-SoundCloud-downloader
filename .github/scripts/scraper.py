@@ -515,7 +515,10 @@ class TelegramChannelScraper:
         scroll_attempts = 0
 
         # تعیین نقطه شروع برای Resume
-        resume_last_id = self._resume_data.get('last_msg_id') if self._resume_loaded else None
+        if self._resume_loaded and self._resume_data is not None:
+            resume_last_id = self._resume_data.get('last_msg_id')
+        else:
+            resume_last_id = None
         collected_count = 0
 
         # ─── تعیین وضعیت start_collecting ──────────────────────
