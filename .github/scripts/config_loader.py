@@ -17,6 +17,7 @@ class Config:
     channel_name: str = ''        # نام نمایشی کانال (اختیاری)
     resume: bool = True           # ادامه خودکار از آخرین نقطه
     start_link: str = ''          # لینک پست برای شروع دستی
+    auto_resume: bool = False     # ادامه خودکار تا رسیدن به limit در یک اجرا لینک پست برای شروع دستی
     
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
@@ -47,5 +48,6 @@ def load_config(path: str = "config.yaml") -> Config:
         delay_between_posts=data.get('delay_between_posts', 1.5),
         channel_name=data.get('channel_name', ''),
         resume=data.get('resume', True),
-        start_link=data.get('start_link', '')
+        start_link=data.get('start_link', ''),
+        auto_resume=data.get('auto_resume', False)  # ← اضافه شد
     )
