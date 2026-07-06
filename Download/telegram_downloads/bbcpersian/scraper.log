@@ -1,43 +1,86 @@
-2026-07-06 10:26:35,373 [INFO] 🔁 auto_resume مقدار دریافت شده از config: True
-2026-07-06 10:26:35,374 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
-2026-07-06 10:26:35,374 [INFO] 🐞 حالت دیباگ: فعال
-2026-07-06 10:26:35,374 [INFO] 📌 Resume: غیرفعال
-2026-07-06 10:26:35,374 [INFO] 🧭 جهت اسکرول: up
-2026-07-06 10:26:35,374 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
-2026-07-06 10:26:35,374 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
-2026-07-06 10:26:35,374 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
-2026-07-06 10:26:35,374 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=135)
-2026-07-06 10:26:35,374 [INFO] 🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...
-2026-07-06 10:26:35,374 [INFO] 📌 دور 1 از 15
-2026-07-06 10:26:35,374 [INFO] 📊 پست‌های جمع‌آوری‌شده تا اینجا: 0/135
-2026-07-06 10:26:35,374 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
-2026-07-06 10:26:38,748 [INFO] 🔍 نوار جستجو پیدا شد.
-2026-07-06 10:26:40,557 [INFO] 🔍 در حال جستجوی: @bbcpersian
-2026-07-06 10:26:42,571 [INFO] ⏳ منتظر نتایج...
-2026-07-06 10:26:42,572 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
-2026-07-06 10:26:53,451 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
-2026-07-06 10:26:53,451 [INFO] ✅ نتایج جستجو ظاهر شدند.
-2026-07-06 10:27:00,735 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
-2026-07-06 10:27:00,943 [INFO] 🔄 حالت Debug با جهت 'up' → پرش به پایین غیرفعال شد.
-2026-07-06 10:27:24,636 [INFO] 📊 11 پست جمع‌آوری شد.
-2026-07-06 10:27:24,840 [INFO] 📸 گرفتن اسکرین‌شات از 11 پست...
-2026-07-06 10:27:34,673 [INFO]    10/11 اسکرین‌شات گرفته شد.
-2026-07-06 10:27:36,735 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 11
-2026-07-06 10:27:36,821 [INFO] 📥 والد 11 پست تحویل داد.
-2026-07-06 10:27:36,843 [INFO] ℹ️ در بالاترین نقطه هستیم و جهت up است. اسکرول اضافی لغو شد.
-2026-07-06 10:27:38,549 [INFO] 📸 اسکرین‌شات کامل صفحه ذخیره شد: bbcpersian_final.png
-2026-07-06 10:27:38,549 [INFO] 📈 11 پست جدید در این دور اضافه شد
-2026-07-06 10:27:38,549 [INFO] 📊 مجموع پست‌ها تا اینجا: 11/135
-2026-07-06 10:27:38,551 [INFO] 📌 به بالای صفحه رسیدیم. شروع دور بعدی...
-2026-07-06 10:27:38,551 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: name 'HOME_URL' is not defined
+2026-07-06 10:33:15,640 [INFO] 🔁 auto_resume مقدار دریافت شده از config: True
+2026-07-06 10:33:15,640 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-07-06 10:33:15,640 [INFO] 🐞 حالت دیباگ: فعال
+2026-07-06 10:33:15,640 [INFO] 📌 Resume: غیرفعال
+2026-07-06 10:33:15,640 [INFO] 🧭 جهت اسکرول: up
+2026-07-06 10:33:15,640 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-07-06 10:33:15,640 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-07-06 10:33:15,641 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
+2026-07-06 10:33:15,641 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=135)
+2026-07-06 10:33:15,641 [INFO] 🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...
+2026-07-06 10:33:15,641 [INFO] 📌 دور 1 از 15
+2026-07-06 10:33:15,641 [INFO] 📊 پست‌های جمع‌آوری‌شده تا اینجا: 0/135
+2026-07-06 10:33:15,641 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
+2026-07-06 10:33:22,119 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-07-06 10:33:24,217 [INFO] 🔍 در حال جستجوی: @bbcpersian
+2026-07-06 10:33:26,319 [INFO] ⏳ منتظر نتایج...
+2026-07-06 10:33:26,319 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
+2026-07-06 10:33:37,748 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
+2026-07-06 10:33:37,748 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-07-06 10:33:45,546 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-07-06 10:33:45,760 [INFO] 🔄 حالت Debug با جهت 'up' → پرش به پایین غیرفعال شد.
+2026-07-06 10:34:08,059 [INFO] 📊 11 پست جمع‌آوری شد.
+2026-07-06 10:34:08,273 [INFO] 📸 گرفتن اسکرین‌شات از 11 پست...
+2026-07-06 10:34:17,465 [INFO]    10/11 اسکرین‌شات گرفته شد.
+2026-07-06 10:34:19,364 [INFO] ✅ اسکرین‌شات‌ها تمام شد. مجموع: 11
+2026-07-06 10:34:19,417 [INFO] 📥 والد 11 پست تحویل داد.
+2026-07-06 10:34:19,444 [INFO] ℹ️ در بالاترین نقطه هستیم و جهت up است. اسکرول اضافی لغو شد.
+2026-07-06 10:34:21,158 [INFO] 📸 اسکرین‌شات کامل صفحه ذخیره شد: bbcpersian_final.png
+2026-07-06 10:34:21,158 [INFO] 📈 11 پست جدید در این دور اضافه شد
+2026-07-06 10:34:21,158 [INFO] 📊 مجموع پست‌ها تا اینجا: 11/135
+2026-07-06 10:34:21,160 [INFO] 📌 به بالای صفحه رسیدیم. شروع دور بعدی...
+2026-07-06 10:34:23,434 [INFO] 📌 دور 2 از 15
+2026-07-06 10:34:23,434 [INFO] 📊 پست‌های جمع‌آوری‌شده تا اینجا: 11/135
+2026-07-06 10:34:23,434 [INFO] 🔄 ادامه از پست 285820 (دور 2)
+2026-07-06 10:34:23,434 [INFO] 🐞 شروع استخراج با جهت: up | start_link=True
+2026-07-06 10:34:23,946 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: BrowserType.launch_persistent_context: Opening in existing browser session. This usually means that the profile is already in use by another instance of Chromium.
+Call log:
+  - <launching> /home/runner/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --no-sandbox --disable-blink-features=AutomationControlled --user-data-dir=/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/config/browser_profile --remote-debugging-pipe about:blank
+  - <launched> pid=3487
+  - [pid=3487][out] Opening in existing browser session.
+  - [pid=3487] <gracefully close start>
+  - [pid=3487] <kill>
+  - [pid=3487] <will force kill>
+  - [pid=3487] <process did exit: exitCode=0, signal=null>
+  - [pid=3487] starting temporary directories cleanup
+  - [pid=3487] finished temporary directories cleanup
+  - [pid=3487] <gracefully close end>
 Traceback (most recent call last):
   File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 194, in run
     await asyncio.wait_for(self._run_impl(), timeout=timeout)
   File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 405, in _run_impl
-    await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
-                    ^^^^^^^^
-NameError: name 'HOME_URL' is not defined
-2026-07-06 10:27:38,562 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 380, in _run_impl
+    items, context, page = await self._fetch_posts_from_telegram(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 189, in _fetch_posts_from_telegram
+    items, context, page = await super()._fetch_posts_from_telegram(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 436, in _fetch_posts_from_telegram
+    context = await p.chromium.launch_persistent_context(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 16845, in launch_persistent_context
+    await self._impl_obj.launch_persistent_context(
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_browser_type.py", line 165, in launch_persistent_context
+    result = await self._channel.send_return_as_dict(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 83, in send_return_as_dict
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 563, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: BrowserType.launch_persistent_context: Opening in existing browser session. This usually means that the profile is already in use by another instance of Chromium.
+Call log:
+  - <launching> /home/runner/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --no-sandbox --disable-blink-features=AutomationControlled --user-data-dir=/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/config/browser_profile --remote-debugging-pipe about:blank
+  - <launched> pid=3487
+  - [pid=3487][out] Opening in existing browser session.
+  - [pid=3487] <gracefully close start>
+  - [pid=3487] <kill>
+  - [pid=3487] <will force kill>
+  - [pid=3487] <process did exit: exitCode=0, signal=null>
+  - [pid=3487] starting temporary directories cleanup
+  - [pid=3487] finished temporary directories cleanup
+  - [pid=3487] <gracefully close end>
+
+2026-07-06 10:34:23,974 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
