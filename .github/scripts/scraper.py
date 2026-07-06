@@ -97,6 +97,9 @@ class TelegramChannelScraper:
             self.logger.addHandler(fh)
             self.logger.addHandler(ch)
 
+        # ═══════════════ لاگ مقدار auto_resume (برای دیباگ) ═══════════════
+        self.logger.info(f"🔁 auto_resume مقدار دریافت شده از config: {self.auto_resume}")
+
         # ═══════════════ Resume State (بعد از لاگر) ═══════════════
         self.resume_file = self.base_dir / RESUME_FILE
         self.resume = getattr(config, 'resume', False)
