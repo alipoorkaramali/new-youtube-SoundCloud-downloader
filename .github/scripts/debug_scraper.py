@@ -372,6 +372,10 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         else:
             max_rounds = 1
 
+        # ─── متغیرهای جمع‌آوری دانلودها در طول دورها ───
+        all_media_map = {}
+        downloaded_total = 0
+
         context = None
         page = None
 
@@ -426,6 +430,21 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
 
+            # ─── دانلود پست‌های همین دور ──────────────────────────
+            if items:
+                self.logger.info(f"📥 دانلود پست‌های دور {rounds} ({len(items)} پست)...")
+                media_map_round, downloaded_round = await self._download_media(
+                    items, page, context
+                )
+                # اضافه کردن به نقشه‌ی کلی
+                for post_id, files in media_map_round.items():
+                    if post_id in all_media_map:
+                        all_media_map[post_id].extend(files)
+                    else:
+                        all_media_map[post_id] = files
+                downloaded_total += downloaded_round
+                self.logger.info(f"✅ دور {rounds}: {downloaded_round} فایل دانلود شد")
+
             # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
             new_items_count = 0
             for item in items:
@@ -458,14 +477,21 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
 
-        # در دیباگ، رسانه‌ها دانلود نمی‌شوند
+        # ─── دانلودهای کل انجام شده در طول دورها ──────────────
+        self.logger.info(f"🖼️ مجموع {downloaded_total} فایل رسانه در {rounds} دور دانلود شد.")
+        self.logger.info(f"📊 media_map برای {len(all_media_map)} پست پر شد.")
+        
+        # برای سازگاری با OutputGenerator، از all_media_map استفاده می‌کنیم
+        media_map = all_media_map
+
+        # در دیباگ، رسانه‌ها دانلود نمی‌شوند (اما ساختار یکسان است)
         try:
             append_mode = self.resume and self._resume_loaded and not self.auto_resume
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
                 all_items,
-                {},
+                media_map,  # ← از all_media_map استفاده می‌شود
                 debug_mode=self.debug_mode,
                 append_mode=append_mode
             )
@@ -478,7 +504,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await context.close()
 
         self.logger.info("✅ پایان موفقیت‌آمیز دیباگ.")
-
 async def main():
     print("🐞 ========================================")
     print("🐞 Telegram Channel Scraper - حالت دیباگ (هماهنگ با scraper.py)")
