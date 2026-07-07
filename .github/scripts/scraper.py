@@ -748,6 +748,14 @@ class TelegramChannelScraper:
                         break
                 if not target_found:
                     self.logger.warning("⚠️ پیام هدف همچنان پیدا نشد. بازگشت نتیجهٔ خالی برای retry.")
+                    # 📸 اسکرین‌شات اضطراری برای عیب‌یابی
+                    try:
+                        safe_name = self._sanitize_filename(f"target_{self.target_msg_id}_not_found")
+                        path = self.debug_screenshots_dir / f"{safe_name}.png"
+                        await page.screenshot(path=path, full_page=True)
+                        self.logger.info(f"📸 اسکرین‌شات صفحه ذخیره شد: {path.name}")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
                     return [], context, page
         # ─── حلقه اصلی استخراج ──────────────────────────────────
         target_limit = limit if limit is not None else self.limit
