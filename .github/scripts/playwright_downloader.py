@@ -83,6 +83,8 @@ class PlaywrightDownloader:
     async def _process_post(self, page: Page, post_id: str,
                             media_map: Dict[str, List[str]]) -> None:
         logger.info(f"📍 شروع دانلود پست {post_id}")
+        # ─── لیست برای نگهداری اسکرین‌شات‌های ضربدر موقت ───
+        self._debug_cross_files = []
 
         # ──────────────── نمایش پست (اسکرول هوشمند بدون خروج از کانال) ────────────────
         message_locator = page.locator(f'[data-message-id="{post_id}"]').first
@@ -372,9 +374,29 @@ class PlaywrightDownloader:
             else:
                 logger.warning(f"   ⚠️ هیچ لینکی برای دانلود مستقیم یافت نشد.")
 
+        # ─── پاک‌سازی اسکرین‌شات‌های ضربدر در صورت موفقیت ───
+        if menu_success or downloaded_files:
+            # دانلود موفق بوده → اسکرین‌شات‌های ضربدر را حذف کن
+            if hasattr(self, '_debug_cross_files'):
+                for path in self._debug_cross_files:
+                    try:
+                        if path.exists():
+                            path.unlink()
+                            logger.debug(f"   🗑️ اسکرین‌شات ضربدر حذف شد: {path.name}")
+                    except Exception as e:
+                        logger.debug(f"   ⚠️ خطا در حذف اسکرین‌شات ضربدر: {e}")
+                self._debug_cross_files = []
+                logger.info(f"   🧹 اسکرین‌شات‌های ضربدر پاک شدند (دانلود موفق)")
+        else:
+            # دانلود ناموفق بوده → اسکرین‌شات‌های ضربدر نگه داشته می‌شوند
+            if hasattr(self, '_debug_cross_files') and self._debug_cross_files:
+                logger.warning(f"   ⚠️ اسکرین‌شات‌های ضربدر برای بررسی خطا نگه داشته شدند ({len(self._debug_cross_files)} فایل)")
+
         if downloaded_files:
             media_map[post_id] = downloaded_files
             logger.info(f"📦 پست {post_id}: {len(downloaded_files)} رسانه دانلود شد.")
+        else:
+            logger.warning(f"⚠️ پست {post_id}: هیچ رسانه‌ای دانلود نشد.")
 
     async def _download_link(self, page: Page, link: str, post_id: str, idx: int,
                              media_map: Dict[str, List[str]]):
@@ -418,7 +440,7 @@ class PlaywrightDownloader:
         return "bin"
 
     async def _draw_debug_cross(self, page: Page, x: float, y: float, name: str):
-        """رسم ضربدر قرمز و ذخیره اسکرین‌شات"""
+        """رسم ضربدر قرمز و ذخیره اسکرین‌شات (فایل به لیست self._debug_cross_files اضافه می‌شود)"""
         await page.evaluate(f"""
             () => {{
                 const container = document.createElement('div');
@@ -447,7 +469,9 @@ class PlaywrightDownloader:
         """)
         path = self.debug_dir / f"debug_click_{name}.png"
         await page.screenshot(path=path)
-        logger.info(f"   📸 اسکرین‌شات با ضربدر ذخیره شد: {path.name}")
+        logger.debug(f"   📸 اسکرین‌شات با ضربدر موقت: {path.name}")
+        if hasattr(self, '_debug_cross_files'):
+            self._debug_cross_files.append(path)
         await page.evaluate("""
             () => {
                 const container = document.getElementById('debug-cross-container');
