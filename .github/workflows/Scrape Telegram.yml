@@ -41,11 +41,6 @@ on:
         type: boolean
         required: false
         default: false
-      auto_resume:
-        description: 'ادامه خودکار تا رسیدن به limit در یک اجرا (مناسب برای آرشیو کامل بدون نیاز به اجرای مجدد) – اگر فعال باشد، اسکرپر پس از رسیدن به انتهای هر دور، به‌طور خودکار از آخرین پست جمع‌آوری‌شده ادامه می‌دهد تا به limit برسد. (مرورگر بین دورها باز نگه داشته می‌شود) – در صورت فعال بودن این گزینه، معمولاً نیازی به فعال‌سازی resume نیست.'
-        type: boolean
-        required: false
-        default: false
       save_screenshots:
         description: 'ذخیره اسکرین‌شات‌ها (اگر غیرفعال باشد، سرعت اسکرپ افزایش می‌یابد و حجم خروجی کاهش می‌یابد)'
         type: boolean
@@ -182,13 +177,9 @@ jobs:
           resume_val = '${{ github.event.inputs.resume }}'.lower() == 'true'
           c['resume'] = resume_val
           
-          # 🔄 auto_resume: ادامه خودکار تا رسیدن به limit
-          auto_resume_val = '${{ github.event.inputs.auto_resume }}'.lower() == 'true'
-          c['auto_resume'] = auto_resume_val
           # 🖼️ save_screenshots: ذخیره اسکرین‌شات‌ها
           save_screenshots_val = '${{ github.event.inputs.save_screenshots }}'.lower() == 'true'
-          c['save_screenshots'] = save_screenshots_val          
-          print(f'✅ auto_resume set to: {auto_resume_val}')  # ← با کوتیشن تکی
+          c['save_screenshots'] = save_screenshots_val
           
           # debug_mode (اختیاری، برای هماهنگی)
           debug_val = '${{ github.event.inputs.debug_mode }}'.lower() == 'true'
