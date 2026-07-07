@@ -315,6 +315,11 @@ class TelegramChannelScraper:
                 await asyncio.sleep(2)
                 continue
 
+        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
+        if len(all_items) > self.limit:
+            all_items = all_items[:self.limit]
+            self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد.")
+
         # ─── پردازش نهایی ──────────────────────────────────
         if not all_items:
             self.logger.warning("هیچ پستی دریافت نشد.")
