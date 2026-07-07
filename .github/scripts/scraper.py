@@ -852,16 +852,12 @@ class TelegramChannelScraper:
                 break
 
             # ─── اسکرول هوشمند ──────────────────────────────────
-            # در دورهای بعدی، همیشه به سمت بالا (قدیمی‌تر) اسکرول می‌کنیم
-            if rounds > 1:
-                scroll_dir = 'up'
-            else:
-                scroll_dir = self.scroll_direction
-            scrolled = await self._smart_scroll(page, scroll_dir, step=1200, max_attempts=3)
+            # همیشه از جهت ذخیره‌شده در self.scroll_direction استفاده می‌کنیم
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
             
             if scrolled:
                 scroll_attempts = 0
-                self.logger.debug(f"✅ اسکرول هوشمند موفق بود (جهت: {scroll_dir if rounds > 1 else self.scroll_direction})")
+                self.logger.debug(f"✅ اسکرول هوشمند موفق بود (جهت: {self.scroll_direction})")
             else:
                 scroll_attempts += 1
                 self.logger.debug(f"⚠️ اسکرول هوشمند ناموفق. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
