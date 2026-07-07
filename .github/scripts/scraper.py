@@ -703,22 +703,31 @@ class TelegramChannelScraper:
                     f"{str(e)[:100]}"
                 )
 
-            # اگر target پیدا نشد، از جدیدترین پست‌ها شروع کن
+            # اگر target پیدا نشد، چند اسکرول قوی به بالا انجام بده، در غیر این‌صورت خالی برگرد
             if not target_found:
-                self.logger.warning("⚠️ پیام هدف پیدا نشد. از جدیدترین پست‌ها شروع می‌کنیم.")
-                start_collecting = True
-                # پرش به پایین برای رفتن به جدیدترین پست‌ها
-                try:
-                    scroll_button = page.locator('button[title="Go to bottom"]').first
-                    if await scroll_button.count() > 0:
-                        await scroll_button.click(timeout=5000)
-                        await human_sleep(3, 0.4)
-                        self.logger.info("⬇️ به جدیدترین پست‌ها رفتیم.")
-                    else:
-                        self.logger.info("ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-                except Exception:
-                    self.logger.info("ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-
+                self.logger.warning("⚠️ پیام هدف پیدا نشد. تلاش با اسکرول قوی به بالا...")
+                # ۳ بار اسکرول قوی به بالا
+                for _ in range(3):
+                    await page.evaluate("window.scrollBy(0, -4000)")
+                    await human_sleep(2, 0.3)
+                    target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
+                    if await target_locator.count() > 0:
+                        await target_locator.scroll_into_view_if_needed()
+                        await page.evaluate("window.scrollBy(0, -150)")
+                        await human_sleep(1, 0.3)
+                        self.logger.info("✅ پیام هدف بعد از اسکرول اضافی پیدا شد.")
+                        target_found = True
+                        start_collecting = True
+                        seen_ids.add(self.target_msg_id)
+                        # اسکرول اولیه برای بارگذاری پست‌های قدیمی‌تر
+                        self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                        for scroll_step in range(3):
+                            await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                            await human_sleep(1.5, 0.3)
+                        break
+                if not target_found:
+                    self.logger.warning("⚠️ پیام هدف همچنان پیدا نشد. بازگشت نتیجهٔ خالی برای retry.")
+                    return [], context, page
         # ─── حلقه اصلی استخراج ──────────────────────────────────
         target_limit = limit if limit is not None else self.limit
         while len(items) < target_limit and scroll_attempts < self.max_scroll_attempts:
