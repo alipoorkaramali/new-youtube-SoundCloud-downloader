@@ -205,21 +205,19 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     limit=remaining
                 )
 
-            # اگر آیتمی نیامد و در دور resume هستیم، شناسه‌های قدیمی‌تر را امتحان کن
+            # اگر آیتمی نیامد و در دور resume هستیم، شناسه‌های قدیمی‌تر را با کم کردن ۱ حدس بزن
             if not items and rounds > 1 and all_items:
-                self.logger.warning("⚠️ دور resume ناموفق – تلاش با شناسه‌های قدیمی‌تر دیگر...")
-                # لیست شناسه‌ها به ترتیب صعودی (قدیمی‌ترین اول)
-                sorted_ids = sorted([int(it['id']) for it in all_items])
+                self.logger.warning("⚠️ دور resume ناموفق – حدس شناسه‌های قدیمی‌تر با کاهش پلکانی...")
                 failed_id = int(self.target_msg_id) if self.target_msg_id else None
-                # شناسه‌هایی که از failed_id کوچکترند (یعنی قدیمی‌تر)
-                remaining_ids = [str(mid) for mid in sorted_ids if (failed_id is None) or (mid < failed_id)]
-                remaining_ids.reverse()  # از بزرگترین (نزدیک‌ترین به هدف) شروع کن
                 retry_success = False
-                for retry_id in remaining_ids:
-                    self.logger.info(f"🔄 تلاش مجدد با پیام {retry_id} ...")
-                    self.start_link = f"https://t.me/{self.channel}/{retry_id}"
-                    self.target_msg_id = retry_id
-                    # فراخوانی دوباره با همان context و page
+                # ۱۰ شماره قبل از failed_id را امتحان کن
+                for offset in range(1, 11):
+                    guess_id = failed_id - offset
+                    if guess_id <= 0:
+                        break
+                    self.logger.info(f"🔄 حدس شناسه قدیمی‌تر: {guess_id} ...")
+                    self.start_link = f"https://t.me/{self.channel}/{guess_id}"
+                    self.target_msg_id = str(guess_id)
                     items, context, page = await self._fetch_posts_from_telegram(
                         existing_seen_ids=global_seen_ids,
                         keep_browser_open=True,
@@ -231,10 +229,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                         retry_success = True
                         break
                 if not retry_success:
-                    self.logger.warning("⚠️ هیچ یک از شناسه‌های قدیمی‌تر پاسخی ندادند. پایان.")
+                    self.logger.warning("⚠️ هیچ یک از شناسه‌های حدس‌زده پاسخی ندادند. پایان.")
                     break
-                # اگر موفق شدیم، items اکنون معتبر است و ادامه می‌دهیم
-
+                # در صورت موفقیت، items معتبر است و ادامه می‌دهیم
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
