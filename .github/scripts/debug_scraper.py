@@ -37,17 +37,17 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
     def __init__(self, config, debug_screenshots: bool = True):
         config.debug_mode = True
         super().__init__(config)
-
         self.debug_screenshots = debug_screenshots
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-        # جهت اسکرول را از config بگیریم
+        # پارامتر جدید: جهت اسکرول (up/down)
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
         if self.scroll_direction not in ['up', 'down']:
             self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
             self.scroll_direction = 'up'
-        self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
+
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
+        self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
         self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
         self._last_items = []
 
@@ -62,8 +62,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return media_map, 0
 
     async def _save_debug_screenshot(self, page, name: str):
-        """ذخیره اسکرین‌شات دیباگ (فقط در صورت فعال بودن)."""
-        if not self.debug_screenshots or not self.save_screenshots:
+        if not self.debug_screenshots:
             return
         try:
             self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -72,11 +71,43 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
+    # ═══════════════ اسکرول هوشمند با پله‌های افزایشی (هماهنگ با scraper.py) ═══════════════
+    async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
+        """
+        اسکرول هوشمند با سه پله افزایشی.
+        - direction: 'up' یا 'down'
+        - step: مقدار پایه (مثبت)
+        - max_attempts: تعداد پله‌ها
+        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
+        """
+        old_height = await page.evaluate("document.documentElement.scrollHeight")
+        scroll_multipliers = [1, 1.8, 2.8]  # پله‌های افزایشی
+
+        for i in range(min(max_attempts, len(scroll_multipliers))):
+            multiplier = scroll_multipliers[i]
+            amount = int(step * multiplier)
+            if direction == 'up':
+                amount = -amount  # منفی = بالا
+            # برای down، amount مثبت می‌ماند
+
+            self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
+            await page.evaluate(f"window.scrollBy(0, {amount})")
+            await human_sleep(1.2, 0.3)
+
+            new_height = await page.evaluate("document.documentElement.scrollHeight")
+            if new_height != old_height:
+                self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
+                return True
+
+        self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
+        return False
+
+    # ═══════════════ اسکرین‌شات کامل صفحه ═══════════════════
     async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
-        """گرفتن اسکرین‌شات کامل از کل صفحه (فقط در صورت فعال بودن)."""
-        if not self.save_screenshots:
-            return
+        """گرفتن اسکرین‌شات کامل از کل صفحه."""
         try:
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
             safe_channel = self._sanitize_filename(self.channel)
             path = self.screenshots_dir / f"{safe_channel}_{name}.png"
             await page.screenshot(path=path, full_page=True)
@@ -84,40 +115,40 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False,
-                                         existing_context: any = None, existing_page: any = None,
-                                         limit: int = None) -> tuple[List[Dict], any, any]:
-        """
-        استخراج پست‌ها با فراخوانی والد و سپس اسکرین‌شات نهایی.
-        """
-        self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
-
-        # فراخوانی متد والد (scraper اصلی)
-        items, context, page = await super()._fetch_posts_from_telegram(
-            existing_seen_ids=existing_seen_ids,
-            keep_browser_open=True,  # همیشه باز نگه دار برای دیباگ
-            existing_context=existing_context,
-            existing_page=existing_page,
-            limit=limit
-        )
-
-        if not items or not page:
-            self.logger.warning("⚠️ والد هیچ پستی تحویل نداد یا صفحه موجود نیست.")
-            return items, context, page
-
-        self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
-        self.logger.info(f"   📌 start_link: {self.start_link if self.start_link else 'None'}")
-        self.logger.info(f"   📌 limit این دور: {limit if limit is not None else self.limit}")
-        self.logger.info(f"   📌 جهت اسکرول: {self.scroll_direction}")
-
-        # اسکرین‌شات نهایی
-        if self.save_screenshots:
-            await self._capture_full_page_screenshot(page, "final")
-            await self._save_debug_screenshot(page, "debug_final")
-
-        self.logger.info(f"🐞 استخراج تمام شد — {len(items)} پست (جهت: {self.scroll_direction})")
-        return items, context, page
-
+        
+    async def _extract_posts_from_page(self, page) -> List[Dict]:
+        """استخراج مستقیم پست‌ها با JavaScript (selectors قوی‌تر)."""
+        return await page.evaluate("""
+            () => {
+                const posts = [];
+                document.querySelectorAll('[data-message-id]').forEach(el => {
+                    const msgId = el.getAttribute('data-message-id');
+                    if (!msgId) return;
+                    // تلاش برای یافتن متن با چندین selector رایج
+                    const textSelectors = [
+                        '.text-content', '.message-text', '[dir="auto"]',
+                        '.text', '.message', 'div[class*="text"]',
+                        'div[class*="body"]', 'div[class*="message"]'
+                    ];
+                    let text = '';
+                    for (const sel of textSelectors) {
+                        const el = document.querySelector(sel);
+                        if (el && el.innerText.trim().length > 3) {
+                            text = el.innerText.trim();
+                            break;
+                        }
+                    }
+                    // fallback: کل innerText المنت اگر چیزی پیدا نشد
+                    if (!text) text = el.innerText.trim().substring(0, 1000);
+                    const dateEl = el.querySelector('time, .date, [class*="date"], [datetime]');
+                    const date = dateEl ? (dateEl.getAttribute('datetime') || dateEl.innerText.trim()) : '';
+                    posts.push({ id: msgId, text: text, date: date });
+                });
+                return posts;
+            }
+        """)
+    
+    # ═══════════════ بازنویسی متد استخراج با پرش به بالا/پایین و اسکرول جهت‌دار ═══════════════════
     async def run(self):
         """اجرای اصلی با ذخیرهٔ خلاصه JSON."""
         await super().run()
@@ -148,8 +179,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         all_items = []
         global_seen_ids = set()
         rounds = 0
-        # محاسبه تعداد دورهای مورد نیاز بر اساس limit
-        max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
+        max_rounds = max(15, (self.limit // 30) + 2)
         self.logger.info(f"🔄 دیباگ تا رسیدن به {self.limit} پست ادامه می‌دهد...")
 
         context = None
@@ -160,9 +190,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.info(f"📌 دور {rounds} از {max_rounds}")
             self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
 
-            # اگر دور اول نیست، resume_point را تنظیم کن (مانند والد)
             if rounds > 1 and all_items:
-                # پیدا کردن قدیمی‌ترین پست با اسکرین‌شات (دقیق‌تر، مثل scraper اصلی)
+                # پیدا کردن قدیمی‌ترین پست با اسکرین‌شات
                 oldest_post = None
                 sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))
                 for item in sorted_items:
@@ -173,23 +202,18 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     if screenshot_path.exists():
                         oldest_post = item
                         break
-                
                 if oldest_post is None:
-                    # فال‌بک: از قدیمی‌ترین پست استفاده کن
                     oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
                     self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_post['id']}")
-                
                 resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
                 self.start_link = resume_link
                 self.target_msg_id = oldest_post['id']
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
-            # محاسبه تعداد پست‌های باقی‌مانده
             remaining = self.limit - len(all_items)
             if remaining <= 0:
                 break
 
-            # اجرای یک دور اسکرپ
             if rounds == 1:
                 items, context, page = await self._fetch_posts_from_telegram(
                     existing_seen_ids=global_seen_ids,
@@ -205,63 +229,83 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     limit=remaining
                 )
 
-            # اگر آیتمی نیامد و در دور resume هستیم، شناسه‌های قدیمی‌تر را با کم کردن ۱ حدس بزن
+            # ═════════ بازیابی ترکیبی در صورت صفر بودن آیتم‌ها ═════════
             if not items and rounds > 1 and all_items:
-                self.logger.warning("⚠️ دور resume ناموفق – حدس شناسه‌های قدیمی‌تر با کاهش پلکانی...")
-                failed_id = int(self.target_msg_id) if self.target_msg_id else None
+                self.logger.warning("⚠️ دور resume ناموفق – تلاش بازیابی...")
                 retry_success = False
-                # ۱۰ شماره قبل از failed_id را امتحان کن
-                for offset in range(1, 11):
-                    guess_id = failed_id - offset
-                    if guess_id <= 0:
-                        break
-                    self.logger.info(f"🔄 حدس شناسه قدیمی‌تر: {guess_id} ...")
-                    self.start_link = f"https://t.me/{self.channel}/{guess_id}"
-                    self.target_msg_id = str(guess_id)
-                    items, context, page = await self._fetch_posts_from_telegram(
-                        existing_seen_ids=global_seen_ids,
-                        keep_browser_open=True,
-                        existing_context=context,
-                        existing_page=page,
-                        limit=remaining
-                    )
-                    if items:
+
+                # ۱) اسکرول قوی + استخراج مستقیم
+                for retry in range(1, 6):
+                    self.logger.info(f"🔄 تلاش بازیابی {retry}/5 – اسکرول قوی...")
+                    await page.evaluate("window.scrollBy(0, -4500)")
+                    await asyncio.sleep(3)
+                    try:
+                        await page.wait_for_selector('div[data-message-id]', state='attached', timeout=10000)
+                    except:
+                        pass
+                    fresh_posts = await self._extract_posts_from_page(page)
+                    await asyncio.sleep(0.8)
+                    new_items = []
+                    for p in fresh_posts:
+                        if p['id'] not in global_seen_ids:
+                            p['url'] = f"https://t.me/{self.channel}/{p['id']}"
+                            new_items.append(p)
+                    if new_items:
+                        items = new_items
                         retry_success = True
+                        self.logger.info(f"✅ تلاش {retry} با اسکرول موفق بود ({len(new_items)} پست جدید).")
                         break
+
+                # ۲) fallback به حدس ID
+                if not retry_success and self.target_msg_id:
+                    self.logger.warning("⚠️ اسکرول موفق نشد – fallback به حدس ID...")
+                    failed_id = int(self.target_msg_id)
+                    for offset in range(1, 8):
+                        guess_id = failed_id - offset
+                        if guess_id <= 0:
+                            break
+                        self.logger.info(f"🔄 حدس ID: {guess_id}")
+                        self.start_link = f"https://t.me/{self.channel}/{guess_id}"
+                        self.target_msg_id = str(guess_id)
+                        items, context, page = await self._fetch_posts_from_telegram(
+                            existing_seen_ids=global_seen_ids,
+                            keep_browser_open=True,
+                            existing_context=context,
+                            existing_page=page,
+                            limit=remaining
+                        )
+                        if items:
+                            retry_success = True
+                            break
+
                 if not retry_success:
-                    self.logger.warning("⚠️ هیچ یک از شناسه‌های حدس‌زده پاسخی ندادند. پایان.")
+                    self.logger.warning("⚠️ تمام روش‌های بازیابی ناموفق بود. پایان.")
                     break
-                # در صورت موفقیت، items معتبر است و ادامه می‌دهیم
+
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
 
-            # ─── دیباگ دانلود نمی‌کند، ولی برای هماهنگی ساختار نگه می‌داریم ───
-            # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
             new_items_count = 0
             for item in items:
                 if item['id'] not in global_seen_ids:
                     global_seen_ids.add(item['id'])
                     all_items.append(item)
                     new_items_count += 1
-
             self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
             self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
 
             if len(all_items) >= self.limit or rounds >= max_rounds:
                 break
 
-            # اگر به بالای صفحه رسیدیم و هنوز به limit نرسیدیم، ادامه بده
             if hasattr(self, '_is_at_top') and await self._is_at_top(page):
                 self.logger.info("📌 به بالای صفحه رسیدیم. شروع دور بعدی...")
                 await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(2)
 
-        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
         if len(all_items) > self.limit:
             all_items = all_items[:self.limit]
             self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد.")
-
         self._last_items = all_items
 
         if not all_items:
@@ -272,14 +316,13 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
 
-        # تولید خروجی
         try:
             append_mode = getattr(self, 'resume', False) and getattr(self, '_resume_loaded', False)
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
                 all_items,
-                {},  # دیباگ دانلود نمی‌کند
+                {},
                 debug_mode=True,
                 append_mode=append_mode
             )
@@ -290,7 +333,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         if context:
             await context.close()
-
         self.logger.info("✅ پایان موفقیت‌آمیز دیباگ.")
 
 async def main():
