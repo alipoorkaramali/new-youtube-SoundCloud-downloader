@@ -653,8 +653,12 @@ class TelegramChannelScraper:
             self.logger.info(f"🎯 پیدا کردن پیام هدف {self.target_msg_id}...")
             target_found = False
             try:
+                # ⏳ صبر برای اسکرول خودکار تلگرام به پیام هدف
+                await human_sleep(4, 0.5)
+                
                 target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
                 if await target_locator.count() > 0:
+            
                     await target_locator.scroll_into_view_if_needed()
                     await page.evaluate("window.scrollBy(0, -150)")
                     await human_sleep(1, 0.3)
