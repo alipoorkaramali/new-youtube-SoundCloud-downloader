@@ -355,7 +355,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ خطا در ذخیره خلاصه دیباگ: {e}")
 
     async def _run_impl(self):
-        """Override برای ذخیرهٔ آیتم‌ها و تولید خروجی با پشتیبانی از auto_resume."""
+        """Override برای ذخیرهٔ آیتم‌ها و تولید خروجی با ادامه خودکار تا رسیدن به limit."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
         else:
@@ -365,12 +365,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         global_seen_ids = set()
         rounds = 0
         # محاسبه تعداد دورهای مورد نیاز بر اساس limit
-        max_rounds = max(15, (self.limit // 30) + 2) if self.auto_resume else 1
-
-        if self.auto_resume:
-            self.logger.info("🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...")
-        else:
-            max_rounds = 1
+        # هر دور تقریباً ۳۰-۵۰ پست جمع می‌کند، بنابراین limit/30 + 2 دور امن است
+        max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
+        self.logger.info(f"🔄 اسکرپر تا رسیدن به {self.limit} پست ادامه می‌دهد...")
 
         # ─── متغیرهای جمع‌آوری دانلودها در طول دورها ───
         all_media_map = {}
@@ -381,7 +378,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         while len(all_items) < self.limit and rounds < max_rounds:
             rounds += 1
-            self.logger.info(f"📌 دور {rounds} از {max_rounds if self.auto_resume else '1'}")
+            self.logger.info(f"📌 دور {rounds} از {max_rounds}")
             self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
 
             # اگر دور اول نیست و all_items خالی نیست، resume_point را تنظیم کن
@@ -456,7 +453,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
             self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
 
-            if len(all_items) >= self.limit or rounds >= max_rounds or not self.auto_resume:
+            if len(all_items) >= self.limit or rounds >= max_rounds:
                 break
 
             # اگر به بالای صفحه رسیدیم و هنوز به limit نرسیدیم، ادامه بده
@@ -486,7 +483,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         # در دیباگ، رسانه‌ها دانلود نمی‌شوند (اما ساختار یکسان است)
         try:
-            append_mode = self.resume and self._resume_loaded and not self.auto_resume
+            append_mode = self.resume and self._resume_loaded
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
