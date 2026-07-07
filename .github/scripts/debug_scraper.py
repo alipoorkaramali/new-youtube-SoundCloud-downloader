@@ -205,6 +205,36 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     limit=remaining
                 )
 
+            # اگر آیتمی نیامد و در دور resume هستیم، شناسه‌های قدیمی‌تر را امتحان کن
+            if not items and rounds > 1 and all_items:
+                self.logger.warning("⚠️ دور resume ناموفق – تلاش با شناسه‌های قدیمی‌تر دیگر...")
+                # لیست شناسه‌ها به ترتیب صعودی (قدیمی‌ترین اول)
+                sorted_ids = sorted([int(it['id']) for it in all_items])
+                failed_id = int(self.target_msg_id) if self.target_msg_id else None
+                # شناسه‌هایی که از failed_id کوچکترند (یعنی قدیمی‌تر)
+                remaining_ids = [str(mid) for mid in sorted_ids if (failed_id is None) or (mid < failed_id)]
+                remaining_ids.reverse()  # از بزرگترین (نزدیک‌ترین به هدف) شروع کن
+                retry_success = False
+                for retry_id in remaining_ids:
+                    self.logger.info(f"🔄 تلاش مجدد با پیام {retry_id} ...")
+                    self.start_link = f"https://t.me/{self.channel}/{retry_id}"
+                    self.target_msg_id = retry_id
+                    # فراخوانی دوباره با همان context و page
+                    items, context, page = await self._fetch_posts_from_telegram(
+                        existing_seen_ids=global_seen_ids,
+                        keep_browser_open=True,
+                        existing_context=context,
+                        existing_page=page,
+                        limit=remaining
+                    )
+                    if items:
+                        retry_success = True
+                        break
+                if not retry_success:
+                    self.logger.warning("⚠️ هیچ یک از شناسه‌های قدیمی‌تر پاسخی ندادند. پایان.")
+                    break
+                # اگر موفق شدیم، items اکنون معتبر است و ادامه می‌دهیم
+
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
