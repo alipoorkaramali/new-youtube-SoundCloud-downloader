@@ -30,18 +30,25 @@ async def human_sleep(base: float, jitter: float = 0.4):
 
 class DebugTelegramChannelScraper(TelegramChannelScraper):
     """
-    نسخه‌ی دیباگ اسکرپر – فقط برای لاگ و اسکرین‌شات.
-    منطق اصلی اسکرپ به والد واگذار شده است.
+    نسخه‌ی دیباگ اسکرپر با قابلیت انتخاب جهت اسکرول.
+    هماهنگ با scraper.py – از متد _smart_scroll با پله‌های افزایشی استفاده می‌کند.
     """
 
     def __init__(self, config, debug_screenshots: bool = True):
         config.debug_mode = True
         super().__init__(config)
+
         self.debug_screenshots = debug_screenshots
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
 
+        # جهت اسکرول را از config بگیریم
+        self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
+        if self.scroll_direction not in ['up', 'down']:
+            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
+            self.scroll_direction = 'up'
+
         self.logger.info("🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.")
-        self.logger.info(f"🐞 پوشه اسکرین‌شات‌های دیباگ: {self.debug_screenshots_dir}")
+        self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
         self._last_items = []
 
     async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
@@ -55,6 +62,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         return media_map, 0
 
     async def _save_debug_screenshot(self, page, name: str):
+        """ذخیره اسکرین‌شات دیباگ (فقط در صورت فعال بودن)."""
         if not self.debug_screenshots or not self.save_screenshots:
             return
         try:
@@ -64,8 +72,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات دیباگ: {e}")
 
-    async def _capture_full_page_screenshot(self, page, name: str = "final"):
-        """گرفتن اسکرین‌شات کامل صفحه (فقط در صورت فعال بودن)."""
+    async def _capture_full_page_screenshot(self, page, name: str = "full_page"):
+        """گرفتن اسکرین‌شات کامل از کل صفحه (فقط در صورت فعال بودن)."""
         if not self.save_screenshots:
             return
         try:
@@ -76,31 +84,25 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None,
-                                         keep_browser_open: bool = False,
-                                         existing_context: any = None,
-                                         existing_page: any = None,
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False,
+                                         existing_context: any = None, existing_page: any = None,
                                          limit: int = None) -> tuple[List[Dict], any, any]:
         """
-        فراخوانی والد و اضافه کردن اسکرین‌شات دیباگ.
+        استخراج پست‌ها با فراخوانی والد و سپس اسکرین‌شات نهایی.
         """
         self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
 
-        # فراخوانی متد والد (که تمام منطق اسکرپ را دارد)
+        # فراخوانی متد والد (scraper اصلی)
         items, context, page = await super()._fetch_posts_from_telegram(
             existing_seen_ids=existing_seen_ids,
-            keep_browser_open=True,          # همیشه باز نگه دار برای دیباگ
+            keep_browser_open=True,  # همیشه باز نگه دار برای دیباگ
             existing_context=existing_context,
             existing_page=existing_page,
             limit=limit
         )
 
-        if not page:
-            self.logger.error("❌ صفحه دریافت نشد.")
-            return items, context, page
-
-        if not items:
-            self.logger.warning("⚠️ والد هیچ پستی تحویل نداد.")
+        if not items or not page:
+            self.logger.warning("⚠️ والد هیچ پستی تحویل نداد یا صفحه موجود نیست.")
             return items, context, page
 
         self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
@@ -108,6 +110,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         # اسکرین‌شات نهایی
         if self.save_screenshots:
             await self._capture_full_page_screenshot(page, "final")
+            await self._save_debug_screenshot(page, "debug_final")
+
+        self.logger.info(f"🐞 استخراج تمام شد — {len(items)} پست (جهت: {self.scroll_direction})")
 
         return items, context, page
 
@@ -132,19 +137,20 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ خطا در ذخیره خلاصه دیباگ: {e}")
 
     async def _run_impl(self):
-        """Override برای ذخیرهٔ آیتم‌ها و تولید خروجی (هماهنگ با والد)."""
+        """اجرای دیباگ با فراخوانی والد."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
         else:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ برای @{self.channel} (limit={self.limit})")
 
-        # اجرای اسکرپ با استفاده از والد (که خودش تا limit ادامه می‌دهد)
+        # فراخوانی مستقیم متد fetch والد
         items, context, page = await self._fetch_posts_from_telegram(
             existing_seen_ids=set(),
-            keep_browser_open=False,
+            keep_browser_open=True,
             limit=self.limit
         )
-        self._last_items = items
+
+        self._last_items = items or []
 
         if not items:
             self.logger.warning("هیچ پستی دریافت نشد.")
@@ -156,19 +162,19 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         # تولید خروجی
         try:
-            append_mode = self.resume and self._resume_loaded
+            append_mode = getattr(self, 'resume', False) and getattr(self, '_resume_loaded', False)
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
                 items,
                 {},  # در دیباگ رسانه‌ای دانلود نمی‌شود
-                debug_mode=self.debug_mode,
+                debug_mode=True,
                 append_mode=append_mode
             )
             gen.run_all()
             self.logger.info(f"🐞 فایل‌های خروجی دیباگ در: {self.base_dir}")
         except Exception as e:
-            self.logger.warning(f"⚠️ خطا در تولید خروجی: {e}", exc_info=True)
+            self.logger.warning(f"⚠️ خطا در تولید خروجی: {e}")
 
         if context:
             await context.close()
