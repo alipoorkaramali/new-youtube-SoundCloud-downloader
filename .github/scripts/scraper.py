@@ -223,6 +223,10 @@ class TelegramChannelScraper:
         else:
             max_rounds = 1  # فقط یک دور
 
+        # ─── متغیرهای جمع‌آوری دانلودها در طول دورها ───
+        all_media_map = {}
+        downloaded_total = 0
+
         context = None
         page = None
 
@@ -277,6 +281,21 @@ class TelegramChannelScraper:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
 
+            # ─── دانلود پست‌های همین دور ──────────────────────────
+            if items:
+                self.logger.info(f"📥 دانلود پست‌های دور {rounds} ({len(items)} پست)...")
+                media_map_round, downloaded_round = await self._download_media(
+                    items, page, context
+                )
+                # اضافه کردن به نقشه‌ی کلی
+                for post_id, files in media_map_round.items():
+                    if post_id in all_media_map:
+                        all_media_map[post_id].extend(files)
+                    else:
+                        all_media_map[post_id] = files
+                downloaded_total += downloaded_round
+                self.logger.info(f"✅ دور {rounds}: {downloaded_round} فایل دانلود شد")
+
             # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
             new_items_count = 0
             for item in items:
@@ -310,9 +329,12 @@ class TelegramChannelScraper:
 
         self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
 
-        media_map, downloaded = await self._download_media(all_items, page, context)
-        self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
-        self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
+        # ─── دانلودهای کل انجام شده در طول دورها ──────────────
+        self.logger.info(f"🖼️ مجموع {downloaded_total} فایل رسانه در {rounds} دور دانلود شد.")
+        self.logger.info(f"📊 media_map برای {len(all_media_map)} پست پر شد.")
+        
+        # برای سازگاری با OutputGenerator، از all_media_map استفاده می‌کنیم
+        media_map = all_media_map
 
         # ذخیره وضعیت نهایی (قدیمی‌ترین پستی که اسکرین‌شات موفق دارد)
         if all_items:
@@ -356,6 +378,7 @@ class TelegramChannelScraper:
             self._clear_resume_state()
 
         self.logger.info("✅ پایان موفقیت‌آمیز.")
+        
     # ═══════════════════ متد کمکی: پاک‌سازی نام فایل ═══════════════════
 
     @staticmethod
