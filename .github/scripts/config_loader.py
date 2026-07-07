@@ -15,10 +15,9 @@ class Config:
     profile_dir: str              # پوشهٔ پروفایل مرورگر
     delay_between_posts: float    # فاصلهٔ زمانی (ثانیه) بین بارگذاری پست‌ها
     channel_name: str = ''        # نام نمایشی کانال (اختیاری)
-    resume: bool = True           # ادامه خودکار از آخرین نقطه
+    resume: bool = True           # ادامه از آخرین نقطه در اجرای مجدد
     start_link: str = ''          # لینک پست برای شروع دستی
-    auto_resume: bool = False     # ادامه خودکار تا رسیدن به limit در یک اجرا
-    save_screenshots: bool = True # اگر False باشد، اسکرین‌شات‌ها ذخیره نمی‌شونددر یک اجرا لینک پست برای شروع دستی
+    save_screenshots: bool = True # اگر False باشد، اسکرین‌شات‌ها ذخیره نمی‌شوند
     
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
@@ -50,6 +49,5 @@ def load_config(path: str = "config.yaml") -> Config:
         channel_name=data.get('channel_name', ''),
         resume=data.get('resume', True),
         start_link=data.get('start_link', ''),
-        auto_resume=data.get('auto_resume', False),
-        save_screenshots=data.get('save_screenshots', True)   # ← اضافه شد
+        save_screenshots=data.get('save_screenshots', True)
     )
