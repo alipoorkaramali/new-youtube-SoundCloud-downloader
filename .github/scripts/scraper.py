@@ -76,22 +76,15 @@ class TelegramChannelScraper:
 
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
-        self.save_screenshots = getattr(config, 'save_screenshots', True)  # ← اضافه شد
+        self.save_screenshots = getattr(config, 'save_screenshots', True)
         
         # ─── تعداد تلاش‌های اسکرول بر اساس وضعیت save_screenshots ───
         if not self.save_screenshots:
-            self.max_scroll_attempts = 12  # بیشتر از ۸ (برای بارگذاری کامل‌تر)
+            self.max_scroll_attempts = 12
         else:
-            self.max_scroll_attempts = MAX_SCROLL_ATTEMPTS  # ۸
-        
-        # ═══════════════ ذخیره جهت اسکرول (برای هماهنگی با debug) ═══════════════
-        self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
-        if self.scroll_direction not in ['up', 'down']:
-            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
-            self.scroll_direction = 'up'
+            self.max_scroll_attempts = MAX_SCROLL_ATTEMPTS
 
         # ═══════════════ راه‌اندازی لاگر (قبل از هر چیز دیگر) ═══════════════
-        # این کار ضروری است زیرا متدهای Resume از self.logger استفاده می‌کنند
         self.logger = logging.getLogger("TelegramScraper")
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -103,6 +96,11 @@ class TelegramChannelScraper:
             self.logger.addHandler(fh)
             self.logger.addHandler(ch)
 
+        # ═══════════════ ذخیره جهت اسکرول (بعد از لاگر) ═══════════════
+        self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
+        if self.scroll_direction not in ['up', 'down']:
+            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
+            self.scroll_direction = 'up'
         # ═══════════════ لاگ مقدار auto_resume (برای دیباگ) ═══════════════
         #self.logger.info(f"🔁 auto_resume مقدار دریافت شده از config: {self.auto_resume}")
 
@@ -854,7 +852,7 @@ class TelegramChannelScraper:
 
                         # ذخیره وضعیت هر ۳ پست (برای ادامه در صورت شکست)
                         if collected_count % 3 == 0:
-                            self._save_resume_state(msg_id, len(items))
+                            self._save_resume_state(msg_id, collected_count)
 
                         if len(items) >= self.limit:
                             break
@@ -870,11 +868,16 @@ class TelegramChannelScraper:
                 break
 
             # ─── اسکرول هوشمند ──────────────────────────────────
-            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
+            # در دورهای بعدی، همیشه به سمت بالا (قدیمی‌تر) اسکرول می‌کنیم
+            if rounds > 1:
+                scroll_dir = 'up'
+            else:
+                scroll_dir = self.scroll_direction
+            scrolled = await self._smart_scroll(page, scroll_dir, step=1200, max_attempts=3)
             
             if scrolled:
                 scroll_attempts = 0
-                self.logger.debug(f"✅ اسکرول هوشمند موفق بود. ارتفاع صفحه تغییر کرد.")
+                self.logger.debug(f"✅ اسکرول هوشمند موفق بود (جهت: {scroll_dir if rounds > 1 else self.scroll_direction})")
             else:
                 scroll_attempts += 1
                 self.logger.debug(f"⚠️ اسکرول هوشمند ناموفق. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
