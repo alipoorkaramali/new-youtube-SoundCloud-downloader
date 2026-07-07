@@ -106,6 +106,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             return items, context, page
 
         self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
+        self.logger.info(f"   📌 start_link: {self.start_link if self.start_link else 'None'}")
+        self.logger.info(f"   📌 limit این دور: {limit if limit is not None else self.limit}")
+        self.logger.info(f"   📌 جهت اسکرول: {self.scroll_direction}")
 
         # اسکرین‌شات نهایی
         if self.save_screenshots:
@@ -113,7 +116,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await self._save_debug_screenshot(page, "debug_final")
 
         self.logger.info(f"🐞 استخراج تمام شد — {len(items)} پست (جهت: {self.scroll_direction})")
-
         return items, context, page
 
     async def run(self):
@@ -137,28 +139,99 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.warning(f"⚠️ خطا در ذخیره خلاصه دیباگ: {e}")
 
     async def _run_impl(self):
-        """اجرای دیباگ با فراخوانی والد."""
+        """اجرای دیباگ با حلقه‌ی چنددوره‌ای (هماهنگ با والد)."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ با لینک: {self.start_link} (limit={self.limit})")
         else:
             self.logger.info(f"🚀 شروع اسکریپر دیباگ برای @{self.channel} (limit={self.limit})")
 
-        # فراخوانی مستقیم متد fetch والد
-        items, context, page = await self._fetch_posts_from_telegram(
-            existing_seen_ids=set(),
-            keep_browser_open=True,
-            limit=self.limit
-        )
+        all_items = []
+        global_seen_ids = set()
+        rounds = 0
+        # محاسبه تعداد دورهای مورد نیاز بر اساس limit
+        max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
+        self.logger.info(f"🔄 دیباگ تا رسیدن به {self.limit} پست ادامه می‌دهد...")
 
-        self._last_items = items or []
+        context = None
+        page = None
 
-        if not items:
+        while len(all_items) < self.limit and rounds < max_rounds:
+            rounds += 1
+            self.logger.info(f"📌 دور {rounds} از {max_rounds}")
+            self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
+
+            # اگر دور اول نیست، resume_point را تنظیم کن (مانند والد)
+            if rounds > 1 and all_items:
+                oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
+                self.start_link = resume_link
+                self.target_msg_id = oldest_post['id']
+                self._resume_loaded = True
+                if self._resume_data is None:
+                    self._resume_data = {}
+                self._resume_data['last_msg_id'] = self.target_msg_id
+                self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
+
+            # محاسبه تعداد پست‌های باقی‌مانده
+            remaining = self.limit - len(all_items)
+            if remaining <= 0:
+                break
+
+            # اجرای یک دور اسکرپ
+            if rounds == 1:
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=True,
+                    limit=remaining
+                )
+            else:
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=True,
+                    existing_context=context,
+                    existing_page=page,
+                    limit=remaining
+                )
+
+            if not items:
+                self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
+                break
+
+            # ─── دیباگ دانلود نمی‌کند، ولی برای هماهنگی ساختار نگه می‌داریم ───
+            # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
+            new_items_count = 0
+            for item in items:
+                if item['id'] not in global_seen_ids:
+                    global_seen_ids.add(item['id'])
+                    all_items.append(item)
+                    new_items_count += 1
+
+            self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
+            self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
+
+            if len(all_items) >= self.limit or rounds >= max_rounds:
+                break
+
+            # اگر به بالای صفحه رسیدیم و هنوز به limit نرسیدیم، ادامه بده
+            if hasattr(self, '_is_at_top') and await self._is_at_top(page):
+                self.logger.info("📌 به بالای صفحه رسیدیم. شروع دور بعدی...")
+                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+
+        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
+        if len(all_items) > self.limit:
+            all_items = all_items[:self.limit]
+            self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد.")
+
+        self._last_items = all_items
+
+        if not all_items:
             self.logger.warning("هیچ پستی دریافت نشد.")
             if context:
                 await context.close()
             return
 
-        self.logger.info(f"📥 {len(items)} پست استخراج شد (حالت دیباگ).")
+        self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
 
         # تولید خروجی
         try:
@@ -166,8 +239,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             gen = OutputGenerator(
                 self.base_dir,
                 self.channel,
-                items,
-                {},  # در دیباگ رسانه‌ای دانلود نمی‌شود
+                all_items,
+                {},  # دیباگ دانلود نمی‌کند
                 debug_mode=True,
                 append_mode=append_mode
             )
@@ -180,7 +253,6 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             await context.close()
 
         self.logger.info("✅ پایان موفقیت‌آمیز دیباگ.")
-
 
 async def main():
     print("🐞 ========================================")
