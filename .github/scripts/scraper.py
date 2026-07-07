@@ -258,11 +258,17 @@ class TelegramChannelScraper:
                 self._resume_data['last_msg_id'] = self.target_msg_id
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
+            # محاسبه تعداد پست‌های باقی‌مانده تا limit
+            remaining = self.limit - len(all_items)
+            if remaining <= 0:
+                break
+
             # اجرای یک دور اسکرپ (مرورگر همیشه باز نگه داشته می‌شود تا دانلود انجام شود)
             if rounds == 1:
                 items, context, page = await self._fetch_posts_from_telegram(
                     existing_seen_ids=global_seen_ids,
-                    keep_browser_open=True  # همیشه True
+                    keep_browser_open=True,  # همیشه True
+                    limit=remaining  # ← اضافه شد
                 )
             else:
                 # در دورهای بعدی، از context و page موجود استفاده کن
@@ -270,7 +276,8 @@ class TelegramChannelScraper:
                     existing_seen_ids=global_seen_ids,
                     keep_browser_open=True,  # همیشه True
                     existing_context=context,
-                    existing_page=page
+                    existing_page=page,
+                    limit=remaining  # ← اضافه شد
                 )
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
@@ -317,8 +324,14 @@ class TelegramChannelScraper:
 
         # ─── محدود کردن به تعداد مورد نظر ──────────────────────
         if len(all_items) > self.limit:
+            # دریافت شناسه‌های پست‌های نهایی
+            final_ids = {item['id'] for item in all_items[:self.limit]}
             all_items = all_items[:self.limit]
-            self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد.")
+            # فیلتر کردن media_map بر اساس پست‌های نهایی
+            if all_media_map:
+                all_media_map = {post_id: files for post_id, files in all_media_map.items() 
+                                 if post_id in final_ids}
+            self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد و media_map فیلتر شد.")
 
         # ─── پردازش نهایی ──────────────────────────────────
         if not all_items:
@@ -493,7 +506,7 @@ class TelegramChannelScraper:
         """)
     # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
 
-    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: Any = None, existing_page: Any = None) -> Tuple[List[Dict], Any, Any]:
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: Any = None, existing_page: Any = None, limit: int = None) -> Tuple[List[Dict], Any, Any]:
         """
         استخراج پست‌ها از کانال تلگرام با پشتیبانی از Resume و start_link.
 
@@ -502,9 +515,7 @@ class TelegramChannelScraper:
             keep_browser_open (bool): اگر True باشد، مرورگر بعد از پایان بسته نمی‌شود
             existing_context (Any): context موجود از دور قبل (اختیاری)
             existing_page (Any): page موجود از دور قبل (اختیاری)
-
-        Returns:
-            Tuple[List[Dict], Any, Any]: (پست‌ها, context, page)
+            limit (int): تعداد پست‌های مورد نظر در این دور (اگر None باشد، از self.limit استفاده می‌کند)
         """
         from playwright.async_api import async_playwright
 
@@ -688,7 +699,8 @@ class TelegramChannelScraper:
                     self.logger.info("ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
 
         # ─── حلقه اصلی استخراج ──────────────────────────────────
-        while len(items) < self.limit and scroll_attempts < self.max_scroll_attempts:
+        target_limit = limit if limit is not None else self.limit
+        while len(items) < target_limit and scroll_attempts < self.max_scroll_attempts:
             try:
                 # اطمینان از بارگذاری حداقل یک پست جدید
                 try:
@@ -820,7 +832,7 @@ class TelegramChannelScraper:
             except Exception as e:
                 self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
 
-            if len(items) >= self.limit:
+            if len(items) >= target_limit:
                 break
 
             # ─── اسکرول به بالا (تدریجی) ──────────────────────
@@ -872,7 +884,7 @@ class TelegramChannelScraper:
                 await human_sleep(1.5, 0.3)
 
         # ─── محدود کردن به تعداد مورد نظر ──────────────────────
-        items = items[:self.limit]
+        items = items[:target_limit]
         self.logger.info(f"📊 {len(items)} پست جمع‌آوری شد.")
 
         # ─── اسکرین‌شات نهایی ──────────────────────────────────
