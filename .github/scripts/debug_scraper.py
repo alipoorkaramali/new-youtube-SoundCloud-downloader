@@ -229,59 +229,36 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     limit=remaining
                 )
 
-            # ═════════ بازیابی ترکیبی در صورت صفر بودن آیتم‌ها ═════════
+            # اگر آیتمی نیامد و در دور resume هستیم
             if not items and rounds > 1 and all_items:
-                self.logger.warning("⚠️ دور resume ناموفق – تلاش بازیابی...")
-                retry_success = False
+                self.logger.warning("⚠️ دور resume ناموفق – تلاش با ۴ پست جدید جمع‌آوری‌شده...")
 
-                # ۱) اسکرول قوی + استخراج مستقیم
-                for retry in range(1, 6):
-                    self.logger.info(f"🔄 تلاش بازیابی {retry}/5 – اسکرول قوی...")
-                    await page.evaluate("window.scrollBy(0, -4500)")
-                    await asyncio.sleep(3)
-                    try:
-                        await page.wait_for_selector('div[data-message-id]', state='attached', timeout=10000)
-                    except:
-                        pass
-                    fresh_posts = await self._extract_posts_from_page(page)
-                    await asyncio.sleep(0.8)
-                    new_items = []
-                    for p in fresh_posts:
-                        if p['id'] not in global_seen_ids:
-                            p['url'] = f"https://t.me/{self.channel}/{p['id']}"
-                            new_items.append(p)
-                    if new_items:
-                        items = new_items
+                # ۴ شناسهٔ جدیدتر (بزرگترین‌ها) را انتخاب کن
+                sorted_ids = sorted([int(it['id']) for it in all_items], reverse=True)
+                candidate_ids = sorted_ids[:4]
+
+                retry_success = False
+                for candidate_id in candidate_ids:
+                    self.logger.info(f"🔄 تلاش با newest_id = {candidate_id}")
+                    self.start_link = f"https://t.me/{self.channel}/{candidate_id}"
+                    self.target_msg_id = str(candidate_id)
+
+                    items, context, page = await self._fetch_posts_from_telegram(
+                        existing_seen_ids=global_seen_ids,
+                        keep_browser_open=True,
+                        existing_context=context,
+                        existing_page=page,
+                        limit=remaining
+                    )
+                    if items:
                         retry_success = True
-                        self.logger.info(f"✅ تلاش {retry} با اسکرول موفق بود ({len(new_items)} پست جدید).")
+                        self.logger.info(f"✅ شروع از {candidate_id} موفق بود — {len(items)} پست جدید اضافه شد.")
                         break
 
-                # ۲) fallback به حدس ID
-                if not retry_success and self.target_msg_id:
-                    self.logger.warning("⚠️ اسکرول موفق نشد – fallback به حدس ID...")
-                    failed_id = int(self.target_msg_id)
-                    for offset in range(1, 8):
-                        guess_id = failed_id - offset
-                        if guess_id <= 0:
-                            break
-                        self.logger.info(f"🔄 حدس ID: {guess_id}")
-                        self.start_link = f"https://t.me/{self.channel}/{guess_id}"
-                        self.target_msg_id = str(guess_id)
-                        items, context, page = await self._fetch_posts_from_telegram(
-                            existing_seen_ids=global_seen_ids,
-                            keep_browser_open=True,
-                            existing_context=context,
-                            existing_page=page,
-                            limit=remaining
-                        )
-                        if items:
-                            retry_success = True
-                            break
-
                 if not retry_success:
-                    self.logger.warning("⚠️ تمام روش‌های بازیابی ناموفق بود. پایان.")
+                    self.logger.warning("⚠️ هیچ‌یک از ۴ پست جدید هم پاسخ ندادند. پایان.")
                     break
-
+    
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
