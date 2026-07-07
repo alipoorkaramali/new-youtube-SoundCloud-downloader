@@ -229,13 +229,14 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     limit=remaining
                 )
 
+
             # اگر آیتمی نیامد و در دور resume هستیم
             if not items and rounds > 1 and all_items:
-                self.logger.warning("⚠️ دور resume ناموفق – تلاش با شناسه‌های قدیمی‌تر از oldest...")
+                self.logger.warning("⚠️ دور resume ناموفق – تلاش با شناسه‌های قدیمی‌تر از oldest (والد قبلاً اسکرول قوی کرده)...")
                 oldest_id = min(int(it['id']) for it in all_items)
                 retry_success = False
 
-                # تلاش با ۷ شناسهٔ کوچک‌تر از قدیمی‌ترین (تا ۷ پله عقب‌تر)
+                # ۷ شناسهٔ قدیمی‌تر را امتحان کن
                 for offset in range(1, 8):
                     candidate_id = oldest_id - offset
                     if candidate_id <= 0:
