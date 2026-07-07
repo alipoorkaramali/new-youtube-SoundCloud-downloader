@@ -698,6 +698,23 @@ class TelegramChannelScraper:
                             "target_not_found",
                             f"target_id={self.target_msg_id} not found after scrolling"
                         )
+                    # ⏳ تأخیر اضافی و تلاش مجدد
+                    if not target_found:
+                        await human_sleep(3, 0.3)
+                        target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
+                        if await target_locator.count() > 0:
+                            await target_locator.scroll_into_view_if_needed()
+                            await page.evaluate("window.scrollBy(0, -150)")
+                            await human_sleep(1, 0.3)
+                            self.logger.info("✅ پیام هدف بعد از تأخیر اضافی پیدا شد.")
+                            target_found = True
+                            start_collecting = True
+                            seen_ids.add(self.target_msg_id)
+                            self.logger.info(f"🎯 شروع جمع‌آوری از پیام هدف {self.target_msg_id}")
+                            self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                            for scroll_step in range(3):
+                                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                                await human_sleep(1.5, 0.3)
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف: {e}")
                 # در صورت بروز Exception، اسکرین‌شات خطا بگیر
