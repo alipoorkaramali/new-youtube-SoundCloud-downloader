@@ -515,6 +515,16 @@ class TelegramChannelScraper:
                 return scrollTop <= 100;
             }
         """)
+    async def _is_at_bottom(self, page) -> bool:
+        """بررسی انتهای صفحه با ۱۰۰px تحمل."""
+        return await page.evaluate("""
+            () => {
+                const scrollTop = document.documentElement.scrollTop;
+                const clientHeight = document.documentElement.clientHeight;
+                const scrollHeight = document.documentElement.scrollHeight;
+                return scrollTop + clientHeight >= scrollHeight - 100;
+            }
+        """)
     # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
 
     async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: Any = None, existing_page: Any = None, limit: int = None) -> Tuple[List[Dict], Any, Any]:
@@ -861,7 +871,13 @@ class TelegramChannelScraper:
             else:
                 scroll_attempts += 1
                 self.logger.debug(f"⚠️ اسکرول هوشمند ناموفق. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
-
+                # خروج فوری اگر به حاشیه صفحه رسیده باشیم
+                if self.scroll_direction == 'up' and await self._is_at_top(page):
+                    self.logger.info("📌 به بالای صفحه رسیدیم. اسکرول متوقف می‌شود.")
+                    scroll_attempts = self.max_scroll_attempts
+                elif self.scroll_direction == 'down' and await self._is_at_bottom(page):
+                    self.logger.info("📌 به پایین صفحه رسیدیم. اسکرول متوقف می‌شود.")
+                    scroll_attempts = self.max_scroll_attempts
             # ─── اگر start_collecting فعال نشده و در حالت خاص هستیم، اسکرول اضافی ──
             if not start_collecting and has_specific_start:
                 extra_scroll_count += 1
