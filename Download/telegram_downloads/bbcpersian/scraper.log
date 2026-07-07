@@ -1,0 +1,38 @@
+2026-07-07 14:03:48,014 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/bbcpersian
+2026-07-07 14:03:48,014 [INFO] 🐞 حالت دیباگ: فعال
+2026-07-07 14:03:48,014 [INFO] 📌 Resume: غیرفعال
+2026-07-07 14:03:48,014 [INFO] 🧭 جهت اسکرول: up
+2026-07-07 14:03:48,015 [INFO] 🐞 پوشه اسکرین‌شات‌های دیباگ: Download/telegram_downloads/bbcpersian/debug_screenshots
+2026-07-07 14:03:48,015 [INFO] 🐞 حالت دیباگ فعال است – دانلود رسانه انجام نمی‌شود.
+2026-07-07 14:03:48,015 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر)
+2026-07-07 14:03:48,015 [INFO] 🚀 شروع اسکریپر دیباگ برای @bbcpersian (limit=35)
+2026-07-07 14:03:48,015 [INFO] 🔄 دیباگ تا رسیدن به 35 پست ادامه می‌دهد...
+2026-07-07 14:03:48,015 [INFO] 📌 دور 1 از 15
+2026-07-07 14:03:48,015 [INFO] 📊 پست‌های جمع‌آوری‌شده تا اینجا: 0/35
+2026-07-07 14:03:48,015 [INFO] 🐞 شروع استخراج با جهت: up | start_link=False
+2026-07-07 14:03:51,014 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-07-07 14:03:53,172 [INFO] 🔍 در حال جستجوی: @bbcpersian
+2026-07-07 14:03:55,069 [INFO] ⏳ منتظر نتایج...
+2026-07-07 14:03:55,069 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
+2026-07-07 14:04:03,622 [INFO]    ✅ عبارت 'bbcpersian' در مرحله اول یافت شد.
+2026-07-07 14:04:03,622 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-07-07 14:04:09,031 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-07-07 14:04:09,031 [INFO] 🔄 حالت Debug با جهت 'up' → پرش به پایین غیرفعال شد.
+2026-07-07 14:04:10,100 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: name 'rounds' is not defined
+Traceback (most recent call last):
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 198, in run
+    await asyncio.wait_for(self._run_impl(), timeout=timeout)
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 194, in _run_impl
+    items, context, page = await self._fetch_posts_from_telegram(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 96, in _fetch_posts_from_telegram
+    items, context, page = await super()._fetch_posts_from_telegram(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 856, in _fetch_posts_from_telegram
+    if rounds > 1:
+       ^^^^^^
+NameError: name 'rounds' is not defined
+2026-07-07 14:04:10,119 [INFO] 🐞 خلاصه دیباگ ذخیره شد: Download/telegram_downloads/bbcpersian/debug_summary.json
