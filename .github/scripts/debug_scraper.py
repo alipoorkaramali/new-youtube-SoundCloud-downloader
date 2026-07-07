@@ -18,7 +18,7 @@ from typing import List, Dict
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config_loader import load_config
-from scraper import TelegramChannelScraper
+from scraper import TelegramChannelScraper, HOME_URL
 from output_generator import OutputGenerator
 
 
@@ -162,14 +162,26 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
             # اگر دور اول نیست، resume_point را تنظیم کن (مانند والد)
             if rounds > 1 and all_items:
-                oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                # پیدا کردن قدیمی‌ترین پست با اسکرین‌شات (دقیق‌تر، مثل scraper اصلی)
+                oldest_post = None
+                sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))
+                for item in sorted_items:
+                    msg_id = item['id']
+                    safe_channel = self._sanitize_filename(self.channel)
+                    safe_msg_id = self._sanitize_filename(str(msg_id))
+                    screenshot_path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                    if screenshot_path.exists():
+                        oldest_post = item
+                        break
+                
+                if oldest_post is None:
+                    # فال‌بک: از قدیمی‌ترین پست استفاده کن
+                    oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                    self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_post['id']}")
+                
                 resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
                 self.start_link = resume_link
                 self.target_msg_id = oldest_post['id']
-                self._resume_loaded = True
-                if self._resume_data is None:
-                    self._resume_data = {}
-                self._resume_data['last_msg_id'] = self.target_msg_id
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
             # محاسبه تعداد پست‌های باقی‌مانده
