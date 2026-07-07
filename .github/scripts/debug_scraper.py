@@ -463,6 +463,11 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 await asyncio.sleep(2)
                 continue
 
+        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
+        if len(all_items) > self.limit:
+            all_items = all_items[:self.limit]
+            self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد.")
+
         # ─── پردازش نهایی ──────────────────────────────────
         self._last_items = all_items
 
