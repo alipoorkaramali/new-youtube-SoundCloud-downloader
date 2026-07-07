@@ -466,7 +466,36 @@ class TelegramChannelScraper:
                 setTimeout(() => cross.remove(), 3000);
             }''', element_handle)
         except Exception as e:
-            self.logger.debug(f"خطا در رسم صلیب: {e}")
+            self.logger.debug(f"خطا در رسم صلیب: {e}")   # ← این خط را اضافه کن
+    # ═══════════════════ اسکرول هوشمند (از نسخه ۵) ═══════════════════
+    async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
+        """
+        اسکرول هوشمند با افزایش تدریجی قدرت.
+        - direction: 'up' یا 'down'
+        - step: مقدار پایه (مثبت)
+        - max_attempts: تعداد پله‌ها
+        برمی‌گرداند: True اگر ارتفاع تغییر کرد، False اگر نه
+        """
+        old_height = await page.evaluate("document.documentElement.scrollHeight")
+        scroll_multipliers = [1, 1.8, 2.8]  # پله‌های افزایشی
+
+        for i in range(min(max_attempts, len(scroll_multipliers))):
+            multiplier = scroll_multipliers[i]
+            amount = int(step * multiplier)
+            if direction == 'up':
+                amount = -amount
+
+            self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
+            await page.evaluate(f"window.scrollBy(0, {amount})")
+            await human_sleep(1.2, 0.3)
+
+            new_height = await page.evaluate("document.documentElement.scrollHeight")
+            if new_height != old_height:
+                self.logger.info(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
+                return True
+
+        self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
+        return False
     # ═══════════════════ اسکرین‌شات خطا برای دیباگ ═══════════════════
     async def _capture_error_screenshot(self, page, error_type: str, description: str = ""):
         """
@@ -715,9 +744,14 @@ class TelegramChannelScraper:
                 messages = await page.locator('div[data-message-id]').all()
                 self.logger.debug(f"🔍 تعداد پیام‌های موجود: {len(messages)}")
 
-                # همیشه از ترتیب معکوس استفاده می‌کنیم (جدید → قدیمی)
-                # این کار باعث می‌شود در حالت resume، پست‌های جدیدتر قبل از نقطه شروع رد شوند
-                msg_iter = reversed(messages)
+                # انتخاب ترتیب بر اساس جهت اسکرول
+                if self.scroll_direction == 'up':
+                    # اسکرول به بالا: از جدید به قدیم (معکوس)
+                    msg_iter = reversed(messages)
+                else:
+                    # اسکرول به پایین: از قدیم به جدید (عادی)
+                    msg_iter = messages
+                # در حالت resume، پست‌های جدیدتر قبل از نقطه شروع رد می‌شوند
 
                 for msg in msg_iter:
                     try:
@@ -835,32 +869,15 @@ class TelegramChannelScraper:
             if len(items) >= target_limit:
                 break
 
-            # ─── اسکرول به بالا (تدریجی) ──────────────────────
-            old_height = await page.evaluate("document.documentElement.scrollHeight")
+            # ─── اسکرول هوشمند ──────────────────────────────────
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
             
-            # تعداد مراحل اسکرول
-            scroll_steps = 3
-            step_amount = SCROLL_UP // scroll_steps  # -400 هر مرحله
-            
-            for step in range(scroll_steps):
-                await page.evaluate(f"window.scrollBy(0, {step_amount})")
-                # مکث کوتاه بین هر مرحله
-                await human_sleep(0.8, 0.2)
-            
-            # اگر اسکرین‌شات غیرفعال است، زمان بیشتری برای بارگذاری نهایی بده
-            if self.save_screenshots:
-                await human_sleep(0.5, 0.2)
-            else:
-                await human_sleep(1.5, 0.3)  # بیشتر برای بارگذاری کامل
-            
-            new_height = await page.evaluate("document.documentElement.scrollHeight")
-            
-            if new_height == old_height:
-                scroll_attempts += 1
-                self.logger.debug(f"⚠️ ارتفاع صفحه تغییر نکرد. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
-            else:
+            if scrolled:
                 scroll_attempts = 0
-                self.logger.debug(f"✅ ارتفاع صفحه تغییر کرد: {old_height} → {new_height}")
+                self.logger.debug(f"✅ اسکرول هوشمند موفق بود. ارتفاع صفحه تغییر کرد.")
+            else:
+                scroll_attempts += 1
+                self.logger.debug(f"⚠️ اسکرول هوشمند ناموفق. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
 
             # ─── اگر start_collecting فعال نشده و در حالت خاص هستیم، اسکرول اضافی ──
             if not start_collecting and has_specific_start:
