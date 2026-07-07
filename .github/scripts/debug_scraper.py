@@ -186,7 +186,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         except Exception as e:
             self.logger.warning(f"⚠️ خطا در اسکرین‌شات کامل: {e}")
 
-    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: any = None, existing_page: any = None) -> tuple[List[Dict], any, any]:
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: any = None, existing_page: any = None, limit: int = None) -> tuple[List[Dict], any, any]:
         self.logger.info(f"🐞 شروع استخراج با جهت: {self.scroll_direction} | start_link={bool(self.start_link)}")
 
         # ۱. اجرای منطق اصلی والد (با keep_browser_open=True تا مرورگر بسته نشود)
@@ -207,8 +207,9 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.logger.info(f"📥 والد {len(items)} پست تحویل داد.")
 
-        # اگر به حد کافی رسیده‌ایم، نیازی به اسکرول اضافی نیست
-        if len(items) >= self.limit:
+        # ─── تعیین target_limit برای این دور ──────────────
+        target_limit = limit if limit is not None else self.limit
+        if len(items) >= target_limit:
             self.logger.info("✅ به حد limit رسیدیم. نیازی به اسکرول اضافی نیست.")
             if self.save_screenshots:
                 await self._capture_full_page_screenshot(page, "final")
@@ -261,7 +262,7 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         extra_scroll_dir.mkdir(parents=True, exist_ok=True)
         attempt_counter = 0
 
-        while len(seen_ids) < self.limit and no_new_attempts < max_attempts:
+        while len(seen_ids) < target_limit and no_new_attempts < max_attempts:
             attempt_counter += 1
 
             # ─── اسکرین‌شات قبل از اسکرول ──────────────
@@ -409,11 +410,17 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                 self._resume_data['last_msg_id'] = self.target_msg_id
                 self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
 
+            # محاسبه تعداد پست‌های باقی‌مانده تا limit
+            remaining = self.limit - len(all_items)
+            if remaining <= 0:
+                break
+
             # اجرای یک دور اسکرپ (مرورگر همیشه باز نگه داشته می‌شود تا دانلود انجام شود)
             if rounds == 1:
                 items, context, page = await self._fetch_posts_from_telegram(
                     existing_seen_ids=global_seen_ids,
-                    keep_browser_open=True  # همیشه True
+                    keep_browser_open=True,  # همیشه True
+                    limit=remaining  # ← اضافه شد
                 )
             else:
                 # در دورهای بعدی، از context و page موجود استفاده کن
@@ -421,7 +428,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
                     existing_seen_ids=global_seen_ids,
                     keep_browser_open=True,  # همیشه True
                     existing_context=context,
-                    existing_page=page
+                    existing_page=page,
+                    limit=remaining  # ← اضافه شد
                 )
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
