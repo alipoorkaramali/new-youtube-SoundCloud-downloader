@@ -76,7 +76,6 @@ class TelegramChannelScraper:
 
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
-        self.auto_resume = getattr(config, 'auto_resume', False)  # ← اضافه شد
         self.save_screenshots = getattr(config, 'save_screenshots', True)  # ← اضافه شد
         
         # ─── تعداد تلاش‌های اسکرول بر اساس وضعیت save_screenshots ───
@@ -105,7 +104,7 @@ class TelegramChannelScraper:
             self.logger.addHandler(ch)
 
         # ═══════════════ لاگ مقدار auto_resume (برای دیباگ) ═══════════════
-        self.logger.info(f"🔁 auto_resume مقدار دریافت شده از config: {self.auto_resume}")
+        #self.logger.info(f"🔁 auto_resume مقدار دریافت شده از config: {self.auto_resume}")
 
         # ═══════════════ Resume State (بعد از لاگر) ═══════════════
         self.resume_file = self.base_dir / RESUME_FILE
@@ -217,12 +216,8 @@ class TelegramChannelScraper:
         # محاسبه تعداد دورهای مورد نیاز بر اساس limit
         # هر دور تقریباً ۳۰-۵۰ پست جمع می‌کند، بنابراین limit/30 + 2 دور امن است
         max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
-        # اگر auto_resume فعال باشد، حلقه‌ی چنددوره‌ای اجرا می‌شود
-        if self.auto_resume:
-            self.logger.info("🔄 حالت auto_resume فعال است. تا رسیدن به limit ادامه می‌دهد...")
-        else:
-            max_rounds = 1  # فقط یک دور
-
+        self.logger.info(f"🔄 اسکرپر تا رسیدن به {self.limit} پست ادامه می‌دهد...")
+        
         # ─── متغیرهای جمع‌آوری دانلودها در طول دورها ───
         all_media_map = {}
         downloaded_total = 0
@@ -232,7 +227,7 @@ class TelegramChannelScraper:
 
         while len(all_items) < self.limit and rounds < max_rounds:
             rounds += 1
-            self.logger.info(f"📌 دور {rounds} از {max_rounds if self.auto_resume else '1'}")
+            self.logger.info(f"📌 دور {rounds} از {max_rounds}")
             self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
 
             # اگر دور اول نیست، resume_point را تنظیم کن
@@ -308,7 +303,7 @@ class TelegramChannelScraper:
             self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
 
             # اگر به limit رسیدیم یا دور آخر است، پردازش نهایی را انجام بده
-            if len(all_items) >= self.limit or rounds >= max_rounds or not self.auto_resume:
+            if len(all_items) >= self.limit or rounds >= max_rounds:
                 break
 
             # اگر به انتهای کانال رسیدیم و هنوز به limit نرسیدیم، ادامه بده
@@ -357,8 +352,8 @@ class TelegramChannelScraper:
             
             self._save_resume_state(oldest_item['id'], len(all_items))
 
-        # اگر auto_resume فعال است، append_mode نباید true باشد (چون ادغام قبلاً در سطح داده انجام شده)
-        append_mode = self.resume and self._resume_loaded and not self.auto_resume
+        # در حالت resume، append_mode باید true باشد تا داده‌های قبلی با جدید ادغام شوند
+        append_mode = self.resume and self._resume_loaded
 
         gen = OutputGenerator(
             self.base_dir,
