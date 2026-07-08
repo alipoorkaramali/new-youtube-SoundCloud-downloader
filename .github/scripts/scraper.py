@@ -675,46 +675,6 @@ class TelegramChannelScraper:
                         await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
                         await human_sleep(1.5, 0.3)
                         self.logger.debug(f"   اسکرول {scroll_step+1}/3 انجام شد")
-                else:
-                    self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد. تلاش با اسکرول...")
-                    # اسکرول به بالا برای پیدا کردن target
-                    for scroll_attempt in range(3):
-                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
-                        await human_sleep(1.5, 0.3)
-                        target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
-                        if await target_locator.count() > 0:
-                            await target_locator.scroll_into_view_if_needed()
-                            await page.evaluate("window.scrollBy(0, -150)")
-                            await human_sleep(1, 0.3)
-                            self.logger.info(f"✅ پیام هدف در اسکرول {scroll_attempt+1} پیدا شد.")
-                            target_found = True
-                            break
-
-                    # اگر پس از اسکرول‌ها پیدا نشد، اسکرین‌شات خطا بگیر
-                    if not target_found:
-                        description = f"target_{self.target_msg_id}_not_found_after_{scroll_attempt+1}_scrolls"
-                        await self._capture_error_screenshot(
-                            page,
-                            "target_not_found",
-                            f"target_id={self.target_msg_id} not found after scrolling"
-                        )
-                    # ⏳ تأخیر اضافی و تلاش مجدد
-                    if not target_found:
-                        await human_sleep(3, 0.3)
-                        target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
-                        if await target_locator.count() > 0:
-                            await target_locator.scroll_into_view_if_needed()
-                            await page.evaluate("window.scrollBy(0, -150)")
-                            await human_sleep(1, 0.3)
-                            self.logger.info("✅ پیام هدف بعد از تأخیر اضافی پیدا شد.")
-                            target_found = True
-                            start_collecting = True
-                            seen_ids.add(self.target_msg_id)
-                            self.logger.info(f"🎯 شروع جمع‌آوری از پیام هدف {self.target_msg_id}")
-                            self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
-                            for scroll_step in range(3):
-                                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
-                                await human_sleep(1.5, 0.3)
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف: {e}")
                 # در صورت بروز Exception، اسکرین‌شات خطا بگیر
@@ -724,31 +684,41 @@ class TelegramChannelScraper:
                     f"{str(e)[:100]}"
                 )
 
-            # اگر target پیدا نشد، چند اسکرول قوی به بالا انجام بده، در غیر این‌صورت خالی برگرد
+            # اگر target پیدا نشد، پیمایش هوشمند با گام‌های کوچک و تشخیص تاریخ
             if not target_found:
-                self.logger.warning("⚠️ پیام هدف پیدا نشد. تلاش با اسکرول قوی به بالا...")
-                # ۳ بار اسکرول قوی به بالا
-                for _ in range(3):
-                    await page.evaluate("window.scrollBy(0, -4000)")
-                    await human_sleep(2, 0.3)
-                    target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
-                    if await target_locator.count() > 0:
-                        await target_locator.scroll_into_view_if_needed()
-                        await page.evaluate("window.scrollBy(0, -150)")
-                        await human_sleep(1, 0.3)
-                        self.logger.info("✅ پیام هدف بعد از اسکرول اضافی پیدا شد.")
-                        target_found = True
-                        start_collecting = True
-                        seen_ids.add(self.target_msg_id)
-                        # اسکرول اولیه برای بارگذاری پست‌های قدیمی‌تر
-                        self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
-                        for scroll_step in range(3):
-                            await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
-                            await human_sleep(1.5, 0.3)
+                self.logger.warning("⚠️ پیام هدف پیدا نشد. پیمایش آرام به بالا برای یافتن اولین پست دارای تاریخ...")
+                found_any_post = False
+                max_slow_steps = 20
+                for step in range(max_slow_steps):
+                    await page.evaluate("window.scrollBy(0, -600)")
+                    await asyncio.sleep(0.4)
+                    messages = await page.locator('div[data-message-id]').all()
+                    for msg in messages:
+                        msg_id = await msg.get_attribute('data-message-id')
+                        if not msg_id or msg_id in seen_ids:
+                            continue
+                        # بررسی وجود عنصر زمان (نشانهٔ قطعی یک پست)
+                        date_el = msg.locator('time, .date, [class*="date"], [datetime]').first
+                        if await date_el.count() > 0:
+                            self.logger.info(f"🔍 اولین پست معتبر (دارای تاریخ) پیدا شد: {msg_id} — شروع جمع‌آوری از این نقطه")
+                            self.target_msg_id = msg_id
+                            target_found = True
+                            start_collecting = True
+                            seen_ids.add(msg_id)
+                            await msg.scroll_into_view_if_needed()
+                            await page.evaluate("window.scrollBy(0, -150)")
+                            await human_sleep(1, 0.3)
+                            self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                            for scroll_step in range(3):
+                                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                                await human_sleep(1.5, 0.3)
+                            found_any_post = True
+                            break
+                    if found_any_post:
                         break
                 if not target_found:
-                    self.logger.warning("⚠️ پیام هدف همچنان پیدا نشد. بازگشت نتیجهٔ خالی برای retry.")
-                    # 📸 اسکرین‌شات اضطراری برای عیب‌یابی
+                    self.logger.warning("⚠️ هیچ پست دارای تاریخی پیدا نشد. بازگشت نتیجهٔ خالی برای retry.")
+                    # 📸 اسکرین‌شات اضطراری
                     try:
                         safe_name = self._sanitize_filename(f"target_{self.target_msg_id}_not_found")
                         path = self.debug_screenshots_dir / f"{safe_name}.png"
