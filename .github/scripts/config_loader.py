@@ -18,7 +18,9 @@ class Config:
     resume: bool = True           # ادامه از آخرین نقطه در اجرای مجدد
     start_link: str = ''          # لینک پست برای شروع دستی
     save_screenshots: bool = True # اگر False باشد، اسکرین‌شات‌ها ذخیره نمی‌شوند
-    
+    timeout_seconds: int = 0           # 0 = نامحدود (از مقدار پیش‌فرض در کد استفاده می‌شود)
+    auto_extend_timeout: bool = True   # تمدید خودکار زمان در صورت ادامهٔ موفق اسکرپینگ
+
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
     config_path = Path(path)
@@ -49,5 +51,7 @@ def load_config(path: str = "config.yaml") -> Config:
         channel_name=data.get('channel_name', ''),
         resume=data.get('resume', True),
         start_link=data.get('start_link', ''),
-        save_screenshots=data.get('save_screenshots', True)
+        save_screenshots=data.get('save_screenshots', True),
+        timeout_seconds=data.get('timeout_seconds', 0),        # ← جدید
+        auto_extend_timeout=data.get('auto_extend_timeout', True)  # ← جدید
     )
