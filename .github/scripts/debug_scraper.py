@@ -248,8 +248,17 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
             self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
 
-            if len(all_items) >= self.limit or rounds >= max_rounds:
+            # اگر به limit رسیدیم، قطعاً پایان
+            if len(all_items) >= self.limit:
                 break
+
+            # اگر به سقف دورها رسیدیم ولی در این دور پست جدیدی آمده، یک دور دیگر اضافه کن
+            if rounds >= max_rounds:
+                if new_items_count > 0:
+                    max_rounds += 1
+                    self.logger.info("🔄 با وجود رسیدن به سقف دورها، چون هنوز پست جدید می‌آید، یک دور دیگر اضافه شد.")
+                else:
+                    break
 
             # اگر به بالای صفحه رسیدیم و هنوز به limit نرسیدیم، ادامه بده
             if hasattr(self, '_is_at_top') and await self._is_at_top(page):
