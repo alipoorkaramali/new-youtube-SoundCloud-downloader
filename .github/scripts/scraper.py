@@ -1,13 +1,27 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+"""
+ماژول اصلی اسکرپر تلگرام
+------------------------
+این ماژول وظیفه استخراج پست‌ها از کانال‌های تلگرام با استفاده از Playwright را بر عهده دارد.
+ویژگی‌ها:
+- پشتیبانی از شروع با لینک مستقیم به یک پست
+- پشتیبانی از حالت Resume (ادامه از آخرین نقطه)
+- استخراج هوشمند متن با روش‌های مقاوم در برابر تغییرات ساختار
+- ذخیره اسکرین‌شات از پست‌ها
+- هماهنگ با debug_scraper.py برای حالت دیباگ
+"""
 
 import asyncio
 import logging
 import random
 import re
 import json
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple, Any
 
 from config_loader import Config
 from playwright_downloader import PlaywrightDownloader
@@ -15,20 +29,36 @@ from output_generator import OutputGenerator
 
 # ═══════════════════ Constants ═══════════════════
 MAX_SCROLL_ATTEMPTS = 8
-SCROLL_STEP_BASE = 1200  # مقدار پایه اسکرول (بدون جهت)
+SCROLL_UP = -1200
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60  # fallback
 RESUME_FILE = "resume_state.json"
 
 # ═══════════════════ Human-like sleep ═══════════════════
 async def human_sleep(base: float, jitter: float = 0.4):
+    """
+    خواب با تاخیر انسانی (با جیتر تصادفی).
+
+    Args:
+        base (float): زمان پایه به ثانیه
+        jitter (float): ضریب جیتر (0.4 = ±40%)
+    """
     time = base * (1 + random.uniform(-jitter, jitter))
     await asyncio.sleep(max(0.1, time))
 
 
 class TelegramChannelScraper:
+    """
+    کلاس اصلی اسکرپر تلگرام.
+    """
 
     def __init__(self, config: Config):
+        """
+        سازنده کلاس اسکرپر.
+
+        Args:
+            config (Config): آبجکت پیکربندی از config.yaml
+        """
         self.config = config
         self.channel = config.channel.lstrip('@')
         self.channel_name = getattr(config, 'channel_name', '') or ''
@@ -41,23 +71,25 @@ class TelegramChannelScraper:
         self.media_dir.mkdir(parents=True, exist_ok=True)
         self.profile_dir = Path(config.profile_dir)
         self.delay_between_posts = config.delay_between_posts
-
+        
+        # ─── تنظیمات زمان‌بندی هوشمند ───
+        self.timeout_seconds = getattr(config, 'timeout_seconds', OVERALL_TIMEOUT)
+        self.auto_extend_timeout = getattr(config, 'auto_extend_timeout', True)
+        self.hard_timeout = 4 * 3600  # ۴ ساعت (سقف امنیتی)
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         self.debug_screenshots_dir = self.base_dir / "debug_screenshots"
         self.debug_mode = getattr(config, 'debug_mode', False)
+        self.save_screenshots = getattr(config, 'save_screenshots', True)
+        
+        # ─── تعداد تلاش‌های اسکرول بر اساس وضعیت save_screenshots ───
+        if not self.save_screenshots:
+            self.max_scroll_attempts = 12
+        else:
+            self.max_scroll_attempts = MAX_SCROLL_ATTEMPTS
 
-        # ─── پارامتر جدید: جهت اسکرول ───
-        self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
-        if self.scroll_direction not in ['up', 'down']:
-            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
-            self.scroll_direction = 'up'
-
-        # ═══════════════ Resume State ═══════════════════
-        self.resume_file = self.base_dir / RESUME_FILE
-        self.resume_data = self._load_resume_state()
-
+        # ═══════════════ راه‌اندازی لاگر (قبل از هر چیز دیگر) ═══════════════
         self.logger = logging.getLogger("TelegramScraper")
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -69,36 +101,104 @@ class TelegramChannelScraper:
             self.logger.addHandler(fh)
             self.logger.addHandler(ch)
 
+        # ═══════════════ ذخیره جهت اسکرول (بعد از لاگر) ═══════════════
+        self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
+        if self.scroll_direction not in ['up', 'down']:
+            self.logger.warning(f"⚠️ مقدار نامعتبر برای scroll_direction: {self.scroll_direction}. استفاده از 'up'.")
+            self.scroll_direction = 'up'
+        # ═══════════════ لاگ مقدار auto_resume (برای دیباگ) ═══════════════
+        #self.logger.info(f"🔁 auto_resume مقدار دریافت شده از config: {self.auto_resume}")
+
+        # ═══════════════ Resume State (بعد از لاگر) ═══════════════
+        self.resume_file = self.base_dir / RESUME_FILE
+        self.resume = getattr(config, 'resume', False)
+        self._resume_data = None
+        self._resume_loaded = False
+        self._resume_last_link = None
+
+        # بارگذاری وضعیت resume اگر فعال باشد
+        if self.resume:
+            self._resume_data = self._load_resume_state()
+            if self._resume_data:
+                last_link = self._resume_data.get('last_post_link')
+                last_msg_id = self._resume_data.get('last_msg_id')
+                if last_link:
+                    self._resume_last_link = last_link
+                    self._resume_loaded = True
+                    self.logger.info(f"🔄 Resume فعال: last_msg_id={last_msg_id}, total_posts={self._resume_data.get('total_posts', 0)}")
+                    self.logger.info(f"🔗 لینک آخرین پست: {last_link}")
+
+                    # ═══════════════ تبدیل Resume به start_link ═══════════════
+                    # مقدار start_link را با لینک آخرین پست بازنویسی می‌کنیم
+                    self.start_link = last_link
+                    self.logger.info(f"🔄 Resume به عنوان start_link تنظیم شد: {self.start_link}")
+
+                    # استخراج target_msg_id برای استفاده در _navigate_to_start_link
+                    try:
+                        parts = self.start_link.rstrip('/').split('/')
+                        if parts and parts[-1].isdigit():
+                            self.target_msg_id = parts[-1]
+                            self.logger.info(f"🎯 شناسه پیام هدف از resume: {self.target_msg_id}")
+                    except Exception as e:
+                        self.logger.debug(f"خطا در استخراج target_msg_id از resume: {e}")
+                else:
+                    self.logger.warning("⚠️ فایل resume موجود است اما 'last_post_link' پیدا نشد.")
+                    self.resume = False
+            else:
+                self.logger.warning("⚠️ فایل resume یافت نشد. اجرا بدون resume.")
+                self.resume = False
+
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
         self.logger.info(f"🐞 حالت دیباگ: {'فعال' if self.debug_mode else 'غیرفعال'}")
-        self.logger.info(f"🧭 جهت اسکرول: {'بالا (قدیمی‌تر)' if self.scroll_direction == 'up' else 'پایین (جدیدتر)'}")
+        self.logger.info(f"📌 Resume: {'فعال (بارگذاری‌شده)' if self._resume_loaded else 'غیرفعال'}")
+        self.logger.info(f"🧭 جهت اسکرول: {self.scroll_direction}")
 
     # ═══════════════════ Resume State Methods ═══════════════════
+
     def _load_resume_state(self) -> dict:
+        """بارگذاری وضعیت resume از فایل JSON."""
         if self.resume_file.exists():
             try:
                 with open(self.resume_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                self.logger.info(f"📂 وضعیت قبلی بارگذاری شد: آخرین msg_id={data.get('last_msg_id')}, تعداد={data.get('count', 0)}")
+                self.logger.info(f"📂 وضعیت resume بارگذاری شد: {data.get('last_msg_id')}, total={data.get('total_posts', 0)}")
                 return data
-            except Exception:
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در بارگذاری resume: {e}")
                 return {}
         return {}
 
-    def _save_resume_state(self, last_msg_id: str, count: int):
+    def _save_resume_state(self, last_msg_id: str, total_posts: int):
+        """ذخیره وضعیت resume در فایل JSON (هماهنگ با debug_scraper)."""
         try:
+            last_post_link = f"https://t.me/{self.channel}/{last_msg_id}"
+            state = {
+                "last_post_link": last_post_link,
+                "last_msg_id": last_msg_id,
+                "channel": self.channel,
+                "total_posts": total_posts,
+                "timestamp": asyncio.get_event_loop().time()
+            }
             with open(self.resume_file, 'w', encoding='utf-8') as f:
-                json.dump({'last_msg_id': last_msg_id, 'count': count}, f)
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            self.logger.debug(f"💾 Resume state saved: {last_msg_id}, total={total_posts}")
         except Exception as e:
-            self.logger.warning(f"⚠️ ذخیره وضعیت resume ناموفق: {e}")
+            self.logger.warning(f"⚠️ خطا در ذخیره resume: {e}")
 
     def _clear_resume_state(self):
+        """حذف فایل resume (در صورت پایان کامل)."""
         if self.resume_file.exists():
-            self.resume_file.unlink()
+            try:
+                self.resume_file.unlink()
+                self.logger.debug("🗑️ فایل resume حذف شد.")
+            except Exception as e:
+                self.logger.warning(f"⚠️ خطا در حذف resume: {e}")
 
     # ═══════════════════ متد اصلی با Timeout انعطاف‌پذیر ═══════════════════
+
     async def run(self):
-        timeout = getattr(self.config, 'timeout_seconds', OVERALL_TIMEOUT)
+        """اجرای اصلی اسکرپر با زمان‌بندی timeout."""
+        timeout = self.hard_timeout if self.auto_extend_timeout else self.timeout_seconds
         try:
             await asyncio.wait_for(self._run_impl(), timeout=timeout)
         except asyncio.TimeoutError:
@@ -107,45 +207,210 @@ class TelegramChannelScraper:
             self.logger.critical(f"❌ خطای مرگبار در اجرای اصلی: {e}", exc_info=True)
 
     async def _run_impl(self):
+        """پیاده‌سازی اصلی اسکرپر با پشتیبانی از ادامه خودکار تا رسیدن به limit."""
         if self.start_link:
             self.logger.info(f"🚀 شروع اسکریپر با لینک: {self.start_link} (limit={self.limit})")
         else:
             self.logger.info(f"🚀 شروع اسکریپر مستقل برای @{self.channel} (limit={self.limit})")
 
-        items, context, page = await self._fetch_posts_from_telegram()
-        if not items:
+        all_items = []
+        global_seen_ids = set()
+        rounds = 0
+        # محاسبه تعداد دورهای مورد نیاز بر اساس limit
+        max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
+        self.logger.info(f"🔄 اسکرپر تا رسیدن به {self.limit} پست ادامه می‌دهد...")
+
+        # ─── متغیرهای جمع‌آوری دانلودها در طول دورها ───
+        all_media_map = {}
+        downloaded_total = 0
+        start_time = asyncio.get_event_loop().time()
+        current_timeout = self.timeout_seconds
+        
+        context = None
+        page = None
+
+        while len(all_items) < self.limit and rounds < max_rounds:
+            rounds += 1
+            self.logger.info(f"📌 دور {rounds} از {max_rounds}")
+            self.logger.info(f"📊 پست‌های جمع‌آوری‌شده تا اینجا: {len(all_items)}/{self.limit}")
+
+            # اگر دور اول نیست، resume_point را تنظیم کن
+            if rounds > 1 and all_items:
+                # پیدا کردن قدیمی‌ترین پستی که اسکرین‌شات آن موجود است
+                oldest_post = None
+                sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))
+                for item in sorted_items:
+                    msg_id = item['id']
+                    safe_channel = self._sanitize_filename(self.channel)
+                    safe_msg_id = self._sanitize_filename(str(msg_id))
+                    screenshot_path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                    if screenshot_path.exists():
+                        oldest_post = item
+                        break
+
+                if oldest_post is None:
+                    # فال‌بک: از قدیمی‌ترین پست استفاده کن
+                    oldest_post = min(all_items, key=lambda x: int(x.get('id', 0)))
+                    self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_post['id']}")
+
+                resume_link = f"https://t.me/{self.channel}/{oldest_post['id']}"
+                self.start_link = resume_link
+                self.target_msg_id = oldest_post['id']
+                self._resume_loaded = True
+                if self._resume_data is None:
+                    self._resume_data = {}
+                self._resume_data['last_msg_id'] = self.target_msg_id
+                self.logger.info(f"🔄 ادامه از پست {self.target_msg_id} (دور {rounds})")
+
+            # محاسبه تعداد پست‌های باقی‌مانده تا limit
+            remaining = self.limit - len(all_items)
+            if remaining <= 0:
+                break
+
+            # اجرای یک دور اسکرپ (مرورگر همیشه باز نگه داشته می‌شود تا دانلود انجام شود)
+            if rounds == 1:
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=True,
+                    limit=remaining
+                )
+            else:
+                items, context, page = await self._fetch_posts_from_telegram(
+                    existing_seen_ids=global_seen_ids,
+                    keep_browser_open=True,
+                    existing_context=context,
+                    existing_page=page,
+                    limit=remaining
+                )
+            if not items:
+                self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
+                break
+
+            # ─── دانلود پست‌های همین دور ──────────────────────────
+            if items:
+                self.logger.info(f"📥 دانلود پست‌های دور {rounds} ({len(items)} پست)...")
+                media_map_round, downloaded_round = await self._download_media(
+                    items, page, context
+                )
+                # اضافه کردن به نقشه‌ی کلی
+                for post_id, files in media_map_round.items():
+                    if post_id in all_media_map:
+                        all_media_map[post_id].extend(files)
+                    else:
+                        all_media_map[post_id] = files
+                downloaded_total += downloaded_round
+                self.logger.info(f"✅ دور {rounds}: {downloaded_round} فایل دانلود شد")
+
+            # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
+            new_items_count = 0
+            for item in items:
+                if item['id'] not in global_seen_ids:
+                    global_seen_ids.add(item['id'])
+                    all_items.append(item)
+                    new_items_count += 1
+
+            self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
+            self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
+
+            # ─── مدیریت هوشمند زمان ـــــ
+            if current_timeout > 0:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed >= current_timeout:
+                    if self.auto_extend_timeout and new_items_count > 0:
+                        current_timeout += 600  # ۱۰ دقیقه تمدید
+                        self.logger.info("⏱️ زمان اسکرپینگ به‌دلیل ادامهٔ موفقیت‌آمیز تا %d دقیقه تمدید شد.", current_timeout // 60)
+                    else:
+                        self.logger.warning("⏰ محدودیت زمانی %d ثانیه به پایان رسید. توقف.", current_timeout)
+                        break
+                        
+            # اگر به limit رسیدیم، قطعاً پایان
+            if len(all_items) >= self.limit:
+                break
+
+            # اگر به سقف دورها رسیدیم ولی در این دور پست جدیدی آمده، یک دور دیگر اضافه کن
+            if rounds >= max_rounds:
+                if new_items_count > 0:
+                    max_rounds += 1
+                    self.logger.info("🔄 با وجود رسیدن به سقف دورها، چون هنوز پست جدید می‌آید، یک دور دیگر اضافه شد.")
+                else:
+                    break
+
+            # اگر به انتهای کانال رسیدیم و هنوز به limit نرسیدیم، ادامه بده
+            if hasattr(self, '_is_at_top') and await self._is_at_top(page):
+                self.logger.info("📌 به بالای صفحه رسیدیم. شروع دور بعدی...")
+                await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+                continue
+
+        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
+        if len(all_items) > self.limit:
+            final_ids = {item['id'] for item in all_items[:self.limit]}
+            all_items = all_items[:self.limit]
+            if all_media_map:
+                all_media_map = {post_id: files for post_id, files in all_media_map.items() 
+                                 if post_id in final_ids}
+            self.logger.info(f"📊 تعداد پست‌ها به {self.limit} محدود شد و media_map فیلتر شد.")
+
+        # ─── پردازش نهایی ──────────────────────────────────
+        if not all_items:
             self.logger.warning("هیچ پستی دریافت نشد.")
             if context:
                 await context.close()
             return
-        self.logger.info(f"📥 {len(items)} پست استخراج شد (جدیدترین‌ها).")
 
-        media_map, downloaded = await self._download_media(items, page, context)
-        self.logger.info(f"🖼️ {downloaded} فایل رسانه دانلود شد.")
-        self.logger.info(f"📊 media_map برای {len(media_map)} پست پر شد.")
+        self.logger.info(f"📥 {len(all_items)} پست استخراج شد (در {rounds} دور).")
+        self.logger.info(f"🖼️ مجموع {downloaded_total} فایل رسانه در {rounds} دور دانلود شد.")
+        self.logger.info(f"📊 media_map برای {len(all_media_map)} پست پر شد.")
+
+        media_map = all_media_map
+
+        # ذخیره وضعیت نهایی (قدیمی‌ترین پستی که اسکرین‌شات موفق دارد)
+        if all_items:
+            oldest_item = None
+            sorted_items = sorted(all_items, key=lambda x: int(x.get('id', 0)))
+            for item in sorted_items:
+                msg_id = item['id']
+                safe_channel = self._sanitize_filename(self.channel)
+                safe_msg_id = self._sanitize_filename(str(msg_id))
+                screenshot_path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
+                if screenshot_path.exists():
+                    oldest_item = item
+                    break
+            if oldest_item is None:
+                oldest_item = min(all_items, key=lambda x: int(x.get('id', 0)))
+                self.logger.warning(f"⚠️ هیچ اسکرین‌شاتی برای پست‌های قدیمی پیدا نشد، از oldest بدون اسکرین‌شات استفاده می‌شود: {oldest_item['id']}")
+            self._save_resume_state(oldest_item['id'], len(all_items))
+
+        append_mode = self.resume and self._resume_loaded
 
         gen = OutputGenerator(
             self.base_dir,
             self.channel,
-            items,
+            all_items,
             media_map,
-            debug_mode=self.debug_mode
+            debug_mode=self.debug_mode,
+            append_mode=append_mode
         )
         gen.run_all()
 
         if context:
             await context.close()
 
-        self._clear_resume_state()
-        self.logger.info("✅ پایان موفقیت‌آمیز.")
+        if not self.resume:
+            self._clear_resume_state()
 
+        self.logger.info("✅ پایان موفقیت‌آمیز.")        
     # ═══════════════════ متد کمکی: پاک‌سازی نام فایل ═══════════════════
+
     @staticmethod
     def _sanitize_filename(name: str) -> str:
+        """پاک‌سازی نام فایل با حذف کاراکترهای غیرمجاز."""
         return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
     # ═══════════════════ متد واحد برای اسکرین‌شات ═══════════════════
+
     async def _screenshot(self, page, name: str, full_page: bool = True, element=None):
+        """گرفتن اسکرین‌شات از صفحه یا المنت."""
         try:
             if element is not None:
                 if hasattr(element, 'element_handle'):
@@ -167,14 +432,23 @@ class TelegramChannelScraper:
             self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات {name}: {e}")
 
     async def _save_screenshot(self, page, name: str):
+        """ذخیره اسکرین‌شات کامل صفحه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            self.logger.debug(f"⏭️ اسکرین‌شات {name} غیرفعال است.")
+            return
         await self._screenshot(page, name, full_page=True)
 
     async def _take_screenshot(self, page, name: str):
+        """ذخیره اسکرین‌شات دیباگ کامل صفحه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            return
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
         await self._screenshot(page, name, full_page=True)
 
     # ═══════════════════ رسم صلیب روی المنت ═══════════════════
+
     async def _draw_debug_cross(self, page, element_handle):
+        """رسم صلیب قرمز روی المنت برای دیباگ."""
         try:
             if not element_handle:
                 return
@@ -200,12 +474,11 @@ class TelegramChannelScraper:
                 setTimeout(() => cross.remove(), 3000);
             }''', element_handle)
         except Exception as e:
-            self.logger.debug(f"خطا در رسم صلیب: {e}")
-
-    # ═══════════════════ اسکرول هوشمند با افزایش تدریجی ═══════════════════
-    async def _smart_scroll(self, page, direction: str, step: int = SCROLL_STEP_BASE, max_attempts: int = 3) -> bool:
+            self.logger.debug(f"خطا در رسم صلیب: {e}")   # ← این خط را اضافه کن
+    # ═══════════════════ اسکرول هوشمند (از نسخه ۵) ═══════════════════
+    async def _smart_scroll(self, page, direction: str, step: int = 1200, max_attempts: int = 3) -> bool:
         """
-        اسکرول هوشمند با سه پله افزایشی.
+        اسکرول هوشمند با افزایش تدریجی قدرت.
         - direction: 'up' یا 'down'
         - step: مقدار پایه (مثبت)
         - max_attempts: تعداد پله‌ها
@@ -218,8 +491,7 @@ class TelegramChannelScraper:
             multiplier = scroll_multipliers[i]
             amount = int(step * multiplier)
             if direction == 'up':
-                amount = -amount  # منفی = بالا
-            # برای down، amount مثبت می‌ماند
+                amount = -amount
 
             self.logger.debug(f"   اسکرول {amount}px (پله {i+1})")
             await page.evaluate(f"window.scrollBy(0, {amount})")
@@ -232,149 +504,301 @@ class TelegramChannelScraper:
 
         self.logger.info(f"⚠️ ارتفاع صفحه پس از {max_attempts} اسکرول تغییر نکرد.")
         return False
+    # ═══════════════════ اسکرین‌شات خطا برای دیباگ ═══════════════════
+    async def _capture_error_screenshot(self, page, error_type: str, description: str = ""):
+        """
+        گرفتن اسکرین‌شات از صفحه در هنگام بروز خطا برای دیباگ (فقط در صورت فعال بودن).
+        """
+        if not self.save_screenshots:
+            return
+        try:
+            error_dir = self.debug_screenshots_dir / "error_screenshots"
+            error_dir.mkdir(parents=True, exist_ok=True)
+ 
+            # ایجاد نام فایل با timestamp و نوع خطا
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_channel = self._sanitize_filename(self.channel)
+            safe_error = self._sanitize_filename(error_type)
+            filename = f"{safe_channel}_{safe_error}_{timestamp}.png"
 
-    # ═══════════════════ استخراج پست‌ها با Resume و استخراج هوشمند متن (نسخه نهایی مقاوم) ═══════════════════
-    async def _fetch_posts_from_telegram(self) -> tuple[List[Dict], any, any]:
+            # در صورت وجود توضیح، به نام فایل اضافه کن
+            if description:
+                safe_desc = self._sanitize_filename(description)[:50]  # محدود کردن طول
+                filename = f"{safe_channel}_{safe_error}_{safe_desc}_{timestamp}.png"
+
+            path = error_dir / filename
+            await page.screenshot(path=path, full_page=True)
+            self.logger.info(f"📸 اسکرین‌شات خطا ذخیره شد: {path.name}")
+            self.logger.info(f"   نوع خطا: {error_type} | توضیح: {description}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات خطا: {e}")
+    # ═══════════════════ بررسی بالای صفحه (کمکی) ═══════════════════
+    async def _is_at_top(self, page) -> bool:
+        """بررسی میکند که آیا صفحه به بالاترین نقطه رسیده است (با ۱۰۰px تحمل)."""
+        return await page.evaluate("""
+            () => {
+                const scrollTop = document.documentElement.scrollTop;
+                return scrollTop <= 100;
+            }
+        """)
+    async def _is_at_bottom(self, page) -> bool:
+        """بررسی انتهای صفحه با ۱۰۰px تحمل."""
+        return await page.evaluate("""
+            () => {
+                const scrollTop = document.documentElement.scrollTop;
+                const clientHeight = document.documentElement.clientHeight;
+                const scrollHeight = document.documentElement.scrollHeight;
+                return scrollTop + clientHeight >= scrollHeight - 100;
+            }
+        """)
+    # ═══════════════════ استخراج پست‌ها (نسخه نهایی با پشتیبانی Resume) ═══════════════════
+
+    async def _fetch_posts_from_telegram(self, existing_seen_ids: set = None, keep_browser_open: bool = False, existing_context: Any = None, existing_page: Any = None, limit: int = None) -> Tuple[List[Dict], Any, Any]:
+        """
+        استخراج پست‌ها از کانال تلگرام با پشتیبانی از Resume و start_link.
+
+        Args:
+            existing_seen_ids (set): مجموعه‌ی شناسه‌های پست‌های قبلی (برای جلوگیری از تکرار)
+            keep_browser_open (bool): اگر True باشد، مرورگر بعد از پایان بسته نمی‌شود
+            existing_context (Any): context موجود از دور قبل (اختیاری)
+            existing_page (Any): page موجود از دور قبل (اختیاری)
+            limit (int): تعداد پست‌های مورد نظر در این دور (اگر None باشد، از self.limit استفاده می‌کند)
+        """
         from playwright.async_api import async_playwright
 
-        p = await async_playwright().start()
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=str(self.profile_dir),
-            headless=False,
-            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-            viewport={"width": 1366, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-        )
-        page = await context.new_page()
+        # ─── اگر context و page از قبل وجود دارند، از آن‌ها استفاده کن ──
+        if existing_context is not None and existing_page is not None:
+            context = existing_context
+            page = existing_page
+            p = None  # برای اینکه در انتها بسته نشود
+            self.logger.info("♻️ استفاده مجدد از context و page موجود")
+        else:
+            # ─── راه‌اندازی مرورگر ──────────────────────────────────
+            p = await async_playwright().start()
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                headless=False,
+                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                viewport={"width": 1366, "height": 900},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+            )
+            page = await context.new_page()
 
         try:
             await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
         except Exception as e:
             self.logger.error(f"❌ صفحه اصلی باز نشد: {e}")
-            await context.close()
+            if existing_context is None:
+                await context.close()
             return [], None, None
 
+        # ─── ورود به کانال یا لینک ──────────────────────────────
         if self.start_link:
             entered = await self._navigate_to_start_link(page)
         else:
             entered = await self._search_and_enter_channel(page)
 
         if not entered:
-            await context.close()
+            if existing_context is None:
+                await context.close()
             return [], None, None
-        await self._save_screenshot(page, "initial")
+        if self.save_screenshots:
+            await self._save_screenshot(page, "initial")
 
-        # ═══════════════ پرش به ابتدا یا انتهای صفحه بر اساس جهت اسکرول ═══════════════
-        if not self.start_link and not self.resume_data.get('last_msg_id'):
-            if self.scroll_direction == 'up':
-                self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
-                clicked = False
-                scroll_button_selectors = [
-                    'button[title="Go to bottom"]',
-                    'div[class*="scroll-to-bottom"]',
-                    'div[class*="ScrollButton"]',
-                    '[aria-label="Scroll to bottom"]',
-                    'button:has(svg[class*="arrow-down"])',
-                ]
-                for sel in scroll_button_selectors:
-                    try:
-                        btn = page.locator(sel).first
-                        if await btn.count() > 0:
-                            await btn.click(timeout=5000)
-                            self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                            clicked = True
-                            await human_sleep(3.5, 0.4)
-                            break
-                    except Exception:
-                        continue
-                if not clicked:
-                    self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-            else:  # scroll_direction == 'down'
-                self.logger.info("⬆️ تلاش برای رفتن به بالای صفحه (قدیمی‌ترین پست‌ها)...")
-                await page.evaluate("window.scrollTo(0, 0)")
-                await human_sleep(2, 0.3)
-                for _ in range(3):
-                    await page.evaluate("window.scrollBy(0, -2000)")
-                    await human_sleep(1, 0.2)
-                self.logger.info("   ✅ به بالای صفحه رفتیم.")
+        # ─── پرش به پایین (فقط در حالت عادی و بدون resume) ────
+        if not self.start_link and not self._resume_loaded:
+            self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+            clicked = False
+            scroll_button_selectors = [
+                'button[title="Go to bottom"]',
+                'div[class*="scroll-to-bottom"]',
+                'div[class*="ScrollButton"]',
+                '[aria-label="Scroll to bottom"]',
+                'button:has(svg[class*="arrow-down"])',
+            ]
+            for sel in scroll_button_selectors:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.count() > 0:
+                        await btn.click(timeout=5000)
+                        self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                        clicked = True
+                        await human_sleep(3.5, 0.4)
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
         elif self.start_link:
-            self.logger.info("ℹ️ در حالت start_link، پرش به پایین/بالا انجام نمی‌شود.")
+            self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.")
         else:
-            self.logger.info(f"ℹ️ حالت Resume: از msg_id={self.resume_data.get('last_msg_id')} ادامه می‌دهیم.")
+            self.logger.info(f"ℹ️ حالت Resume: از msg_id={self._resume_data.get('last_msg_id')} ادامه می‌دهیم.")
 
-        # جمع‌آوری پست‌ها
+        # ─── جمع‌آوری پست‌ها ──────────────────────────────────
         items = []
-        seen_ids = set()
+        # اگر مجموعه‌ی شناسه‌های قبلی ارسال شده، از آن استفاده کن
+        if existing_seen_ids is not None:
+            seen_ids = existing_seen_ids.copy()
+        else:
+            seen_ids = set()
         scroll_attempts = 0
 
-        resume_last_id = self.resume_data.get('last_msg_id') if not self.start_link else None
-        start_collecting = False
-        extra_scroll_count = 0
-        max_extra_scrolls = 4
+        # تعیین نقطه شروع برای Resume
+        if self._resume_loaded and self._resume_data is not None:
+            resume_last_id = self._resume_data.get('last_msg_id')
+        else:
+            resume_last_id = None
         collected_count = 0
 
-        # اگر resume داریم، ابتدا به پیام مورد نظر برویم
-        if resume_last_id:
-            self.logger.info(f"🔄 تلاش برای یافتن پیام resume: {resume_last_id}")
-            try:
-                target_locator = page.locator(f'[data-message-id="{resume_last_id}"]').first
-                if await target_locator.count() > 0:
-                    await target_locator.scroll_into_view_if_needed()
-                    offset = -150 if self.scroll_direction == 'up' else 150
-                    await page.evaluate(f"window.scrollBy(0, {offset})")
-                    await human_sleep(1, 0.3)
-                    self.logger.info(f"✅ پیام resume پیدا شد. جمع‌آوری از این نقطه به سمت {self.scroll_direction} شروع می‌شود.")
-                    start_collecting = True
-                    seen_ids.add(resume_last_id)
-                else:
-                    self.logger.warning("⚠️ پیام resume پیدا نشد. از جدیدترین پست‌ها شروع می‌کنیم.")
-                    start_collecting = True
-                    resume_last_id = None
-            except Exception as e:
-                self.logger.warning(f"⚠️ خطا در یافتن پیام resume: {e}")
-                start_collecting = True
-                resume_last_id = None
+        # ─── تعیین وضعیت start_collecting ──────────────────────
+        # اگر start_link یا resume داریم، باید به دنبال نقطه شروع بگردیم
+        has_specific_start = bool(self.start_link or self._resume_loaded)
 
+        if has_specific_start:
+            start_collecting = False  # نیاز به پیدا کردن نقطه شروع
+            extra_scroll_count = 0
+            max_extra_scrolls = 4
+        else:
+            start_collecting = True   # از ابتدا جمع‌آوری می‌کنیم
+            extra_scroll_count = 0    # نیازی به اسکرول اضافی نیست
+
+        # ─── اگر Resume داریم، به پیام مورد نظر برویم ──────────
+        # ─── Resume به start_link تبدیل شده است، نیازی به جستجوی جداگانه نیست ──
+        # اگر resume_last_id وجود دارد، فقط برای لاگ نگه داشته می‌شود، اما عملیات اضافی انجام نمی‌شود.
+        if resume_last_id:
+            self.logger.info(f"🔄 Resume از پیام {resume_last_id} ادامه می‌یابد (از طریق start_link).")
+            # هیچ عملیات دیگری انجام نمی‌شود – منطق start_link کار را انجام می‌دهد.
+
+        # ─── اگر start_link داریم، پیام هدف را پیدا کن ──────────
         if self.start_link and self.target_msg_id:
             self.logger.info(f"🎯 پیدا کردن پیام هدف {self.target_msg_id}...")
+            target_found = False
             try:
+                # ⏳ صبر برای اسکرول خودکار تلگرام به پیام هدف
+                await human_sleep(4, 0.5)
+                
                 target_locator = page.locator(f'[data-message-id="{self.target_msg_id}"]').first
                 if await target_locator.count() > 0:
+            
                     await target_locator.scroll_into_view_if_needed()
-                    offset = -150 if self.scroll_direction == 'up' else 150
-                    await page.evaluate(f"window.scrollBy(0, {offset})")
+                    await page.evaluate("window.scrollBy(0, -150)")
                     await human_sleep(1, 0.3)
-                    self.logger.info("✅ پیام هدف به مرکز صفحه منتقل شد.")
-                else:
-                    self.logger.warning(f"⚠️ پیام هدف {self.target_msg_id} پیدا نشد.")
+                    self.logger.info("✅ پیام هدف به بالای صفحه منتقل شد.")
+                    target_found = True
+                    # بلافاصله start_collecting را فعال کن تا اسکرول اضافی انجام نشود
+                    start_collecting = True
+                    seen_ids.add(self.target_msg_id)
+                    self.logger.info(f"🎯 شروع جمع‌آوری از پیام هدف {self.target_msg_id}")
+                    
+                    # ─── اسکرول اولیه برای بارگذاری پست‌های قدیمی‌تر ───
+                    self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                    for scroll_step in range(3):
+                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                        await human_sleep(1.5, 0.3)
+                        self.logger.debug(f"   اسکرول {scroll_step+1}/3 انجام شد")
             except Exception as e:
                 self.logger.warning(f"⚠️ خطا در انتقال پیام هدف: {e}")
+                # در صورت بروز Exception، اسکرین‌شات خطا بگیر
+                await self._capture_error_screenshot(
+                    page,
+                    "target_scroll_exception",
+                    f"{str(e)[:100]}"
+                )
 
-        # حالت عادی (بدون resume و بدون start_link)
-        if not resume_last_id and not self.start_link:
-            start_collecting = True
-            self.logger.info("ℹ️ حالت عادی: شروع جمع‌آوری.")
-
-        while len(items) < self.limit and scroll_attempts < MAX_SCROLL_ATTEMPTS:
+            # اگر target پیدا نشد، پیمایش هوشمند با گام‌های کوچک و تشخیص تاریخ
+            if not target_found:
+                self.logger.warning("⚠️ پیام هدف پیدا نشد. پیمایش آرام به بالا برای یافتن اولین پست دارای تاریخ...")
+                found_any_post = False
+                max_slow_steps = 20
+                for step in range(max_slow_steps):
+                    await page.evaluate("window.scrollBy(0, -600)")
+                    await asyncio.sleep(0.4)
+                    messages = await page.locator('div[data-message-id]').all()
+                    for msg in messages:
+                        msg_id = await msg.get_attribute('data-message-id')
+                        if not msg_id or msg_id in seen_ids:
+                            continue
+                        # بررسی وجود تاریخ (اولویت) و در صورت نبود، وجود کپشن کافی
+                        date_el = msg.locator('time, .date, [class*="date"], [datetime], .message-time, [class*="time"]').first
+                        has_date = await date_el.count() > 0
+                        has_caption = False
+                        if not has_date:
+                            # دیباگ هوشمند: جزئیات فقط در سطح DEBUG، در غیر این صورت هشدار مختصر
+                            if self.logger.isEnabledFor(logging.DEBUG):
+                                try:
+                                    html_snippet = (await msg.evaluate("el => el.outerHTML")).strip()[:800]
+                                    date_candidates = await msg.evaluate("""
+                                        el => {
+                                            const candidates = el.querySelectorAll('time, [datetime], [class*="date"], [class*="time"], [class*="meta"]');
+                                            return Array.from(candidates).map(e => e.outerHTML).join('\\n---\\n');
+                                        }
+                                    """)
+                                    self.logger.debug(
+                                        "⚠️ تاریخ پیدا نشد. HTML پیام (بخشی):\n%s\n---\nعناصر احتمالی تاریخ:\n%s",
+                                        html_snippet, date_candidates or "هیچ عنصری یافت نشد"
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                self.logger.warning("⚠️ تاریخ پیام %s یافت نشد. از کپشن برای تشخیص پست استفاده می‌شود.", msg_id)
+                            try:
+                                text_content = (await msg.inner_text()).strip()
+                                has_caption = len(text_content) > 10
+                            except:
+                                pass
+                        if has_date or has_caption:
+                            self.logger.info(f"🔍 اولین پست معتبر پیدا شد: {msg_id} (تاریخ: {has_date}, کپشن: {has_caption}) — شروع جمع‌آوری")
+                            self.target_msg_id = msg_id
+                            target_found = True
+                            start_collecting = True
+                            seen_ids.add(msg_id)
+                            await msg.scroll_into_view_if_needed()
+                            await page.evaluate("window.scrollBy(0, -150)")
+                            await human_sleep(1, 0.3)
+                            self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                            for scroll_step in range(3):
+                                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+                                await human_sleep(1.5, 0.3)
+                            found_any_post = True
+                            break
+                    if found_any_post:
+                        break
+                if not target_found:
+                    self.logger.warning("⚠️ هیچ پست دارای تاریخی پیدا نشد. بازگشت نتیجهٔ خالی برای retry.")
+                    # 📸 اسکرین‌شات اضطراری
+                    try:
+                        safe_name = self._sanitize_filename(f"target_{self.target_msg_id}_not_found")
+                        path = self.debug_screenshots_dir / f"{safe_name}.png"
+                        await page.screenshot(path=path, full_page=True)
+                        self.logger.info(f"📸 اسکرین‌شات صفحه ذخیره شد: {path.name}")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ خطا در ذخیره اسکرین‌شات: {e}")
+                    return [], context, page
+        # ─── حلقه اصلی استخراج ──────────────────────────────────
+        target_limit = limit if limit is not None else self.limit
+        while len(items) < target_limit and scroll_attempts < self.max_scroll_attempts:
             try:
+                # اطمینان از بارگذاری حداقل یک پست جدید
+                try:
+                    await page.wait_for_selector(
+                        'div[data-message-id]', 
+                        state='attached', 
+                        timeout=2000  # ۲ ثانیه صبر کن
+                    )
+                except Exception:
+                    self.logger.debug("⏳ هیچ پست جدیدی در این مرحله بارگذاری نشد.")
+                
                 messages = await page.locator('div[data-message-id]').all()
+                self.logger.debug(f"🔍 تعداد پیام‌های موجود: {len(messages)}")
 
-                # ─── تعیین ترتیب پیمایش بر اساس جهت اسکرول ──────────────────
-                # در حالت عادی (بدون start_link و resume)، اگر direction == 'up' از جدیدترین به قدیمی‌ترین
-                # و اگر direction == 'down' از قدیمی‌ترین به جدیدترین
-                if self.start_link or resume_last_id:
-                    # در حالت start_link یا resume، باید از نقطه شروع به سمت direction حرکت کنیم
-                    # اما چون start_collecting کنترل می‌کند، می‌توانیم از ترتیب کلی استفاده کنیم
-                    if self.scroll_direction == 'up':
-                        msg_iter = reversed(messages)  # از انتها به ابتدا (جدید به قدیم)
-                    else:
-                        msg_iter = messages  # از ابتدا به انتها (قدیم به جدید)
+                # انتخاب ترتیب بر اساس جهت اسکرول
+                if self.scroll_direction == 'up':
+                    # اسکرول به بالا: از جدید به قدیم (معکوس)
+                    msg_iter = reversed(messages)
                 else:
-                    # حالت عادی
-                    if self.scroll_direction == 'up':
-                        msg_iter = reversed(messages)  # جدید به قدیم
-                    else:  # down
-                        msg_iter = messages  # قدیم به جدید
+                    # اسکرول به پایین: از قدیم به جدید (عادی)
+                    msg_iter = messages
+                # در حالت resume، پست‌های جدیدتر قبل از نقطه شروع رد می‌شوند
 
                 for msg in msg_iter:
                     try:
@@ -382,25 +806,30 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
 
-                        # در حالت start_link یا resume، فقط زمانی که به نقطه شروع رسیدیم جمع‌آوری کنیم
+                        # در حالت start_link، فقط بعد از رسیدن به پیام هدف شروع کن
                         if self.start_link and not start_collecting:
                             if msg_id == self.target_msg_id:
                                 start_collecting = True
                                 self.logger.info(f"🎯 به پیام هدف رسیدیم (ID: {msg_id})، شروع جمع‌آوری...")
                                 seen_ids.add(msg_id)
+                                continue  # خود پیام هدف را جمع نمی‌کنیم (قبلاً اسکرپ شده)
                             else:
                                 continue
-                        elif resume_last_id and not start_collecting:
-                            # در resume، ما قبلاً start_collecting را True کرده‌ایم اگر پیام پیدا شده باشد
-                            # اما اگر پیدا نشده، اینجا ignore می‌کنیم
-                            pass
 
+                        # اگر هنوز شروع نکرده‌ایم، ادامه نده
                         if not start_collecting:
                             continue
 
-                        # ─── استخراج متن ──────────────────────────────────────
+                        # ═══════════════ فقط پست‌های قدیمی‌تر از نقطه شروع را جمع کن ═══════════════
+                        # در حالت start_link، فقط پست‌هایی با ID کوچکتر از target_msg_id را قبول کن
+                        if self.start_link and int(msg_id) >= int(self.target_msg_id):
+                            self.logger.debug(f"⏭️ پست {msg_id} جدیدتر یا مساوی هدف است، رد می‌شود.")
+                            continue
+
+                        # ═══════════════ استخراج هوشمند متن پست ═══════════════
                         text = ""
                         try:
+                            # روش ۱: selectorهای خاص برای محتوای اصلی
                             content_selectors = [
                                 'div.message-content',
                                 'div.text-content',
@@ -415,18 +844,21 @@ class TelegramChannelScraper:
                                     if text and len(text) > 3:
                                         break
 
+                            # روش ۲: استفاده از inner_text کل پیام
                             if not text or len(text) < 5:
                                 try:
                                     text = (await msg.inner_text()).strip()[:1000]
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    self.logger.debug(f"   inner_text fallback failed for {msg_id}: {e}")
 
+                            # روش ۳: JavaScript textContent
                             if not text or len(text) < 5:
                                 try:
                                     text = (await msg.evaluate("el => el.textContent || ''")).strip()[:1000]
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    self.logger.debug(f"   textContent fallback failed for {msg_id}: {e}")
 
+                            # روش ۴: (اضطراری) استفاده از page.evaluate
                             if not text or len(text) < 5:
                                 try:
                                     text = (await page.evaluate(f"""
@@ -435,9 +867,10 @@ class TelegramChannelScraper:
                                             return el ? el.innerText || el.textContent || '' : '';
                                         }}
                                     """)).strip()[:1000]
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    self.logger.debug(f"   emergency evaluate failed for {msg_id}: {e}")
 
+                            # تمیز کردن نهایی
                             if text:
                                 text = re.sub(r'\s+', ' ', text).strip()[:1000]
 
@@ -448,7 +881,7 @@ class TelegramChannelScraper:
                             self.logger.warning(f"❌ خطا در استخراج متن پست {msg_id}: {e}")
                             text = ""
 
-                        # ─── استخراج تاریخ ────────────────────────────────────
+                        # استخراج تاریخ
                         date_el = msg.locator('time, .message-date, .date, span[class*="date"]').first
                         date = ""
                         try:
@@ -466,55 +899,73 @@ class TelegramChannelScraper:
                         seen_ids.add(msg_id)
                         collected_count += 1
 
-                        if start_collecting and collected_count % 3 == 0:
+                        # ذخیره وضعیت هر ۳ پست (برای ادامه در صورت شکست)
+                        if collected_count % 3 == 0:
                             self._save_resume_state(msg_id, collected_count)
 
-                        if len(items) >= self.limit:
+                        if len(items) >= target_limit:
                             break
+
                     except Exception as e:
                         self.logger.debug(f"خطا در پردازش پیام: {e}")
                         continue
+
             except Exception as e:
                 self.logger.error(f"❌ خطا در استخراج پست‌ها: {e}")
 
-            if len(items) >= self.limit:
+            if len(items) >= target_limit:
                 break
 
-            # ─── اسکرول هوشمند با جهت ──────────────────────────────────
-            old_height = await page.evaluate("document.documentElement.scrollHeight")
-            scrolled = await self._smart_scroll(page, self.scroll_direction, step=SCROLL_STEP_BASE, max_attempts=3)
-            new_height = await page.evaluate("document.documentElement.scrollHeight")
-
-            if new_height == old_height:
-                scroll_attempts += 1
-            else:
+            # ─── اسکرول هوشمند ──────────────────────────────────
+            # همیشه از جهت ذخیره‌شده در self.scroll_direction استفاده می‌کنیم
+            scrolled = await self._smart_scroll(page, self.scroll_direction, step=1200, max_attempts=3)
+            
+            if scrolled:
                 scroll_attempts = 0
-
-            # ─── مدیریت اسکرول اضافی فقط در حالت start_link یا resume ───
-            if not start_collecting and (self.start_link or resume_last_id):
+                self.logger.debug(f"✅ اسکرول هوشمند موفق بود (جهت: {self.scroll_direction})")
+            else:
+                scroll_attempts += 1
+                self.logger.debug(f"⚠️ اسکرول هوشمند ناموفق. تلاش {scroll_attempts}/{self.max_scroll_attempts}")
+                # خروج فوری اگر به حاشیه صفحه رسیده باشیم
+                if self.scroll_direction == 'up' and await self._is_at_top(page):
+                    self.logger.info("📌 به بالای صفحه رسیدیم. اسکرول متوقف می‌شود.")
+                    scroll_attempts = self.max_scroll_attempts
+                elif self.scroll_direction == 'down' and await self._is_at_bottom(page):
+                    self.logger.info("📌 به پایین صفحه رسیدیم. اسکرول متوقف می‌شود.")
+                    scroll_attempts = self.max_scroll_attempts
+            # ─── اگر start_collecting فعال نشده و در حالت خاص هستیم، اسکرول اضافی ──
+            if not start_collecting and has_specific_start:
                 extra_scroll_count += 1
                 if extra_scroll_count <= max_extra_scrolls:
                     self.logger.info(f"🔄 هنوز به نقطه شروع نرسیدیم، اسکرول اضافی شماره {extra_scroll_count}...")
-                    extra_amount = -SCROLL_STEP_BASE * 2 if self.scroll_direction == 'up' else SCROLL_STEP_BASE * 2
                     if extra_scroll_count >= 3:
-                        extra_amount = extra_amount * 2
+                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP * 2})")
                         self.logger.warning(f"⚠️ اسکرول قوی‌تر انجام شد (تلاش {extra_scroll_count})")
-                    await page.evaluate(f"window.scrollBy(0, {extra_amount})")
+                    else:
+                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP // 2})")
                     await human_sleep(1.5, 0.3)
                 else:
                     self.logger.warning(f"⚠️ پس از {max_extra_scrolls} اسکرول اضافی، نقطه شروع پیدا نشد. ادامه با پست‌های موجود...")
                     start_collecting = True
                     resume_last_id = None
+            # در غیر این صورت (حالت عادی) هیچ اسکرول اضافی انجام نمی‌شود
 
+            # ─── تاخیر برای جلوگیری از بارگذاری بیش از حد ──────
             if len(items) % 5 == 0 and len(items) > 0:
                 await human_sleep(1.5, 0.3)
 
-        items = items[:self.limit]
+        # ─── محدود کردن به تعداد مورد نظر ──────────────────────
+        items = items[:target_limit]
         self.logger.info(f"📊 {len(items)} پست جمع‌آوری شد.")
 
-        await self._save_screenshot(page, "final")
-        await self._capture_post_screenshots(page, items)
+        # ─── اسکرین‌شات نهایی ──────────────────────────────────
+        if self.save_screenshots:
+            await self._save_screenshot(page, "final")
+            await self._capture_post_screenshots(page, items)
+        else:
+            self.logger.info("⏭️ اسکرین‌شات‌ها غیرفعال هستند.")
 
+        # ─── اسکرول به اولین پست ──────────────────────────────
         if items:
             first_id = items[0]['id']
             try:
@@ -523,10 +974,27 @@ class TelegramChannelScraper:
             except Exception:
                 pass
 
-        return items, context, page
+        # اگر keep_browser_open فعال باشد یا از context موجود استفاده شده باشد، مرورگر را نبند
+        if (keep_browser_open or existing_context is not None) and context:
+            # مرورگر را باز نگه دار
+            pass
+        else:
+            if context:
+                await context.close()
 
+        return items, context, page
     # ═══════════════════ جستجو و ورود به کانال ═══════════════════
+
     async def _search_and_enter_channel(self, page) -> bool:
+        """
+        جستجوی کانال و ورود به آن.
+
+        Args:
+            page: صفحه مرورگر
+
+        Returns:
+            bool: موفقیت‌آمیز بودن عملیات
+        """
         search_input = None
         for sel in [
             'input[placeholder*="Search"]',
@@ -540,6 +1008,7 @@ class TelegramChannelScraper:
                     break
             except Exception:
                 continue
+
         if not search_input:
             self.logger.error("❌ نوار جستجو پیدا نشد.")
             return False
@@ -550,7 +1019,8 @@ class TelegramChannelScraper:
         await human_sleep(0.2, 0.1)
         await search_input.type(self.channel, delay=random.randint(80, 150))
         self.logger.info(f"🔍 در حال جستجوی: @{self.channel}")
-        await self._take_screenshot(page, "search_input_filled")
+        if self.save_screenshots:
+            await self._take_screenshot(page, "search_input_filled")
         await human_sleep(1.5, 0.3)
         await page.keyboard.press("Enter")
         self.logger.info("⏳ منتظر نتایج...")
@@ -558,25 +1028,14 @@ class TelegramChannelScraper:
         search_term = self.channel_name if self.channel_name else self.channel
         found = False
 
-        self.logger.info("🕐 مرحله اول انتظار (۱۰ ثانیه)...")
-        await human_sleep(10, 0.5)
-        if await self._check_text_on_page(page, search_term):
-            found = True
-            self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله اول یافت شد.")
-
-        if not found:
-            self.logger.info("🕑 مرحله دوم انتظار (۱۵ ثانیه)...")
-            await human_sleep(15, 0.5)
+        # انتظار با چند مرحله
+        for wait_time, stage in [(10, "اول"), (15, "دوم"), (20, "سوم")]:
+            self.logger.info(f"🕐 مرحله {stage} انتظار ({wait_time} ثانیه)...")
+            await human_sleep(wait_time, 0.5)
             if await self._check_text_on_page(page, search_term):
                 found = True
-                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله دوم یافت شد.")
-
-        if not found:
-            self.logger.info("🕒 مرحله سوم انتظار (۲۰ ثانیه)...")
-            await human_sleep(20, 0.5)
-            if await self._check_text_on_page(page, search_term):
-                found = True
-                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله سوم یافت شد.")
+                self.logger.info(f"   ✅ عبارت '{search_term}' در مرحله {stage} یافت شد.")
+                break
 
         if not found:
             self.logger.info("📑 کلیک روی تب Channels (در صورت وجود)...")
@@ -598,18 +1057,31 @@ class TelegramChannelScraper:
 
         if not found:
             self.logger.error(f"❌ نتایج جستجو برای '{search_term}' پیدا نشد (حتی پس از ۴۵+ ثانیه).")
-            await self._take_screenshot(page, "search_failed")
+            if self.save_screenshots:
+                await self._take_screenshot(page, "search_failed")
             return False
 
         self.logger.info("✅ نتایج جستجو ظاهر شدند.")
-        await self._take_screenshot(page, f"search_results_{self.channel}")
+        if self.save_screenshots:
+            await self._take_screenshot(page, f"search_results_{self.channel}")
         await human_sleep(2, 0.3)
-        await self._take_screenshot(page, "before_click_final")
+        if self.save_screenshots:
+            await self._take_screenshot(page, "before_click_final")
 
         return await self._click_search_result(page, search_term)
 
     # ═══════════════════ متد جستجو با لینک ═══════════════════
+
     async def _navigate_to_start_link(self, page) -> bool:
+        """
+        رفتن به لینک مستقیم یک پست.
+
+        Args:
+            page: صفحه مرورگر
+
+        Returns:
+            bool: موفقیت‌آمیز بودن عملیات
+        """
         self.logger.info(f"🔗 تلاش برای رفتن به لینک: {self.start_link}")
 
         try:
@@ -638,6 +1110,7 @@ class TelegramChannelScraper:
                         break
                 except Exception:
                     continue
+
             if not search_input:
                 self.logger.error("❌ نوار جستجو پیدا نشد.")
                 return False
@@ -648,12 +1121,13 @@ class TelegramChannelScraper:
             await human_sleep(0.2, 0.1)
             await search_input.type(self.start_link, delay=random.randint(80, 150))
             self.logger.info(f"🔍 لینک تایپ شد: {self.start_link}")
-            await self._take_screenshot(page, "search_link_filled")
-            await human_sleep(1.5, 0.3)
+            if self.save_screenshots:
+                await self._take_screenshot(page, "search_link_filled")
             await page.keyboard.press("Enter")
             self.logger.info("⏳ منتظر نتایج جستجو...")
             await human_sleep(5, 0.5)
-            await self._take_screenshot(page, "search_results_loaded")
+            if self.save_screenshots:
+                await self._take_screenshot(page, "search_results_loaded")
 
             clicked = False
             result_selectors = [
@@ -694,7 +1168,8 @@ class TelegramChannelScraper:
                         }
                     }''')
                     await human_sleep(2, 0.3)
-                    await self._take_screenshot(page, "after_js_click")
+                    if self.save_screenshots:
+                        await self._take_screenshot(page, "after_js_click")
                     self.logger.info("✅ کلیک با JavaScript انجام شد.")
                     clicked = True
                 except Exception as e:
@@ -702,21 +1177,24 @@ class TelegramChannelScraper:
 
             if not clicked:
                 self.logger.error("❌ نتوانستیم روی هیچ نتیجه‌ای کلیک کنیم.")
-                await self._take_screenshot(page, "click_result_failed")
+                if self.save_screenshots:
+                    await self._take_screenshot(page, "click_result_failed")
                 return False
-
             for attempt in range(3):
                 try:
                     await page.wait_for_selector('div[data-message-id]', timeout=15000)
                     self.logger.info("✅ صفحه پیام‌ها با موفقیت بارگذاری شد.")
-                    await self._take_screenshot(page, "messages_page_loaded")
+                    if self.save_screenshots:
+                        await self._take_screenshot(page, "messages_page_loaded")
                     return True
                 except Exception as e:
                     self.logger.warning(f"⚠️ تلاش {attempt+1} برای بارگذاری پیام‌ها ناموفق: {e}")
                     if attempt < 2:
                         await human_sleep(3, 0.5)
+
             self.logger.error("❌ پس از کلیک، پیام‌ها پیدا نشدند.")
-            await self._take_screenshot(page, "no_messages_after_click")
+            if self.save_screenshots:
+                await self._take_screenshot(page, "no_messages_after_click")
             return False
 
         for retry in range(2):
@@ -729,10 +1207,13 @@ class TelegramChannelScraper:
                 return True
             else:
                 self.logger.warning(f"❌ تلاش {retry+1} ناموفق بود.")
+
         return False
 
     # ═══════════════════ متد کمکی: بررسی وجود عبارت ═══════════════════
+
     async def _check_text_on_page(self, page, term: str) -> bool:
+        """بررسی وجود یک عبارت در صفحه."""
         try:
             return await page.evaluate(f'''(t) => {{
                 const bodyText = document.body.innerText || '';
@@ -742,12 +1223,15 @@ class TelegramChannelScraper:
             return False
 
     # ═══════════════════ کلیک روی نتیجه جستجو ═══════════════════
+
     async def _click_search_result(self, page, search_term: str) -> bool:
+        """کلیک روی نتیجه جستجو برای ورود به کانال."""
         click_selectors = [
             'div.chatlist-item', 'div[role="button"]', 'div.search-result',
             'a[data-peer-id]', 'div[class*="chatlist"] div[class*="item"]',
             'div[class*="ListItem"]', 'div[class*="search-result"]'
         ]
+
         for sel in click_selectors:
             try:
                 loc = page.locator(sel).first
@@ -791,27 +1275,55 @@ class TelegramChannelScraper:
             self.logger.debug("JavaScript generic click: %s", e)
 
         self.logger.error("❌ تمام روش‌های کلیک شکست خورد.")
-        await self._take_screenshot(page, "click_failed")
+        if self.save_screenshots:
+            await self._take_screenshot(page, "click_failed")
         return False
 
     # ═══════════════════ اسکرین‌شات از تکتک پست‌ها ═══════════════════
+
     async def _capture_post_screenshots(self, page, items: List[Dict]):
+        """گرفتن اسکرین‌شات از هر پست به‌صورت جداگانه (فقط در صورت فعال بودن)."""
+        if not self.save_screenshots:
+            self.logger.info("⏭️ ذخیره اسکرین‌شات پست‌ها غیرفعال است.")
+            return
         self.logger.info(f"📸 گرفتن اسکرین‌شات از {len(items)} پست...")
+   
         for idx, item in enumerate(items):
             msg_id = item['id']
             try:
                 locator = page.locator(f'[data-message-id="{msg_id}"]').first
                 if await locator.count() == 0:
                     self.logger.warning(f"⚠️ المان پست {msg_id} پیدا نشد، رد می‌شود.")
+                    # اسکرین‌شات خطا برای بررسی وضعیت صفحه
+                    await self._capture_error_screenshot(
+                        page,
+                        "post_not_found",
+                        f"post_id={msg_id} not found in DOM"
+                    )
                     continue
-
-                await locator.scroll_into_view_if_needed()
-                await human_sleep(0.5, 0.2)
 
                 safe_channel = self._sanitize_filename(self.channel)
                 safe_msg_id = self._sanitize_filename(str(msg_id))
                 path = self.screenshots_dir / f"{safe_channel}_post_{safe_msg_id}.png"
-                await locator.screenshot(path=path)
+                
+                if path.exists():
+                    self.logger.debug(f"⏭️ اسکرین‌شات پست {msg_id} قبلاً وجود دارد، رد می‌شود.")
+                    continue
+                
+                # اسکرول به المنت و گرفتن اسکرین‌شات با مدیریت خطا
+                try:
+                    await locator.scroll_into_view_if_needed()
+                    await human_sleep(0.5, 0.2)
+                    await locator.screenshot(path=path, timeout=30000)
+                except Exception as e:
+                    self.logger.warning(f"⚠️ خطا در اسکرین‌شات پست {msg_id}: {str(e)[:100]}")
+                    # اسکرین‌شات خطا برای بررسی وضعیت صفحه
+                    await self._capture_error_screenshot(
+                        page,
+                        "screenshot_failed",
+                        f"post_id={msg_id} - {str(e)[:50]}"
+                    )
+                    continue
                 self.logger.debug(f"📸 اسکرین‌شات ذخیره شد: {path.name}")
 
                 if (idx + 1) % 10 == 0:
@@ -822,8 +1334,20 @@ class TelegramChannelScraper:
 
         self.logger.info(f"✅ اسکرین‌شات‌ها تمام شد. مجموع: {len(items)}")
 
-    # ═══════════════════ دانلود رسانه‌ها با quiet_base ═══════════════════
-    async def _download_media(self, items: List[Dict], page, context) -> tuple[dict, int]:
+    # ═══════════════════ دانلود رسانه‌ها ═══════════════════
+
+    async def _download_media(self, items: List[Dict], page, context) -> Tuple[Dict, int]:
+        """
+        دانلود رسانه‌های مرتبط با پست‌ها.
+
+        Args:
+            items (List[Dict]): لیست پست‌ها
+            page: صفحه مرورگر
+            context: زمینه مرورگر
+
+        Returns:
+            Tuple[Dict, int]: (نقشه رسانه‌ها, تعداد دانلودها)
+        """
         post_ids = [str(item['id']) for item in items]
         media_map = {}
 
