@@ -32,7 +32,7 @@ on:
         required: false
         default: '80'
       debug_mode:
-        description: 'حالت دیباگ (اسکرین‌شات از هر مرحله)'
+        description: 'حالت اسکریپ بدون دانلود مدیا (فقط استخراج پست‌ها)'
         type: boolean
         required: false
         default: false
@@ -246,12 +246,12 @@ jobs:
       # ════════════════════════════════════════════
       # ۱۲. اجرای اسکریپر (عادی یا دیباگ)
       # ════════════════════════════════════════════
-      - name: 🚀 Run Telegram Scraper
+      - name: 🚀 Run Telegram Scraper (with media download)
         if: ${{ !inputs.debug_mode }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
 
 
-      - name: 🐞 Run Debug Scraper
+      - name: 📝 Run Debug Scraper (no media download)
         if: ${{ inputs.debug_mode }}
         run: xvfb-run python .github/scripts/debug_scraper.py
 
