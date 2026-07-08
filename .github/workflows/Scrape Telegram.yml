@@ -45,7 +45,7 @@ on:
         description: 'ذخیره اسکرین‌شات‌ها (غیرفعال کردن آن سرعت را تا ۳۰٪ افزایش می‌دهد و حجم خروجی را بسیار کاهش می‌دهد)'
         type: boolean
         required: false
-        default: true
+        default: false
       save_to:
         description: 'محل ذخیره‌سازی خروجی‌ها (در صورت انتخاب دستی، override می‌شود)'
         required: true
