@@ -54,6 +54,15 @@ on:
         options:
           - 'artifact'
           - 'repository'
+      timeout_seconds:
+        description: 'حداکثر زمان اجرا به ثانیه (۰ = استفاده از پیش‌فرض کد)'
+        required: false
+        default: '0'
+      auto_extend_timeout:
+        description: 'تمدید خودکار زمان در صورت ادامهٔ موفق اسکرپینگ'
+        type: boolean
+        required: false
+        default: true      
       max_scroll_attempts:
         description: 'حداکثر تعداد تلاش‌های اسکرول ناموفق (پیشرفته)'
         required: false
@@ -70,7 +79,7 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 45 
+    timeout-minutes: 240
     steps:
       # ════════════════════════════════════════════
       # ۱. دریافت کد از مخزن (فقط آخرین commit)
@@ -203,6 +212,8 @@ jobs:
           # debug_mode (اختیاری، برای هماهنگی)
           debug_val = '${{ github.event.inputs.debug_mode }}'.lower() == 'true'
           c['debug_mode'] = debug_val
+          c['timeout_seconds'] = int('${{ github.event.inputs.timeout_seconds }}')
+          c['auto_extend_timeout'] = '${{ github.event.inputs.auto_extend_timeout }}'.lower() == 'true'
           
           # ذخیره فایل
           with open('config/config.yaml', 'w') as f:
@@ -238,12 +249,12 @@ jobs:
       - name: 🚀 Run Telegram Scraper
         if: ${{ !inputs.debug_mode }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
-        timeout-minutes: 35
+
 
       - name: 🐞 Run Debug Scraper
         if: ${{ inputs.debug_mode }}
         run: xvfb-run python .github/scripts/debug_scraper.py
-        timeout-minutes: 35
+
 
       # ════════════════════════════════════════════
       # ۱۳. پاکسازی آرتیفکت‌های قدیمی دیباگ
