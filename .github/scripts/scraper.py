@@ -702,15 +702,27 @@ class TelegramChannelScraper:
                         has_date = await date_el.count() > 0
                         has_caption = False
                         if not has_date:
-                            # DEBUG: لاگ HTML پیام برای پیدا کردن تگ دقیق تاریخ
-                            try:
-                                html_snippet = (await msg.evaluate("el => el.outerHTML")).strip()[:500]
-                                self.logger.info(f"⚠️ تاریخ پیدا نشد. HTML پیام: {html_snippet}")
-                            except:
-                                pass
+                            # دیباگ هوشمند: جزئیات فقط در سطح DEBUG، در غیر این صورت هشدار مختصر
+                            if self.logger.isEnabledFor(logging.DEBUG):
+                                try:
+                                    html_snippet = (await msg.evaluate("el => el.outerHTML")).strip()[:800]
+                                    date_candidates = await msg.evaluate("""
+                                        el => {
+                                            const candidates = el.querySelectorAll('time, [datetime], [class*="date"], [class*="time"], [class*="meta"]');
+                                            return Array.from(candidates).map(e => e.outerHTML).join('\\n---\\n');
+                                        }
+                                    """)
+                                    self.logger.debug(
+                                        "⚠️ تاریخ پیدا نشد. HTML پیام (بخشی):\n%s\n---\nعناصر احتمالی تاریخ:\n%s",
+                                        html_snippet, date_candidates or "هیچ عنصری یافت نشد"
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                self.logger.warning("⚠️ تاریخ پیام %s یافت نشد. از کپشن برای تشخیص پست استفاده می‌شود.", msg_id)
                             try:
                                 text_content = (await msg.inner_text()).strip()
-                                has_caption = len(text_content) > 10   # حداقل ۱۰ کاراکتر
+                                has_caption = len(text_content) > 10
                             except:
                                 pass
                         if has_date or has_caption:
