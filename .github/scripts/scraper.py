@@ -697,10 +697,18 @@ class TelegramChannelScraper:
                         msg_id = await msg.get_attribute('data-message-id')
                         if not msg_id or msg_id in seen_ids:
                             continue
-                        # بررسی وجود عنصر زمان (نشانهٔ قطعی یک پست)
+                        # بررسی وجود تاریخ (اولویت) و در صورت نبود، وجود کپشن کافی
                         date_el = msg.locator('time, .date, [class*="date"], [datetime]').first
-                        if await date_el.count() > 0:
-                            self.logger.info(f"🔍 اولین پست معتبر (دارای تاریخ) پیدا شد: {msg_id} — شروع جمع‌آوری از این نقطه")
+                        has_date = await date_el.count() > 0
+                        has_caption = False
+                        if not has_date:
+                            try:
+                                text_content = (await msg.inner_text()).strip()
+                                has_caption = len(text_content) > 10   # حداقل ۱۰ کاراکتر
+                            except:
+                                pass
+                        if has_date or has_caption:
+                            self.logger.info(f"🔍 اولین پست معتبر پیدا شد: {msg_id} (تاریخ: {has_date}, کپشن: {has_caption}) — شروع جمع‌آوری")
                             self.target_msg_id = msg_id
                             target_found = True
                             start_collecting = True
