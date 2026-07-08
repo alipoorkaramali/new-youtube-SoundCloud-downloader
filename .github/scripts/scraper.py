@@ -70,7 +70,11 @@ class TelegramChannelScraper:
         self.media_dir.mkdir(parents=True, exist_ok=True)
         self.profile_dir = Path(config.profile_dir)
         self.delay_between_posts = config.delay_between_posts
-
+        
+        # ─── تنظیمات زمان‌بندی هوشمند ───
+        self.timeout_seconds = getattr(config, 'timeout_seconds', OVERALL_TIMEOUT)
+        self.auto_extend_timeout = getattr(config, 'auto_extend_timeout', True)
+        self.hard_timeout = 4 * 3600  # ۴ ساعت (سقف امنیتی)
         self.screenshots_dir = self.base_dir / "post_screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -193,7 +197,7 @@ class TelegramChannelScraper:
 
     async def run(self):
         """اجرای اصلی اسکرپر با زمان‌بندی timeout."""
-        timeout = getattr(self.config, 'timeout_seconds', OVERALL_TIMEOUT)
+        timeout = self.hard_timeout if self.auto_extend_timeout else self.timeout_seconds
         try:
             await asyncio.wait_for(self._run_impl(), timeout=timeout)
         except asyncio.TimeoutError:
@@ -218,7 +222,9 @@ class TelegramChannelScraper:
         # ─── متغیرهای جمع‌آوری دانلودها در طول دورها ───
         all_media_map = {}
         downloaded_total = 0
-
+        start_time = asyncio.get_event_loop().time()
+        current_timeout = self.timeout_seconds
+        
         context = None
         page = None
 
@@ -305,6 +311,17 @@ class TelegramChannelScraper:
             self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
             self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
 
+            # ─── مدیریت هوشمند زمان ـــــ
+            if current_timeout > 0:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed >= current_timeout:
+                    if self.auto_extend_timeout and new_items_count > 0:
+                        current_timeout += 600  # ۱۰ دقیقه تمدید
+                        self.logger.info("⏱️ زمان اسکرپینگ به‌دلیل ادامهٔ موفقیت‌آمیز تا %d دقیقه تمدید شد.", current_timeout // 60)
+                    else:
+                        self.logger.warning("⏰ محدودیت زمانی %d ثانیه به پایان رسید. توقف.", current_timeout)
+                        break
+                        
             # اگر به limit رسیدیم، قطعاً پایان
             if len(all_items) >= self.limit:
                 break
