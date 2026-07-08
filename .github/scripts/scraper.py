@@ -698,7 +698,7 @@ class TelegramChannelScraper:
                         if not msg_id or msg_id in seen_ids:
                             continue
                         # بررسی وجود تاریخ (اولویت) و در صورت نبود، وجود کپشن کافی
-                        date_el = msg.locator('time, .date, [class*="date"], [datetime]').first
+                        date_el = msg.locator('time, .date, [class*="date"], [datetime], .message-time, [class*="time"]').first
                         has_date = await date_el.count() > 0
                         has_caption = False
                         if not has_date:
