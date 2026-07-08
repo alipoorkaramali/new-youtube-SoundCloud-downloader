@@ -151,6 +151,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
         # محاسبه تعداد دورهای مورد نیاز بر اساس limit
         max_rounds = max(15, (self.limit // 30) + 2)  # حداقل ۱۵ دور
         self.logger.info(f"🔄 دیباگ تا رسیدن به {self.limit} پست ادامه می‌دهد...")
+        start_time = asyncio.get_event_loop().time()
+        current_timeout = self.timeout_seconds
 
         context = None
         page = None
@@ -247,7 +249,17 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
             self.logger.info(f"📈 {new_items_count} پست جدید در این دور اضافه شد")
             self.logger.info(f"📊 مجموع پست‌ها تا اینجا: {len(all_items)}/{self.limit}")
-
+            
+            # ─── مدیریت هوشمند زمان ـــــ
+            if current_timeout > 0:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed >= current_timeout:
+                    if self.auto_extend_timeout and new_items_count > 0:
+                        current_timeout += 600  # ۱۰ دقیقه تمدید
+                        self.logger.info("⏱️ زمان اسکرپینگ به‌دلیل ادامهٔ موفقیت‌آمیز تا %d دقیقه تمدید شد.", current_timeout // 60)
+                    else:
+                        self.logger.warning("⏰ محدودیت زمانی %d ثانیه به پایان رسید. توقف.", current_timeout)
+                        break
             # اگر به limit رسیدیم، قطعاً پایان
             if len(all_items) >= self.limit:
                 break
