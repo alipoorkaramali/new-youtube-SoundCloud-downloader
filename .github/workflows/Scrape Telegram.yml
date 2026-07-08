@@ -203,7 +203,8 @@ jobs:
                   c['start_link'] = start_link
               else:
                   c.pop('start_link', None)
-              c['scroll_direction'] = '${{ github.event.inputs.scroll_direction }}' or 'up'
+              scroll_dir = '${{ github.event.inputs.scroll_direction }}'.strip()
+              c['scroll_direction'] = scroll_dir if scroll_dir else 'up'
           
           # 🖼️ save_screenshots: ذخیره اسکرین‌شات‌ها
           save_screenshots_val = '${{ github.event.inputs.save_screenshots }}'.lower() == 'true'
