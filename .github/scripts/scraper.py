@@ -605,34 +605,29 @@ class TelegramChannelScraper:
             await self._save_screenshot(page, "initial")
 
         # ─── پرش به پایین (فقط در حالت عادی و بدون resume) ────
-        # هماهنگی با debug_scraper: اگر debug_mode فعال و scroll_direction == 'up' باشد، پرش انجام نمی‌شود
         if not self.start_link and not self._resume_loaded:
-            # از self.debug_mode و self.scroll_direction استفاده می‌کنیم
-            if not self.debug_mode or self.scroll_direction == 'down':
-                self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
-                clicked = False
-                scroll_button_selectors = [
-                    'button[title="Go to bottom"]',
-                    'div[class*="scroll-to-bottom"]',
-                    'div[class*="ScrollButton"]',
-                    '[aria-label="Scroll to bottom"]',
-                    'button:has(svg[class*="arrow-down"])',
-                ]
-                for sel in scroll_button_selectors:
-                    try:
-                        btn = page.locator(sel).first
-                        if await btn.count() > 0:
-                            await btn.click(timeout=5000)
-                            self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
-                            clicked = True
-                            await human_sleep(3.5, 0.4)
-                            break
-                    except Exception:
-                        continue
-                if not clicked:
-                    self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
-            else:
-                self.logger.info(f"🔄 حالت Debug با جهت '{self.scroll_direction}' → پرش به پایین غیرفعال شد.")
+            self.logger.info("⬇️ تلاش برای پرش به جدیدترین پست‌ها...")
+            clicked = False
+            scroll_button_selectors = [
+                'button[title="Go to bottom"]',
+                'div[class*="scroll-to-bottom"]',
+                'div[class*="ScrollButton"]',
+                '[aria-label="Scroll to bottom"]',
+                'button:has(svg[class*="arrow-down"])',
+            ]
+            for sel in scroll_button_selectors:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.count() > 0:
+                        await btn.click(timeout=5000)
+                        self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                        clicked = True
+                        await human_sleep(3.5, 0.4)
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
         elif self.start_link:
             self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.")
         else:
