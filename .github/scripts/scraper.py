@@ -701,12 +701,11 @@ class TelegramChannelScraper:
                         date_el = msg.locator('time, .date, [class*="date"], [datetime]').first
                         has_date = await date_el.count() > 0
                         has_caption = False
-                        has_caption = False
                         if not has_date:
                             # DEBUG: لاگ HTML پیام برای پیدا کردن تگ دقیق تاریخ
                             try:
                                 html_snippet = (await msg.evaluate("el => el.outerHTML")).strip()[:500]
-                                self.logger.debug(f"⚠️ تاریخ پیدا نشد. HTML پیام: {html_snippet}")
+                                self.logger.info(f"⚠️ تاریخ پیدا نشد. HTML پیام: {html_snippet}")
                             except:
                                 pass
                             try:
