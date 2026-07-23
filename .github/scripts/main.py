@@ -103,6 +103,9 @@ async def main():
 
     # ─── اجرا با تایم‌اوت (خارج از بلوک شرطی) ──────────
     timeout = getattr(config, 'timeout_seconds', 2100)
+    if timeout <= 0:
+        logger.warning(f"⚠️ مقدار timeout_seconds در config ({timeout}) نامعتبر است. استفاده از مقدار پیش‌فرض: 2100 ثانیه")
+        timeout = 2100
     try:
         await asyncio.wait_for(scraper.run(), timeout=timeout)
     except asyncio.TimeoutError:
