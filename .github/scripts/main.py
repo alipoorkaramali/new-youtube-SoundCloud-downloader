@@ -92,14 +92,14 @@ async def main():
     # ─── انتخاب اسکرپر مناسب ────────────────────────────
     logger = logging.getLogger("Main")
     
-    if config.debug_mode and DebugTelegramChannelScraper is not None:
-        logger.info("🐞 حالت دیباگ فعال است – استفاده از DebugTelegramChannelScraper")
-        scraper = DebugTelegramChannelScraper(config, debug_screenshots=True)
-    elif config.debug_mode and DebugTelegramChannelScraper is None:
-        logger.warning("⚠️ فایل debug_scraper.py یافت نشد. استفاده از اسکرپر معمولی.")
-        scraper = TelegramChannelScraper(config)
-    else:
-        scraper = TelegramChannelScraper(config)
+if getattr(config, 'debug_mode', False) and DebugTelegramChannelScraper is not None:
+    logger.info("🐞 حالت دیباگ فعال است – استفاده از DebugTelegramChannelScraper")
+    scraper = DebugTelegramChannelScraper(config, debug_screenshots=True)
+elif getattr(config, 'debug_mode', False) and DebugTelegramChannelScraper is None:
+    logger.warning("⚠️ فایل debug_scraper.py یافت نشد. استفاده از اسکرپر معمولی.")
+    scraper = TelegramChannelScraper(config)
+else:
+    scraper = TelegramChannelScraper(config)
 
     # ─── اجرا با تایم‌اوت ──────────────────────────────
     timeout = getattr(config, 'timeout_seconds', 2100)
