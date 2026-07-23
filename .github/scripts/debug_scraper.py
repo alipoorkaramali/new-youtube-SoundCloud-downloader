@@ -40,6 +40,8 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
 
         self.debug_screenshots = debug_screenshots
         self.debug_screenshots_dir.mkdir(parents=True, exist_ok=True)
+        # ★★★ اضافه کردن لیست ریپلای‌ها برای هماهنگی با والد ★★★
+        self._reply_posts = []
 
         # جهت اسکرول را از config بگیریم
         self.scroll_direction = getattr(config, 'scroll_direction', 'up').lower()
@@ -237,7 +239,33 @@ class DebugTelegramChannelScraper(TelegramChannelScraper):
             if not items:
                 self.logger.info("ℹ️ پست جدیدی در این دور پیدا نشد. پایان.")
                 break
-
+            # ★★★ فیلتر کردن ریپلای‌ها (هماهنگ با والد) ★★★
+            filtered_items = []
+            for item in items:
+                msg_id = item['id']
+                try:
+                    # پیدا کردن المان پست در صفحه
+                    msg_locator = page.locator(f'[data-message-id="{msg_id}"]').first
+                    # بررسی وجود کلاس EmbeddedMessage (نشان‌دهنده ریپلای)
+                    is_reply = await msg_locator.locator('.EmbeddedMessage').count() > 0
+                    if is_reply:
+                        self._reply_posts.append({
+                            'id': msg_id,
+                            'text': item.get('text', ''),
+                            'date': item.get('date', ''),
+                            'url': f"https://t.me/{self.channel}/{msg_id}"
+                        })
+                        self.logger.info(f"🔁 پست {msg_id} یک ریپلای است (نادیده گرفته شد)")
+                    else:
+                        filtered_items.append(item)
+                except Exception as e:
+                    # در صورت خطا، فرض می‌کنیم ریپلای نیست و نگه می‌داریم
+                    self.logger.debug(f"   ⚠️ خطا در بررسی ریپلای پست {msg_id}: {e}")
+                    filtered_items.append(item)
+            
+            # جایگزین کردن items با filtered_items
+            items = filtered_items
+            
             # ─── دیباگ دانلود نمی‌کند، ولی برای هماهنگی ساختار نگه می‌داریم ───
             # اضافه کردن پست‌های جدید به مجموعه‌ی کلی
             new_items_count = 0
