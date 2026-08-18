@@ -1,5 +1,13 @@
+# ================================================================
+# 🎬🎵⚙️🔐 NEW2-auto-Multi-Platform Downloader
+# YouTube + SoundCloud + MP3 + Duplicate Checker + Auto Cleanup
+# ================================================================
+
 name: 🎬🎵⚙️🔐 NEW2-auto-Multi-Platform Downloader (YouTube + SoundCloud + Split to ZIP)
 
+# ================================================================
+# رویدادهای اجرای Workflow
+# ================================================================
 on:
   workflow_dispatch:
     inputs:
@@ -11,9 +19,11 @@ on:
         options:
           - 'youtube'
           - 'soundcloud'
+
       url:
         description: '🔗 لینک ویدئو / آهنگ'
         required: true
+
       format:
         description: '🎬 خروجی (فقط صوت)'
         required: true
@@ -21,10 +31,12 @@ on:
         type: choice
         options:
           - 'audio'
+
       folder:
         description: '📁 پوشهٔ ذخیره'
         required: false
         default: 'downloads'
+
       keyword:
         description: '🔑 کلیدواژه (برای تشخیص تکراری)'
         required: false
@@ -33,32 +45,55 @@ on:
   repository_dispatch:
     types: [trigger-download]
 
+# ================================================================
+# جلوگیری از اجرای همزمان چند Workflow روی main
+# ================================================================
 concurrency:
   group: main-branch
   cancel-in-progress: false
 
+# ================================================================
+# JOB اصلی
+# ================================================================
 jobs:
   download:
     runs-on: ubuntu-latest
+
+    # جلوگیری از Kill شدن Workflow در دانلودهای طولانی
+    timeout-minutes: 120
+
     permissions:
       contents: write
+
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
+
+      # ============================================================
+      # مرحله 1: دریافت فایل‌های مخزن
+      # ============================================================
       - name: 📥 دریافت فایل‌های مخزن
         uses: actions/checkout@v4
         with:
           ref: main
 
-      # ============= رمزگشایی فایل کوکی =============
+      # ============================================================
+      # مرحله 2: رمزگشایی فایل کوکی
+      # ============================================================
       - name: 🔐 رمزگشایی فایل cookies.txt.gpg
         run: |
           if [ ! -f "config/cookies.txt.gpg" ]; then
             echo "❌ خطا: فایل config/cookies.txt.gpg در مخزن یافت نشد!"
             exit 1
           fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/cookies.txt.gpg > cookies.txt
+
+          gpg \
+            --batch \
+            --yes \
+            --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
+            --decrypt config/cookies.txt.gpg > cookies.txt
+
           if [ -s cookies.txt ]; then
             echo "✅ فایل cookies.txt با موفقیت رمزگشایی شد."
           else
@@ -66,207 +101,663 @@ jobs:
             exit 1
           fi
 
-      # ============= نصب yt-dlp و ffmpeg =============
-      - name: ⚙️ نصب yt‑dlp و ffmpeg (با کش خودکار)
+      # ============================================================
+      # مرحله 3: دریافت آخرین نسخه ffmpeg
+      # ============================================================
+      - name: 🔍 دریافت آخرین نسخه ffmpeg
+        id: get-ffmpeg-version
+        run: |
+          sudo apt-get update
+
+          VERSION=$(apt-cache show ffmpeg | grep '^Version:' | head -1 | awk '{print $2}')
+
+          if [ -z "$VERSION" ]; then
+            echo "❌ نسخه ffmpeg پیدا نشد!"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          echo "✅ آخرین نسخه موجود:"
+          echo "$VERSION"
+
+      # ============================================================
+      # مرحله 4: کش ffmpeg
+      # ============================================================
+      - name: 💾 Cache ffmpeg binary
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: /usr/bin/ffmpeg
+          key: ${{ runner.os }}-ffmpeg-${{ env.VERSION }}
+
+      # ============================================================
+      # مرحله 5: نصب ffmpeg در صورت نیاز
+      # ============================================================
+      - name: 📦 نصب ffmpeg در صورت نیاز
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+          ffmpeg -version
+
+          echo "✅ ffmpeg نصب شد."
+
+      # ============================================================
+      # مرحله 6: نصب yt-dlp
+      #
+      # nightly برای مقابله با تغییرات جدید YouTube
+      # ffmpeg جداگانه نصب شده است
+      # ============================================================
+      - name: ⚙️ نصب yt-dlp (Nightly) + aria2
         uses: AnimMouse/setup-yt-dlp@v3
         with:
           ejs-node: true
           aria2: true
-          ffmpeg: true
+          ffmpeg: false
+          nightly: true
 
-      # ============= تعیین پارامترها =============
+      # ============================================================
+      # مرحله 7: به‌روزرسانی yt-dlp
+      # ============================================================
+      - name: 🔄 به‌روزرسانی yt-dlp
+        run: |
+          python3 -m pip install --upgrade yt-dlp
+
+          echo "======================================"
+          echo "yt-dlp version:"
+          yt-dlp --version
+          echo "======================================"
+
+      # ============================================================
+      # مرحله 8: نصب PO Token Provider
+      #
+      # این قسمت برای مقابله با محدودیت‌های جدید YouTube
+      # مخصوصاً خطای:
+      #
+      # Only images are available for download
+      #
+      # اضافه شده است.
+      # ============================================================
+      - name: 📦 نصب PO Token Plugin
+        run: |
+          python3 -m pip install --upgrade bgutil-ytdlp-pot-provider
+
+          echo "======================================"
+          echo "PO Token Provider نصب شد."
+          echo "======================================"
+
+      # ============================================================
+      # مرحله 9: تنظیم متغیرها بر اساس نوع Event
+      # ============================================================
       - name: 🛠️ تنظیم متغیرها بر اساس نوع رویداد
         id: vars
         run: |
-          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+
+            echo "📡 Event: repository_dispatch"
+
             echo "platform=${{ github.event.client_payload.platform }}" >> $GITHUB_OUTPUT
+
             echo "url=${{ github.event.client_payload.url }}" >> $GITHUB_OUTPUT
+
             echo "folder=${{ github.event.client_payload.mega_folder || 'YoutubeDownloads' }}" >> $GITHUB_OUTPUT
+
             echo "format=audio" >> $GITHUB_OUTPUT
-            echo "keyword=${{ github.event.client_payload.keyword }}" >> $GITHUB_OUTPUT
+
+            echo "keyword=${{ github.event.client_payload.keyword || '' }}" >> $GITHUB_OUTPUT
+
           else
+
+            echo "🖐️ Event: workflow_dispatch"
+
             echo "platform=${{ github.event.inputs.platform }}" >> $GITHUB_OUTPUT
+
             echo "url=${{ github.event.inputs.url }}" >> $GITHUB_OUTPUT
+
             echo "folder=${{ github.event.inputs.folder || 'downloads' }}" >> $GITHUB_OUTPUT
-            echo "format=${{ github.event.inputs.format }}" >> $GITHUB_OUTPUT
+
+            echo "format=${{ github.event.inputs.format || 'audio' }}" >> $GITHUB_OUTPUT
+
             echo "keyword=${{ github.event.inputs.keyword || '' }}" >> $GITHUB_OUTPUT
+
           fi
 
-      # ============= بررسی تکراری بودن =============
+          echo ""
+          echo "======================================"
+          echo "Platform:"
+          echo "${{ github.event_name }}"
+          echo ""
+          echo "URL:"
+          echo "${{ github.event.client_payload.url || github.event.inputs.url }}"
+          echo ""
+          echo "Folder:"
+          echo "${{ github.event.client_payload.mega_folder || github.event.inputs.folder || 'downloads' }}"
+          echo "======================================"
+
+      # ============================================================
+      # مرحله 10: بررسی تکراری بودن
+      # ============================================================
       - name: 🧐 بررسی تکراری بودن و اولویت ساندکلاد
         id: check
         run: |
           python .github/scripts/duplicate_checker.py
+
         env:
           INPUT_KEYWORD: ${{ steps.vars.outputs.keyword }}
           INPUT_PLATFORM: ${{ steps.vars.outputs.platform }}
           INPUT_URL: ${{ steps.vars.outputs.url }}
 
-      - name: 🧹 پاکسازی پوشهٔ دانلود (فقط برای دانلودهای دستی)
-        if: github.event_name != 'repository_dispatch' && steps.check.outputs.duplicate == 'false'
-        run: rm -rf "Download/${{ steps.vars.outputs.folder }}"/*
+      # ============================================================
+      # مرحله 11: نمایش نتیجه Duplicate Checker
+      # ============================================================
+      - name: 🐞 نمایش نتیجه duplicate checker
+        run: |
+          echo "======================================"
+          echo "duplicate = '${{ steps.check.outputs.duplicate }}'"
+          echo "platform  = '${{ steps.vars.outputs.platform }}'"
+          echo "format    = '${{ steps.vars.outputs.format }}'"
+          echo "folder    = '${{ steps.vars.outputs.folder }}'"
+          echo "======================================"
 
+      # ============================================================
+      # مرحله 12: پاکسازی پوشه دانلود
+      # فقط برای دانلودهای دستی
+      # ============================================================
+      - name: 🧹 پاکسازی پوشهٔ دانلود
+        if: github.event_name != 'repository_dispatch' && steps.check.outputs.duplicate == 'false'
+        run: |
+          rm -rf "Download/${{ steps.vars.outputs.folder }}"/* 2>/dev/null || true
+
+          mkdir -p "Download/${{ steps.vars.outputs.folder }}"
+
+          echo "✅ پوشه دانلود آماده شد."
+
+      # ============================================================
+      # مرحله 13: YouTube Audio → MP3
+      #
+      # نسخه بهبودیافته برای مشکل جدید YouTube
+      #
+      # نکات مهم:
+      # --no-check-formats
+      # player clients متعدد
+      # skip webpage / age gate
+      # retry بالا
+      # fragment retry بالا
+      # PO Token Provider
+      # انتخاب عمومی bestaudio/best
+      #
+      # خروجی نهایی فقط MP3 است.
+      # ============================================================
       - name: ▶️ یوتیوب | دانلود صوت (MP3)
         if: steps.vars.outputs.platform == 'youtube' && steps.check.outputs.duplicate == 'false'
         run: |
+
           DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
+
           mkdir -p "$DOWNLOAD_DIR"
-          yt-dlp -f "bestaudio[ext=m4a]/bestaudio/best" \
-            --audio-format mp3 \
-            --audio-quality 0 \
-            --cookies cookies.txt \
-            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+
+          echo "=============================================="
+          echo "🎵 شروع دانلود YouTube"
+          echo "📁 مسیر: $DOWNLOAD_DIR"
+          echo "🔗 URL: ${{ steps.vars.outputs.url }}"
+          echo "=============================================="
+
+          COMMON_OPTS="--cookies cookies.txt \
+            --no-check-formats \
+            --extractor-args youtube:player_client=web,android,ios,web_embedded \
+            --extractor-args youtube:skip=webpage,age_gate \
+            --extractor-retries 10 \
+            --retries 30 \
+            --fragment-retries 30 \
             --sleep-interval 5 \
             --max-sleep-interval 15 \
             --sleep-requests 2 \
-            --force-overwrites \
+            --no-warnings \
             --no-playlist \
+            --compat-options no-external-downloader-progress \
+            --concurrent-fragments 4 \
+            --force-overwrites"
+
+          echo ""
+          echo "🔧 گزینه‌های yt-dlp:"
+          echo "$COMMON_OPTS"
+
+          echo ""
+          echo "🎵 شروع استخراج صوت..."
+
+          yt-dlp $COMMON_OPTS \
+            -f "bestaudio/best" \
+            -x \
+            --audio-format mp3 \
+            --audio-quality 0 \
             "${{ steps.vars.outputs.url }}" \
             -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
+          echo ""
+          echo "=============================================="
+          echo "📂 فایل‌های ایجاد شده:"
+          ls -lah "$DOWNLOAD_DIR"
+          echo "=============================================="
+
+          DOWNLOADED_COUNT=$(find "$DOWNLOAD_DIR" -type f | wc -l)
+
+          if [ "$DOWNLOADED_COUNT" -eq 0 ]; then
+            echo "❌ هیچ فایل صوتی دانلود نشد!"
+            exit 1
+          fi
+
+          echo "✅ دانلود YouTube با موفقیت انجام شد."
+          echo "📊 تعداد فایل‌ها: $DOWNLOADED_COUNT"
+
+      # ============================================================
+      # مرحله 14: SoundCloud Audio → MP3
+      # ============================================================
       - name: ☁️ ساندکلاد | دانلود صوت (MP3)
         if: steps.vars.outputs.platform == 'soundcloud' && steps.check.outputs.duplicate == 'false'
         run: |
+
           DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
+
           mkdir -p "$DOWNLOAD_DIR"
-          yt-dlp -x --audio-format mp3 --audio-quality 0 \
+
+          echo "=============================================="
+          echo "🎵 شروع دانلود SoundCloud"
+          echo "📁 مسیر: $DOWNLOAD_DIR"
+          echo "🔗 URL: ${{ steps.vars.outputs.url }}"
+          echo "=============================================="
+
+          yt-dlp \
+            -x \
+            --audio-format mp3 \
+            --audio-quality 0 \
             --no-playlist \
             --force-ipv4 \
             --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
             --sleep-interval 5 \
             --max-sleep-interval 15 \
             --sleep-requests 2 \
+            --extractor-retries 10 \
+            --retries 30 \
+            --fragment-retries 30 \
+            --force-overwrites \
             "${{ steps.vars.outputs.url }}" \
             -o "$DOWNLOAD_DIR/%(title)s.%(ext)s"
 
+          echo ""
+          echo "=============================================="
+          echo "📂 فایل‌های ایجاد شده:"
+          ls -lah "$DOWNLOAD_DIR"
+          echo "=============================================="
+
+          DOWNLOADED_COUNT=$(find "$DOWNLOAD_DIR" -type f | wc -l)
+
+          if [ "$DOWNLOADED_COUNT" -eq 0 ]; then
+            echo "❌ هیچ فایل صوتی دانلود نشد!"
+            exit 1
+          fi
+
+          echo "✅ دانلود SoundCloud با موفقیت انجام شد."
+          echo "📊 تعداد فایل‌ها: $DOWNLOADED_COUNT"
+
+      # ============================================================
+      # مرحله 15: تقسیم فایل‌ها به ZIP
+      #
+      # در نسخه فعلی غیرفعال است چون خروجی فقط صوت است.
+      # ============================================================
       - name: ✂️ تبدیل فایل‌های بزرگ به ZIP (غیرفعال)
         if: false
-        run: echo "نیازی به تقسیم فایل صوتی نیست"
+        run: |
+          echo "ℹ️ تقسیم فایل صوتی در این Workflow غیرفعال است."
+          echo "ℹ️ خروجی فقط MP3 است."
 
+      # ============================================================
+      # مرحله 16: ثبت زمان آپلود
+      # ============================================================
       - name: 🕒 ثبت زمان آپلود فایل‌های جدید
         if: steps.check.outputs.duplicate == 'false'
-        run: python .github/scripts/record_upload_time.py "Download/${{ steps.vars.outputs.folder }}"
+        run: |
+          python .github/scripts/record_upload_time.py \
+            "Download/${{ steps.vars.outputs.folder }}"
+
+      # ============================================================
+      # مرحله 17: بررسی نتیجه دانلود
+      # ============================================================
+      - name: 🔍 بررسی فایل‌های نهایی
+        if: steps.check.outputs.duplicate == 'false'
+        run: |
+
+          DOWNLOAD_DIR="Download/${{ steps.vars.outputs.folder }}"
+
+          echo "=============================================="
+          echo "📂 بررسی فایل‌های نهایی"
+          echo "=============================================="
+
+          if [ ! -d "$DOWNLOAD_DIR" ]; then
+            echo "❌ پوشه دانلود وجود ندارد!"
+            exit 1
+          fi
+
+          ls -lah "$DOWNLOAD_DIR"
+
+          FILE_COUNT=$(find "$DOWNLOAD_DIR" -type f | wc -l)
+
+          echo ""
+          echo "📊 تعداد فایل‌ها: $FILE_COUNT"
+
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "❌ هیچ فایل نهایی وجود ندارد!"
+            exit 1
+          fi
+
+          echo ""
+          echo "🎵 فایل‌های MP3:"
+          find "$DOWNLOAD_DIR" -type f -iname "*.mp3" -print
+
+          MP3_COUNT=$(find "$DOWNLOAD_DIR" -type f -iname "*.mp3" | wc -l)
+
+          if [ "$MP3_COUNT" -eq 0 ]; then
+            echo "⚠️ فایل MP3 پیدا نشد."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ $MP3_COUNT فایل MP3 آماده است."
+
+      # ============================================================
+      # مرحله 18: نمایش مقدار duplicate
+      # ============================================================
       - name: 🐞 نمایش مقدار duplicate
         run: |
-         echo "duplicate = '${{ steps.check.outputs.duplicate }}'"
-         echo "length = ${#duplicate}"
-      # ================= ثبت فایل‌ها در مخزن =================
+          echo "duplicate = '${{ steps.check.outputs.duplicate }}'"
+
+      # ============================================================
+      # مرحله 19: ثبت فایل‌ها در مخزن
+      # با retry و حل conflict
+      # ============================================================
       - name: 🚀 ثبت فایل‌ها در مخزن (با retry و حل کانفلیکت)
         if: steps.check.outputs.duplicate == 'false'
         run: |
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-    
+
           MAX_RETRIES=5
           RETRY_DELAY=10
-    
+
           for ((i=1; i<=MAX_RETRIES; i++)); do
+
+            echo "=============================================="
             echo "🔄 تلاش $i از $MAX_RETRIES برای commit و push..."
-      
+            echo "=============================================="
+
             git fetch origin main
+
             git pull --rebase origin main || {
+
               echo "⚠️ rebase failed, trying merge"
+
               git pull --no-ff origin main -X theirs --no-edit || {
+
                 echo "❌ خطا در merge"
+
                 exit 1
               }
             }
-      
+
+            # --------------------------------------------------------
+            # حل Conflict فایل‌های upload_times
+            # --------------------------------------------------------
             if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
-              echo "⚠️ کانفلیکت در فایل رکورد زمان. ادغام خطوط..."
+
+              echo "⚠️ کانفلیکت در فایل رکورد زمان."
+
+              echo "🔧 در حال ادغام خطوط..."
+
               for f in State/upload_times_*.txt; do
+
                 if [ -f "$f" ]; then
+
                   git show :1:"$f" > "$f.base" 2>/dev/null || true
+
                   git show :2:"$f" > "$f.local" 2>/dev/null || true
+
                   git show :3:"$f" > "$f.remote" 2>/dev/null || true
-                  cat "$f.local" "$f.remote" 2>/dev/null | sort -u > "$f.merged"
+
+                  cat "$f.local" "$f.remote" 2>/dev/null \
+                    | sort -u > "$f.merged"
+
                   mv "$f.merged" "$f"
-                  rm -f "$f.base" "$f.local" "$f.remote"
+
+                  rm -f \
+                    "$f.base" \
+                    "$f.local" \
+                    "$f.remote"
+
                   git add "$f"
+
                 fi
+
               done
+
             fi
-      
-            git add "Download/${{ steps.vars.outputs.folder }}" State/upload_times_*.txt || true
-      
+
+            # --------------------------------------------------------
+            # Add فایل‌ها
+            # --------------------------------------------------------
+            git add \
+              "Download/${{ steps.vars.outputs.folder }}" \
+              State/upload_times_*.txt || true
+
+            # --------------------------------------------------------
+            # بررسی تغییرات
+            # --------------------------------------------------------
             if git diff --staged --quiet; then
+
               echo "ℹ️ هیچ فایل جدیدی برای commit وجود ندارد."
+
               exit 0
+
             fi
-      
-            git commit -m "افزودن فایل از ${{ steps.vars.outputs.platform }}"
-      
+
+            # --------------------------------------------------------
+            # Commit
+            # --------------------------------------------------------
+            git commit \
+              -m "افزودن فایل از ${{ steps.vars.outputs.platform }}"
+
+            # --------------------------------------------------------
+            # Push
+            # --------------------------------------------------------
             if git push origin main; then
-              echo "✅ پوش با موفقیت انجام شد."
+
+              echo "✅ Push با موفقیت انجام شد."
+
               exit 0
+
             else
-              echo "⚠️ تداخل در push. ${RETRY_DELAY} ثانیه صبر می‌شود..."
-              sleep $RETRY_DELAY
+
+              echo "⚠️ تداخل در push."
+
+              echo "⏳ ${RETRY_DELAY} ثانیه صبر می‌شود..."
+
+              sleep "$RETRY_DELAY"
+
             fi
+
           done
-    
-          echo "❌ پس از $MAX_RETRIES تلاش، پوش ناموفق بود."
+
+          echo "❌ پس از $MAX_RETRIES تلاش، push ناموفق بود."
+
           exit 1
 
+      # ============================================================
+      # مرحله 20: پاکسازی فایل‌های صوتی قدیمی
+      # بیشتر از 24 ساعت
+      # ============================================================
       - name: 🧹 پاکسازی فایل‌های صوتی کهنه (بیش از ۲۴ ساعت)
         if: steps.check.outputs.duplicate == 'false'
-        run: python .github/scripts/cleanup_audio.py "Download/${{ steps.vars.outputs.folder }}"
+        run: |
 
-      # ================= مرحله پاکسازی =================
+          python .github/scripts/cleanup_audio.py \
+            "Download/${{ steps.vars.outputs.folder }}"
+
+      # ============================================================
+      # مرحله 21: ذخیره تغییرات حاصل از Cleanup
+      # ============================================================
       - name: 📌 ذخیره‌سازی حذف‌ها (در صورت وجود)
         if: steps.check.outputs.duplicate == 'false'
         run: |
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           MAX_RETRIES=5
           RETRY_DELAY=10
-          
+
           for ((i=1; i<=MAX_RETRIES; i++)); do
+
+            echo "=============================================="
             echo "🔄 تلاش $i برای commit پاکسازی..."
+            echo "=============================================="
+
             git fetch origin main
+
             git pull --rebase origin main || {
+
               echo "⚠️ rebase failed, trying merge"
+
               git pull --no-ff origin main -X theirs --no-edit
+
             }
-            
+
+            # --------------------------------------------------------
+            # حل conflict
+            # --------------------------------------------------------
             if git status --porcelain | grep -E '^UU.*State/upload_times_'; then
-              echo "⚠️ کانفلیکت در فایل رکورد زمان. ادغام خطوط..."
+
+              echo "⚠️ کانفلیکت در فایل رکورد زمان."
+
+              echo "🔧 در حال ادغام خطوط..."
+
               for f in State/upload_times_*.txt; do
+
                 if [ -f "$f" ]; then
+
                   git show :2:"$f" > "$f.local" 2>/dev/null || true
+
                   git show :3:"$f" > "$f.remote" 2>/dev/null || true
-                  cat "$f.local" "$f.remote" 2>/dev/null | sort -u > "$f.merged"
+
+                  cat "$f.local" "$f.remote" 2>/dev/null \
+                    | sort -u > "$f.merged"
+
                   mv "$f.merged" "$f"
-                  rm -f "$f.local" "$f.remote"
+
+                  rm -f \
+                    "$f.local" \
+                    "$f.remote"
+
                   git add "$f"
+
                 fi
+
               done
+
             fi
-            
+
+            # --------------------------------------------------------
+            # Add تمام تغییرات
+            # --------------------------------------------------------
             git add -A
+
+            # --------------------------------------------------------
+            # بررسی تغییرات
+            # --------------------------------------------------------
             if git diff --staged --quiet; then
+
               echo "ℹ️ هیچ تغییر جدیدی برای commit وجود ندارد."
+
               exit 0
+
             fi
-            git commit -m "پاکسازی فایل‌های صوتی قدیمی (>24h)"
+
+            # --------------------------------------------------------
+            # Commit
+            # --------------------------------------------------------
+            git commit \
+              -m "پاکسازی فایل‌های صوتی قدیمی (>24h)"
+
+            # --------------------------------------------------------
+            # Push
+            # --------------------------------------------------------
             if git push origin main; then
-              echo "✅ پوش پاکسازی موفق بود."
+
+              echo "✅ Push پاکسازی موفق بود."
+
               exit 0
+
             else
-              echo "⚠️ تداخل در push پاکسازی. ${RETRY_DELAY} ثانیه صبر می‌شود..."
-              sleep $RETRY_DELAY
+
+              echo "⚠️ تداخل در push پاکسازی."
+
+              echo "⏳ ${RETRY_DELAY} ثانیه صبر می‌شود..."
+
+              sleep "$RETRY_DELAY"
+
             fi
+
           done
-          echo "❌ پس از تلاش مجدد، پوش پاکسازی ناموفق بود."
+
+          echo "❌ پس از تلاش مجدد، push پاکسازی ناموفق بود."
+
           exit 1
 
-      # ================= ثبت آیتم جدید =================
+      # ============================================================
+      # مرحله 22: ثبت آیتم جدید در لیست دانلود شده‌ها
+      # ============================================================
       - name: 📝 ثبت آیتم جدید در لیست دانلود شده‌ها
         if: steps.check.outputs.duplicate == 'false'
         run: |
+
           python .github/scripts/add_downloaded_item.py
+
         env:
           INPUT_KEYWORD: ${{ steps.vars.outputs.keyword }}
           INPUT_PLATFORM: ${{ steps.vars.outputs.platform }}
           INPUT_URL: ${{ steps.vars.outputs.url }}
+
+      # ============================================================
+      # مرحله 23: نمایش نهایی وضعیت Workflow
+      # ============================================================
+      - name: 🎉 گزارش نهایی
+        if: always()
+        run: |
+
+          echo ""
+          echo "=================================================="
+          echo "🎬🎵 گزارش نهایی Workflow"
+          echo "=================================================="
+
+          echo "🌐 Platform:"
+          echo "${{ steps.vars.outputs.platform }}"
+
+          echo ""
+          echo "🔗 URL:"
+          echo "${{ steps.vars.outputs.url }}"
+
+          echo ""
+          echo "🎵 Format:"
+          echo "MP3 / Audio Only"
+
+          echo ""
+          echo "📁 Folder:"
+          echo "${{ steps.vars.outputs.folder }}"
+
+          echo ""
+          echo "🔍 Duplicate:"
+          echo "${{ steps.check.outputs.duplicate }}"
+
+          echo ""
+          echo "=================================================="
