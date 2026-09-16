@@ -1,97 +1,62 @@
 # اتصال به cron-job.org
 
-این ورک‌فلو علاوه بر `schedule` داخلی گیت‌هاب، با **`repository_dispatch`** از بیرون هم قابل تریگر است — مناسب برای [cron-job.org](https://console.cron-job.org/dashboard).
+## روش پیشنهادی: Import from cURL
 
-## چرا cron-job.org؟
+1. یک **GitHub PAT** بساز (دسترسی `repo` یا Actions + Contents همین مخزن).
+2. برو به https://console.cron-job.org/dashboard → **Create cronjob**.
+3. گزینه **Import from cURL** را بزن.
+4. این دستور را paste کن (فقط `YOUR_GITHUB_TOKEN` را عوض کن):
 
-- `schedule` گیت‌هاب فقط روی **default branch** اجرا می‌شود و گاهی تأخیر دارد.
-- با cron-job.org می‌توانی روی برنچ `test` (یا هر برنچ) و با زمان‌بندی دقیق‌تر تریگر بزنی.
-
-## پیش‌نیاز
-
-1. یک **Personal Access Token (classic)** یا fine-grained با دسترسی:
-   - `repo` (یا حداقل Contents + Actions برای این مخزن)
-2. توکن را فقط در cron-job.org ذخیره کن؛ داخل مخزن commit نکن.
-
-## ساخت Job در cron-job.org
-
-1. برو به: https://console.cron-job.org/dashboard  
-2. **Create cronjob**
-3. تنظیمات پیشنهادی:
-
-| فیلد | مقدار |
-|------|--------|
-| **Title** | `Telegram news hourly` |
-| **URL** | `https://api.github.com/repos/alipoorkaramali/new-youtube-SoundCloud-downloader/dispatches` |
-| **Schedule** | هر ۱ ساعت (مثلاً `0 * * * *`) |
-| **Request method** | `POST` |
-| **Request timeout** | 30s+ |
-
-4. **Request headers:**
-
-```
-Accept: application/vnd.github+json
-Authorization: Bearer YOUR_GITHUB_TOKEN
-Content-Type: application/json
-X-GitHub-Api-Version: 2022-11-28
+```bash
+curl -X POST "https://api.github.com/repos/alipoorkaramali/new-youtube-SoundCloud-downloader/dispatches" \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer YOUR_GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type":"telegram-news-hourly","client_payload":{"source":"cron-job.org"}}'
 ```
 
-5. **Request body:**
+همان فایل آماده: [`docs/cron-job-org-import.curl`](./cron-job-org-import.curl)
 
-```json
-{
-  "event_type": "telegram-news-hourly",
-  "client_payload": {
-    "source": "cron-job.org"
-  }
-}
-```
+5. بعد از import:
+   - **Title:** مثلاً `Telegram news hourly`
+   - **Schedule:** هر ۱ ساعت (`0 * * * *`)
+   - **Enable** کن و یک‌بار **Run now** بزن
 
-6. ذخیره و یک‌بار **Run now** برای تست.
+اگر پاسخ API برابر **204** بود، تریگر موفق است و باید run در تب Actions مخزن دیده شود.
 
-### انواع event پشتیبانی‌شده
+---
 
-- `telegram-news-hourly`
-- `telegram-news-scrape`
+## انواع event
 
-هر دو مثل اجرای ساعتی عمل می‌کنند: همه کانال‌های `channel_list`، حالت متنی، ذخیره در repository.
+| event_type | معنی |
+|------------|------|
+| `telegram-news-hourly` | اجرای ساعتی همه کانال‌های `channel_list` |
+| `telegram-news-scrape` | همان رفتار |
+
+هر دو: حالت متنی (بدون مدیا)، ذخیره در repository، ادامه از `last_post_id`.
+
+---
 
 ## افزودن کانال جدید
 
-### روش ۱ — فقط اضافه به لیست (بدون اسکرپ)
+### فقط اضافه به لیست (بدون اسکرپ)
 
-Actions → **Scrape Telegram & Save Archive** → Run workflow:
+Actions → **Scrape Telegram & Save Archive** → Run workflow  
+فیلد **`add_only_channels`:** مثلاً `manoto,voa,dw_persian`
 
-- فیلد **`add_only_channels`**: مثلاً `manoto,voa,dw_persian`
-- بقیه را رها کن
+### اسکرپ یک کانال جدید
 
-### روش ۲ — اسکرپ دستی یک کانال جدید
+فیلد **`channel`** را پر کن؛ اگر در لیست نبود خودکار اضافه می‌شود.
 
-- **`channel`**: نام کانال (بدون `@`)
-- اگر در لیست نبود **خودکار** به `State/telegram_news_state.json` اضافه می‌شود و اسکرپ شروع می‌شود.
+### ویرایش مستقیم
 
-### روش ۳ — ویرایش مستقیم state
+`State/telegram_news_state.json` → `channel_list`
 
-فایل: `State/telegram_news_state.json`
+---
 
-```json
-{
-  "channel_list": ["IranintlTv", "bbcpersian", "CHANNEL_NEW"],
-  "channels": {
-    "CHANNEL_NEW": { "last_post_id": "" }
-  }
-}
-```
+## نکات امنیتی
 
-## تست سریع با curl
-
-```bash
-curl -X POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer YOUR_GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  https://api.github.com/repos/alipoorkaramali/new-youtube-SoundCloud-downloader/dispatches \
-  -d '{"event_type":"telegram-news-hourly","client_payload":{"source":"manual-test"}}'
-```
-
-اگر پاسخ `204 No Content` بود، تریگر موفق بوده است.
+- توکن را فقط در cron-job.org بگذار؛ داخل git commit نکن.
+- اگر توکن لو رفت، فوراً revoke کن.
+- `schedule` داخلی گیت‌هاب فقط روی default branch کار می‌کند؛ cron-job.org برای تریگر پایدارتر است.
