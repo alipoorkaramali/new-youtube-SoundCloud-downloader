@@ -264,3 +264,60 @@
 2026-09-16 19:18:53,888 [INFO] ✅ تمام فایل‌های خروجی با موفقیت تولید شدند.
 2026-09-16 19:18:53,888 [INFO] 📊 تعداد نهایی پست‌ها: 50
 2026-09-16 19:18:54,103 [INFO] ✅ پایان دیباگ
+2026-09-16 19:51:00,938 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTv
+2026-09-16 19:51:00,938 [INFO] 🐞 حالت دیباگ: فعال
+2026-09-16 19:51:00,938 [INFO] 📌 Resume: غیرفعال
+2026-09-16 19:51:00,938 [INFO] 🧭 جهت اسکرول: down
+2026-09-16 19:51:00,939 [INFO] 🐞 debug screenshots: Download/telegram_downloads/IranintlTv/debug_screenshots
+2026-09-16 19:51:00,939 [INFO] 🐞 حالت دیباگ – بدون دانلود رسانه
+2026-09-16 19:51:00,939 [INFO] 🧭 جهت اسکرول: پایین (جدیدتر)
+2026-09-16 19:51:00,939 [INFO] 🚀 دیباگ با لینک: https://t.me/IranintlTv/357703 (limit=50)
+2026-09-16 19:51:00,939 [INFO] 🔄 تا 50 پست (هر دور از آخرین مرز → قبلی/بعدی)
+2026-09-16 19:51:00,939 [INFO] 📌 دور 1/15 | جمع‌شده 0/50
+2026-09-16 19:51:00,939 [INFO] 🐞 استخراج جهت=down start_link=True
+2026-09-16 19:51:06,255 [INFO] 🔗 تلاش برای رفتن به لینک: https://t.me/IranintlTv/357703
+2026-09-16 19:51:06,256 [INFO] 🎯 شناسه پیام هدف: 357703
+2026-09-16 19:51:07,580 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-09-16 19:51:12,397 [INFO] 🔍 لینک تایپ شد: https://t.me/IranintlTv/357703
+2026-09-16 19:51:12,407 [INFO] ⏳ منتظر نتایج جستجو...
+2026-09-16 19:51:29,065 [INFO] ✅ روی اولین نتیجه با سلکتور 'div[class*="message"] a' کلیک شد.
+2026-09-16 19:51:29,534 [INFO] ✅ صفحه پیام‌ها با موفقیت بارگذاری شد.
+2026-09-16 19:51:29,535 [INFO] ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.
+2026-09-16 19:51:29,535 [INFO] 🎯 پیدا کردن پیام هدف 357703...
+2026-09-16 19:51:33,468 [INFO] ✅ پیام هدف به بالای صفحه منتقل شد.
+2026-09-16 19:51:33,468 [INFO] 🎯 شروع جمع‌آوری از پیام هدف 357703
+2026-09-16 19:51:33,468 [INFO] ⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...
+2026-09-16 19:51:42,320 [INFO] ⚠️ ارتفاع صفحه پس از 3 اسکرول تغییر نکرد.
+2026-09-16 19:51:42,321 [INFO] 📌 به پایین صفحه رسیدیم. اسکرول متوقف می‌شود.
+2026-09-16 19:51:42,321 [INFO] 📊 29 پست جمع‌آوری شد.
+2026-09-16 19:51:42,321 [INFO] ⏭️ اسکرین‌شات‌ها غیرفعال هستند.
+2026-09-16 19:51:42,352 [INFO] 📥 29 پست | start_link=https://t.me/IranintlTv/357703 | scroll=down
+2026-09-16 19:51:42,429 [INFO] 📈 +29 | مجموع 29/50
+2026-09-16 19:51:42,430 [INFO] 📌 بالای صفحه – دور بعد
+2026-09-16 19:52:12,431 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://web.telegram.org/a/", waiting until "domcontentloaded"
+Traceback (most recent call last):
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 203, in run
+    await asyncio.wait_for(self._run_impl(), timeout=timeout)
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 222, in _run_impl
+    await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 9901, in goto
+    await self._impl_obj.goto(
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/playwright/_impl/_page.py", line 562, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/playwright/_impl/_frame.py", line 157, in goto
+    await self._channel.send(
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 76, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 632, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://web.telegram.org/a/", waiting until "domcontentloaded"
+
