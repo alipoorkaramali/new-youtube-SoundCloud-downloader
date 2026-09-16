@@ -1,392 +1,338 @@
 name: 🌀 Scrape Telegram & Save Archive
 
 on:
+  schedule:
+    - cron: '0 * * * *'
+  repository_dispatch:
+    types: [telegram-news-hourly, telegram-news-scrape]
   workflow_dispatch:
     inputs:
       channel:
-        description: 'نام کاربری کانال (برای مسیر خروجی، حتی اگر start_link دارید)'
-        required: true
-        default: 'bbcpersian'
+        description: 'نام کاربری کانال برای اسکرپ دستی'
+        required: false
+        default: 'IranintlTv'
+      add_only_channels:
+        description: 'فقط اضافه به لیست بدون اسکرپ — چند کانال با کاما'
+        required: false
+        default: ''
       channel_name:
-        description: 'نام نمایشی کانال (اختیاری، برای جستجوی دقیق‌تر)'
+        description: 'نام نمایشی کانال'
         required: false
         default: ''
       start_link:
-        description: 'لینک مستقیم به یک پست (اختیاری، مثال: https://t.me/example/123)'
+        description: 'لینک پست (دستی خالی = جدیدترین کانال سپس به قبلی‌ها)'
         required: false
         default: ''
       scroll_direction:
-        description: 'جهت اسکرول (اگر resume فعال باشد، این گزینه نادیده گرفته می‌شود و روی up تنظیم می‌گردد)'
+        description: 'جهت اسکرول (دستی پیش‌فرض up = آخرین→قبلی)'
         required: false
         default: 'up'
         type: choice
-        options:
-          - 'up'
-          - 'down'
+        options: ['up', 'down']
       limit:
         description: 'تعداد پست‌ها'
         required: false
-        default: '35'
+        default: '50'
       max_media_mb:
         description: 'حداکثر حجم رسانه (MB)'
         required: false
         default: '80'
       debug_mode:
-        description: 'حالت اسکریپ بدون دانلود مدیا (فقط استخراج پست‌ها)'
+        description: 'بدون دانلود مدیا'
         type: boolean
         required: false
-        default: false
+        default: true
       resume:
-        description: 'ادامه از آخرین پست (اگر فعال باشد، start_link نادیده گرفته می‌شود و جهت اسکرول خودکار روی up تنظیم می‌گردد)'
+        description: 'ادامه از resume_state'
         type: boolean
         required: false
         default: false
       save_screenshots:
-        description: 'ذخیره اسکرین‌شات‌ها (غیرفعال کردن آن سرعت را تا ۳۰٪ افزایش می‌دهد و حجم خروجی را بسیار کاهش می‌دهد)'
+        description: 'ذخیره اسکرین‌شات'
         type: boolean
         required: false
         default: false
       save_to:
-        description: 'محل ذخیره‌سازی خروجی‌ها (در صورت انتخاب دستی، override می‌شود)'
+        description: 'محل ذخیره'
         required: true
         type: choice
-        default: 'artifact'
-        options:
-          - 'artifact'
-          - 'repository'
+        default: 'repository'
+        options: ['artifact', 'repository']
       timeout_seconds:
-        description: 'حداکثر زمان اجرا به ثانیه (۰ = استفاده از پیش‌فرض کد)'
+        description: 'تایم‌اوت ثانیه'
         required: false
         default: '0'
       auto_extend_timeout:
-        description: 'تمدید خودکار زمان در صورت ادامهٔ موفق اسکرپینگ'
+        description: 'تمدید خودکار زمان'
         type: boolean
         required: false
-        default: true      
+        default: true
       max_scroll_attempts:
-        description: 'حداکثر تعداد تلاش‌های اسکرول ناموفق (پیشرفته)'
+        description: 'حداکثر تلاش اسکرول'
         required: false
-        default: '12' 
+        default: '12'
 
 permissions:
   contents: write
   actions: write
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.inputs.channel }}
-  cancel-in-progress: true
-
 jobs:
-  scrape:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    outputs:
+      channels: ${{ steps.set.outputs.channels }}
+      is_schedule: ${{ steps.set.outputs.is_schedule }}
+      skip_scrape: ${{ steps.set.outputs.skip_scrape }}
     steps:
-      # ════════════════════════════════════════════
-      # ۱. دریافت کد از مخزن (فقط آخرین commit)
-      # ════════════════════════════════════════════
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+      - name: Build channel matrix / manage list
+        id: set
+        run: |
+          STATE="State/telegram_news_state.json"
+          mkdir -p State
+          [ -f "$STATE" ] || echo '{"channel_list":["IranintlTv","bbcpersian"],"channels":{}}' > "$STATE"
+          IS_SCHEDULE="false"
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            IS_SCHEDULE="true"
+          fi
+          echo "is_schedule=$IS_SCHEDULE" >> $GITHUB_OUTPUT
+          ADD_ONLY="${{ github.event.inputs.add_only_channels }}"
+          SKIP_SCRAPE="false"
+          if [ -n "$ADD_ONLY" ] && [ "$IS_SCHEDULE" != "true" ]; then
+            export ADD_ONLY
+            python3 -c "
+          import json,os,re
+          from pathlib import Path
+          p=Path('State/telegram_news_state.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          d.setdefault('channel_list',[]); d.setdefault('channels',{})
+          for part in re.split(r'[,\\s]+', os.environ.get('ADD_ONLY','').strip()):
+            ch=part.strip().lstrip('@')
+            if not ch: continue
+            if ch not in d['channel_list']: d['channel_list'].append(ch)
+            d['channels'].setdefault(ch,{})
+          p.write_text(json.dumps(d,indent=2,ensure_ascii=False)+'\\n',encoding='utf-8')
+          print(d['channel_list'])
+          "
+            echo "channels=[]" >> $GITHUB_OUTPUT
+            echo "skip_scrape=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [ "$IS_SCHEDULE" = "true" ]; then
+            CHANNELS=$(python3 -c "import json;d=json.load(open('$STATE'));print(json.dumps(d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']))")
+          else
+            CH=$(echo "${{ github.event.inputs.channel }}" | sed 's/^@//' | xargs)
+            [ -z "$CH" ] && CH="IranintlTv"
+            export CH
+            python3 -c "
+          import json,os
+          from pathlib import Path
+          ch=os.environ['CH']; p=Path('State/telegram_news_state.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          d.setdefault('channel_list',[]); d.setdefault('channels',{})
+          if ch not in d['channel_list']: d['channel_list'].append(ch)
+          d['channels'].setdefault(ch,{})
+          p.write_text(json.dumps(d,indent=2,ensure_ascii=False)+'\\n',encoding='utf-8')
+          "
+            CHANNELS=$(python3 -c "import json,os; print(json.dumps([os.environ['CH']]))")
+          fi
+          echo "channels=$CHANNELS" >> $GITHUB_OUTPUT
+          echo "skip_scrape=$SKIP_SCRAPE" >> $GITHUB_OUTPUT
+      - name: Commit channel list if changed
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(telegram-news): update channel_list"
+          file_pattern: "State/telegram_news_state.json"
+          branch: ${{ github.ref_name }}
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
+
+  scrape:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.skip_scrape != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJson(needs.prepare.outputs.channels) }}
+    concurrency:
+      group: telegram-news-${{ matrix.channel }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
           fetch-depth: 1
-      - name: 🔍 Validate Inputs
+      - name: Resolve run parameters
+        id: params
         run: |
-          if [[ -z "${{ github.event.inputs.channel }}" ]]; then
-            echo "❌ channel نمی‌تواند خالی باشد"
-            exit 1
+          CHANNEL=$(echo "${{ matrix.channel }}" | sed 's/^@//')
+          STATE="State/telegram_news_state.json"
+          IS_SCHEDULE="${{ needs.prepare.outputs.is_schedule }}"
+          if [ "$IS_SCHEDULE" = "true" ]; then
+            DEBUG="true"; SAVE_TO="repository"; LIMIT="50"
+            SAVE_SHOTS="false"; RESUME="false"; START_LINK=""; CHANNEL_NAME=""
+            MAX_MEDIA="80"; TIMEOUT_SEC="0"; AUTO_EXT="true"; MAX_SCROLL="12"; SCROLL="down"
+          else
+            DEBUG="${{ github.event.inputs.debug_mode }}"
+            SAVE_TO="${{ github.event.inputs.save_to }}"
+            LIMIT="${{ github.event.inputs.limit }}"
+            SCROLL="${{ github.event.inputs.scroll_direction }}"
+            SAVE_SHOTS="${{ github.event.inputs.save_screenshots }}"
+            RESUME="${{ github.event.inputs.resume }}"
+            START_LINK="${{ github.event.inputs.start_link }}"
+            CHANNEL_NAME="${{ github.event.inputs.channel_name }}"
+            MAX_MEDIA="${{ github.event.inputs.max_media_mb }}"
+            TIMEOUT_SEC="${{ github.event.inputs.timeout_seconds }}"
+            AUTO_EXT="${{ github.event.inputs.auto_extend_timeout }}"
+            MAX_SCROLL="${{ github.event.inputs.max_scroll_attempts }}"
           fi
-          echo "✅ ورودی‌ها معتبر هستند"
-      # ════════════════════════════════════════════
-      # ۲. تنظیم پایتون
-      # ════════════════════════════════════════════
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
+          LAST_POST=""
+          [ -f "$STATE" ] && LAST_POST=$(python3 -c "import json;d=json.load(open('$STATE'));print((d.get('channels') or {}).get('$CHANNEL',{}).get('last_post_id') or '')")
+          if [ "$IS_SCHEDULE" = "true" ]; then
+            if [ -n "$LAST_POST" ] && [ "$RESUME" != "true" ]; then
+              START_LINK="https://t.me/${CHANNEL}/${LAST_POST}"
+              SCROLL="down"
+              echo "🤖 auto: from last_saved=$LAST_POST → newer (down)"
+            else
+              START_LINK=""
+              SCROLL="up"
+              echo "🤖 auto: first time → newest then previous (up)"
+            fi
+          else
+            if [ -z "$START_LINK" ]; then
+              START_LINK=""
+              SCROLL="up"
+              echo "👆 manual: newest then previous posts (scroll=up)"
+            else
+              echo "👆 manual: start_link=$START_LINK scroll=$SCROLL"
+            fi
+          fi
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+          echo "channel_name=$CHANNEL_NAME" >> $GITHUB_OUTPUT
+          echo "start_link=$START_LINK" >> $GITHUB_OUTPUT
+          echo "scroll_direction=$SCROLL" >> $GITHUB_OUTPUT
+          echo "limit=$LIMIT" >> $GITHUB_OUTPUT
+          echo "max_media_mb=$MAX_MEDIA" >> $GITHUB_OUTPUT
+          echo "debug_mode=$DEBUG" >> $GITHUB_OUTPUT
+          echo "resume=$RESUME" >> $GITHUB_OUTPUT
+          echo "save_screenshots=$SAVE_SHOTS" >> $GITHUB_OUTPUT
+          echo "save_to=$SAVE_TO" >> $GITHUB_OUTPUT
+          echo "timeout_seconds=$TIMEOUT_SEC" >> $GITHUB_OUTPUT
+          echo "auto_extend_timeout=$AUTO_EXT" >> $GITHUB_OUTPUT
+          echo "max_scroll_attempts=$MAX_SCROLL" >> $GITHUB_OUTPUT
+          echo "last_post_id=$LAST_POST" >> $GITHUB_OUTPUT
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      # ════════════════════════════════════════════
-      # ۳. کش بسته‌های pip
-      # ════════════════════════════════════════════
-      - name: 💾 Cache pip packages
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      # ════════════════════════════════════════════
-      # ۴. نصب وابستگی‌های پایتون (شامل beautifulsoup4 و lxml)
-      # ════════════════════════════════════════════
-      - name: 📦 Install Python dependencies
+          restore-keys: ${{ runner.os }}-pip-
+      - name: Install deps
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-
-      # ════════════════════════════════════════════
-      # ۵. کش مرورگر Playwright
-      # ════════════════════════════════════════════
-      - name: 💾 Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      # ════════════════════════════════════════════
-      # ۶. نصب Playwright و کرومیوم
-      # ════════════════════════════════════════════
-      - name: 🎭 Install Playwright and Chromium
-        run: |
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
-          
-      # ════════════════════════════════════════════
-      # ۷. رمزگشایی پروفایل مرورگر
-      # ════════════════════════════════════════════
-      - name: 🔓 Decrypt browser profile
+      - name: Decrypt profile
         run: |
-          if [ ! -f config/browser_profile.tar.gz.gpg ]; then
-            echo "❌ فایل config/browser_profile.tar.gz.gpg یافت نشد!"
-            exit 1
-          fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
-              --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
-          if [ ! -s config/browser_profile.tar.gz ]; then
-            echo "❌ رمزگشایی پروفایل ناموفق بود یا فایل خالی است"
-            exit 1
-          fi
-          if ! tar tzf config/browser_profile.tar.gz >/dev/null 2>&1; then
-            echo "❌ فایل پروفایل معتبر نیست (tar قادر به باز کردن آن نیست)"
-            exit 1
-          fi
-          echo "✅ پروفایل با موفقیت رمزگشایی شد و معتبر است"
-
-      # ════════════════════════════════════════════
-      # ۸. استخراج پروفایل مرورگر
-      # ════════════════════════════════════════════
-      - name: 📂 Extract browser profile
-        run: tar -xzf config/browser_profile.tar.gz -C config/
-
-      # ════════════════════════════════════════════
-      # ۹. به‌روزرسانی فایل تنظیمات با ورودی‌ها (با تبدیل صحیح بولین)
-      # ════════════════════════════════════════════
-      - name: ⚙️ Update config.yaml with inputs
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
+          tar -xzf config/browser_profile.tar.gz -C config/
+      - name: Write config.yaml
         run: |
           python -c "
           import yaml
-          with open('config/config.yaml', 'r') as f:
-              c = yaml.safe_load(f) or {}
-          
-          # پارامترهای اجباری
-          c['channel'] = '${{ github.event.inputs.channel }}' or 'unknown'
-          c['channel_name'] = '${{ github.event.inputs.channel_name }}' or ''
-          c['limit'] = ${{ github.event.inputs.limit }}
-          c['max_media_mb'] = ${{ github.event.inputs.max_media_mb }}
-
-          c['max_scroll_attempts'] = int('${{ github.event.inputs.max_scroll_attempts }}')
-
-          # 🔄 resume: تبدیل رشته به بولین (رفع خطای true/True)
-          resume_val = '${{ github.event.inputs.resume }}'.lower() == 'true'
+          with open('config/config.yaml') as f: c = yaml.safe_load(f) or {}
+          c['channel'] = '${{ steps.params.outputs.channel }}'
+          c['channel_name'] = '''${{ steps.params.outputs.channel_name }}''' or ''
+          c['limit'] = int('${{ steps.params.outputs.limit }}' or '50')
+          c['max_media_mb'] = int('${{ steps.params.outputs.max_media_mb }}' or '80')
+          c['max_scroll_attempts'] = int('${{ steps.params.outputs.max_scroll_attempts }}' or '12')
+          resume_val = '${{ steps.params.outputs.resume }}'.lower() == 'true'
           c['resume'] = resume_val
-
+          start_link = '''${{ steps.params.outputs.start_link }}'''.strip()
           if resume_val:
-              c.pop('start_link', None)
-              c['scroll_direction'] = 'up'
-              c['max_scroll_attempts'] = 12   # رونویسی برای حالت resume
+              c.pop('start_link', None); c['scroll_direction'] = 'up'
           else:
-              start_link = '${{ github.event.inputs.start_link }}'.strip()
-              if start_link:
-                  c['start_link'] = start_link
-              else:
-                  c.pop('start_link', None)
-              scroll_dir = '${{ github.event.inputs.scroll_direction }}'.strip()
-              c['scroll_direction'] = scroll_dir if scroll_dir else 'up'
-          
-          # 🖼️ save_screenshots: ذخیره اسکرین‌شات‌ها
-          save_screenshots_val = '${{ github.event.inputs.save_screenshots }}'.lower() == 'true'
-          c['save_screenshots'] = save_screenshots_val
-          
-          # debug_mode (اختیاری، برای هماهنگی)
-          debug_val = '${{ github.event.inputs.debug_mode }}'.lower() == 'true'
-          c['debug_mode'] = debug_val
-          c['timeout_seconds'] = int('${{ github.event.inputs.timeout_seconds }}')
-          c['auto_extend_timeout'] = '${{ github.event.inputs.auto_extend_timeout }}'.lower() == 'true'
-          
-          # ذخیره فایل
-          with open('config/config.yaml', 'w') as f:
-              yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
+              if start_link: c['start_link'] = start_link
+              else: c.pop('start_link', None)
+              c['scroll_direction'] = '${{ steps.params.outputs.scroll_direction }}' or 'up'
+          c['save_screenshots'] = '${{ steps.params.outputs.save_screenshots }}'.lower() == 'true'
+          c['debug_mode'] = '${{ steps.params.outputs.debug_mode }}'.lower() == 'true'
+          c['timeout_seconds'] = int('${{ steps.params.outputs.timeout_seconds }}' or '0')
+          c['auto_extend_timeout'] = '${{ steps.params.outputs.auto_extend_timeout }}'.lower() == 'true'
+          with open('config/config.yaml', 'w') as f: yaml.dump(c, f, allow_unicode=True, default_flow_style=False)
+          print(c)
           "
-
-      # ════════════════════════════════════════════
-      # ۱۰. پاکسازی خروجی قبلی (فقط در صورتی که Resume فعال نباشد)
-      # ════════════════════════════════════════════
-      - name: 🧹 Clean old output for this channel
-        if: ${{ !inputs.resume && inputs.save_to == 'repository' }}
-        run: rm -rf "Download/telegram_downloads/${{ github.event.inputs.channel }}"
-
-      # ════════════════════════════════════════════
-      # ۱۱. تعیین حالت ذخیره‌سازی هوشمند (پیش‌فرض بر اساس debug_mode)
-      # ════════════════════════════════════════════
-      - name: 🤖 Smart Save Mode (Default based on debug_mode)
-        id: save_mode
-        run: |
-          if [[ "${{ inputs.debug_mode }}" == "true" ]]; then
-            DEFAULT_SAVE="artifact"
-            MODE_MSG="Debug Mode ON → Default: Artifact"
-          else
-            DEFAULT_SAVE="repository"
-            MODE_MSG="Normal Mode → Default: Repository"
-          fi
-          echo "DEFAULT_SAVE=$DEFAULT_SAVE" >> $GITHUB_OUTPUT
-          echo "::notice title=📌 Smart Save Mode::$MODE_MSG | Debug=${{ inputs.debug_mode }} | Default=$DEFAULT_SAVE"
-
-      # ════════════════════════════════════════════
-      # ۱۲. اجرای اسکریپر (عادی یا دیباگ)
-      # ════════════════════════════════════════════
-      - name: 🚀 Run Telegram Scraper (with media download)
-        if: ${{ !inputs.debug_mode }}
+      - name: Run scraper (media)
+        if: ${{ steps.params.outputs.debug_mode != 'true' }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
-
-
-      - name: 📝 Run Debug Scraper (no media download)
-        if: ${{ inputs.debug_mode }}
+      - name: Run debug scraper (text)
+        if: ${{ steps.params.outputs.debug_mode == 'true' }}
         run: xvfb-run python .github/scripts/debug_scraper.py
-
-
-      # ════════════════════════════════════════════
-      # ۱۳. پاکسازی آرتیفکت‌های قدیمی دیباگ
-      # ════════════════════════════════════════════
-      - name: 🧹 Delete old debug screenshots artifacts
-        if: ${{ inputs.save_to == 'artifact' }}
+      - name: Verify output
+        if: always()
         run: |
-          ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name | startswith("debug-screenshots-")) | .id')
-          for id in $ids; do
-            gh api repos/${{ github.repository }}/actions/artifacts/$id -X DELETE
-          done
+          OUT="Download/telegram_downloads/${{ steps.params.outputs.channel }}"
+          [ -d "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null)" ] || { echo no output; exit 1; }
+      - name: Update state last_post_id
+        if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 📦 Compress debug screenshots
-        if: ${{ inputs.save_to == 'artifact' && inputs.debug_mode }}
+          CHANNEL: ${{ steps.params.outputs.channel }}
         run: |
-          OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
-          if [ -d "$OUTPUT_DIR/debug_screenshots" ]; then
-            cd "$OUTPUT_DIR"
-            tar -czf debug_screenshots.tar.gz debug_screenshots/
-            rm -rf debug_screenshots/   # پاک کردن پوشه اصلی
-            echo "✅ debug_screenshots compressed and cleaned"
-          fi
-      # ════════════════════════════════════════════
-      # ۱۴. آپلود اسکرین‌شات‌های دیباگ
-      # ════════════════════════════════════════════
-      - name: 📤 Upload debug screenshots
-        if: ${{ inputs.save_to == 'artifact' && inputs.debug_mode }}
+          mkdir -p State
+          STATE=State/telegram_news_state.json
+          [ -f "$STATE" ] || echo '{"channel_list":[],"channels":{}}' > "$STATE"
+          export STATE JSON_FILE="Download/telegram_downloads/$CHANNEL/${CHANNEL}_posts.json"
+          export RESUME_FILE="Download/telegram_downloads/$CHANNEL/resume_state.json"
+          python3 << 'PY'
+          import json, os
+          from pathlib import Path
+          from datetime import datetime, timezone
+          channel = os.environ["CHANNEL"]
+          state_path = Path(os.environ["STATE"])
+          state = json.loads(state_path.read_text(encoding="utf-8"))
+          state.setdefault("channel_list", []); state.setdefault("channels", {})
+          last_id = None
+          jf = Path(os.environ["JSON_FILE"])
+          if jf.exists():
+              posts = json.loads(jf.read_text(encoding="utf-8"))
+              ids = [int(p.get("id") or p.get("message_id") or 0) for p in posts if str(p.get("id") or p.get("message_id") or "").isdigit()]
+              if ids: last_id = str(max(ids))
+          if not last_id:
+              rf = Path(os.environ["RESUME_FILE"])
+              if rf.exists():
+                  r = json.loads(rf.read_text(encoding="utf-8"))
+                  last_id = str(r.get("last_msg_id") or r.get("last_post_id") or "") or None
+          if last_id:
+              if channel not in state["channel_list"]: state["channel_list"].append(channel)
+              prev = state["channels"].get(channel) or {}
+              prev.update({"last_post_id": last_id, "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+              state["channels"][channel] = prev
+              state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
+              print("state", channel, last_id)
+          PY
+      - name: Commit results
+        if: ${{ steps.params.outputs.save_to == 'repository' }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email github-actions[bot]@users.noreply.github.com
+          git pull --rebase --autostash origin ${{ github.ref_name }} || true
+          git add "Download/telegram_downloads/${{ steps.params.outputs.channel }}" State/telegram_news_state.json || true
+          git diff --cached --quiet || git commit -m "📥 news scrape @${{ steps.params.outputs.channel }}"
+          git push origin HEAD:${{ github.ref_name }} || true
+      - name: Upload artifact
+        if: ${{ steps.params.outputs.save_to == 'artifact' && always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: debug-screenshots-${{ github.run_id }}
-          path: Download/telegram_downloads/${{ github.event.inputs.channel }}/debug_screenshots.tar.gz
-
-      # ════════════════════════════════════════════
-      # ۱۵. بررسی خروجی (همیشه)
-      # ════════════════════════════════════════════
-      - name: 📊 Verify output
-        if: ${{ always() }}
-        run: |
-          OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
-          if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then
-            echo "❌ No output found"
-            exit 1
-          fi
-          echo "✅ Output directory is ready"
-
-      - name: 📋 Summary of results
-        if: ${{ always() }}
-        run: |
-          OUTPUT_DIR="Download/telegram_downloads/${{ github.event.inputs.channel }}"
-          CHANNEL="${{ github.event.inputs.channel }}"
-          JSON_FILE="$OUTPUT_DIR/${CHANNEL}_posts.json"
-          echo "📁 خروجی: $OUTPUT_DIR"
-          if [ -f "$JSON_FILE" ]; then
-            POST_COUNT=$(python -c "import json; print(len(json.load(open('$JSON_FILE'))))")
-            echo "📊 تعداد پست‌ها: $POST_COUNT"
-          else
-            echo "⚠️ فایل JSON یافت نشد: $JSON_FILE"
-          fi
-          echo "💾 حجم کل خروجی:"
-          du -sh "$OUTPUT_DIR" 2>/dev/null || echo "0"
-          echo "📸 تعداد اسکرین‌شات‌ها:"
-          ls "$OUTPUT_DIR/post_screenshots/" 2>/dev/null | wc -l
-      # ════════════════════════════════════════════
-      # ۱۶. تنظیم Git LFS
-      # ════════════════════════════════════════════
-      - name: 🐘 Setup Git LFS track for media & screenshots
-        if: ${{ always() }}
-        run: |
-          git lfs install
-          mkdir -p "Download/telegram_downloads/${{ github.event.inputs.channel }}/media"
-          mkdir -p "Download/telegram_downloads/${{ github.event.inputs.channel }}/post_screenshots"
-          git lfs track "Download/telegram_downloads/**/media/*" || true
-          git lfs track "Download/telegram_downloads/**/post_screenshots/*" || true
-          git add .gitattributes
-
-      # ════════════════════════════════════════════
-      # ۱۷. کامیت و آپلود نتایج
-      # ════════════════════════════════════════════
-      - name: 🔄 Pull latest changes before staging
-        if: ${{ inputs.save_to == 'repository' }}
-        run: |
-          git config pull.rebase true
-          git pull --rebase --autostash origin ${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🗃 Stage all generated files for commit
-        if: ${{ inputs.save_to == 'repository' }}
-        run: |
-          echo "📂 مسیر خروجی: Download/telegram_downloads/${{ github.event.inputs.channel }}"
-          ls -la "Download/telegram_downloads/${{ github.event.inputs.channel }}" || echo "پوشه خالی است"
-          git add "Download/telegram_downloads/${{ github.event.inputs.channel }}/**" 2>/dev/null || true
-          git add .gitattributes
-          echo "📋 وضعیت فایل‌های staged:"
-          git status --short
-          
-      - name: 💾 Commit and push results
-        if: ${{ inputs.save_to == 'repository' }}
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "📥 Update archive for @${{ github.event.inputs.channel }} (limit=${{ github.event.inputs.limit }}, direction=${{ github.event.inputs.scroll_direction }}, resume=${{ github.event.inputs.resume }})"
-          file_pattern: "Download/telegram_downloads/**"
-          branch: ${{ github.ref_name }}
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          add_options: "--force"
-          push_options: "--force-with-lease"
-
-      # ════════════════════════════════════════════
-      # ۱۸. پاکسازی آرتیفکت‌های قدیمی پست‌ها
-      # ════════════════════════════════════════════
-      - name: 🧹 Delete old post screenshots artifacts
-        if: ${{ inputs.save_to == 'artifact' }}
-        run: |
-          ids=$(gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name | startswith("post-screenshots-${{ github.event.inputs.channel }}-")) | .id')
-          for id in $ids; do
-            gh api repos/${{ github.repository }}/actions/artifacts/$id -X DELETE
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ════════════════════════════════════════════
-      # ۱۹. آپلود اسکرین‌شات‌های هر پست (همیشه)
-      # ════════════════════════════════════════════
-      - name: 📸 Upload post screenshots
-        uses: actions/upload-artifact@v4
-        if: ${{ inputs.save_to == 'artifact' && always() }}
-        with:
-          name: post-screenshots-${{ github.event.inputs.channel }}-${{ github.run_id }}
-          path: Download/telegram_downloads/${{ github.event.inputs.channel }}/post_screenshots/
+          name: telegram-${{ steps.params.outputs.channel }}-${{ github.run_id }}
+          path: Download/telegram_downloads/${{ steps.params.outputs.channel }}/

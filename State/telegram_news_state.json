@@ -1,0 +1,29 @@
+{
+  "channel_list": [
+    "IranintlTv",
+    "bbcpersian"
+  ],
+  "channels": {
+    "IranintlTv": {
+      "last_post_id": "357703",
+      "last_updated": "2026-09-16T19:18:54Z",
+      "source": "seeded_from_posts_json_max"
+    },
+    "bbcpersian": {
+      "last_post_id": "287500",
+      "last_updated": "2026-09-16T17:45:00Z",
+      "source": "seeded_from_posts_json_max"
+    }
+  },
+  "schedule": {
+    "cron": "0 * * * *",
+    "note": "every hour UTC",
+    "defaults": {
+      "debug_mode": true,
+      "save_to": "repository",
+      "limit": 50,
+      "scroll_direction": "down",
+      "save_screenshots": false
+    }
+  }
+}
