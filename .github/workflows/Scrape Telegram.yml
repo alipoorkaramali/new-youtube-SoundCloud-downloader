@@ -1,33 +1,36 @@
 name: 🌀 Scrape Telegram & Save Archive
 
 on:
-  # هر ۱ ساعت یک‌بار (UTC) — کانال‌های داخل State/telegram_news_state.json
   schedule:
     - cron: '0 * * * *'
+  repository_dispatch:
+    types: [telegram-news-hourly, telegram-news-scrape]
   workflow_dispatch:
     inputs:
       channel:
-        description: 'نام کاربری کانال (خالی = همه کانال‌های state در حالت دستی با یک کانال پیش‌فرض)'
+        description: 'نام کاربری کانال برای اسکرپ دستی (اگر در لیست نبود خودکار اضافه می‌شود)'
         required: false
         default: 'IranintlTv'
+      add_only_channels:
+        description: 'فقط اضافه به لیست بدون اسکرپ — چند کانال با کاما (مثال: manoto,voa)'
+        required: false
+        default: ''
       channel_name:
         description: 'نام نمایشی کانال (اختیاری)'
         required: false
         default: ''
       start_link:
-        description: 'لینک مستقیم پست (خالی = ادامه از بعد از آخرین پست ذخیره‌شده در state)'
+        description: 'لینک مستقیم پست (خالی = ادامه از آخرین پست state)'
         required: false
         default: ''
       scroll_direction:
-        description: 'جهت اسکرول (در ادامه خودکار از state معمولاً down)'
+        description: 'جهت اسکرول'
         required: false
         default: 'down'
         type: choice
-        options:
-          - 'up'
-          - 'down'
+        options: ['up', 'down']
       limit:
-        description: 'تعداد پست‌ها (ساعتی/ادامه خودکار معمولاً تا ۵۰ پست جدید)'
+        description: 'تعداد پست‌ها'
         required: false
         default: '50'
       max_media_mb:
@@ -35,12 +38,12 @@ on:
         required: false
         default: '80'
       debug_mode:
-        description: 'بدون دانلود مدیا (تمرکز متنی) — در cron همیشه true'
+        description: 'بدون دانلود مدیا (متنی) — در cron/cron-job همیشه true'
         type: boolean
         required: false
         default: true
       resume:
-        description: 'ادامه قدیمی از resume_state (معمولاً برای news خودکار لازم نیست)'
+        description: 'ادامه از resume_state قدیمی'
         type: boolean
         required: false
         default: false
@@ -50,15 +53,13 @@ on:
         required: false
         default: false
       save_to:
-        description: 'محل ذخیره خروجی'
+        description: 'محل ذخیره'
         required: true
         type: choice
         default: 'repository'
-        options:
-          - 'artifact'
-          - 'repository'
+        options: ['artifact', 'repository']
       timeout_seconds:
-        description: 'حداکثر زمان اجرا به ثانیه (۰ = پیش‌فرض کد)'
+        description: 'تایم‌اوت ثانیه (۰=پیش‌فرض)'
         required: false
         default: '0'
       auto_extend_timeout:
@@ -81,46 +82,100 @@ jobs:
     outputs:
       channels: ${{ steps.set.outputs.channels }}
       is_schedule: ${{ steps.set.outputs.is_schedule }}
+      skip_scrape: ${{ steps.set.outputs.skip_scrape }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1
 
-      - name: Build channel matrix
+      - name: Build channel matrix / manage list
         id: set
         run: |
           STATE="State/telegram_news_state.json"
+          mkdir -p State
           if [ ! -f "$STATE" ]; then
             echo '{"channel_list":["IranintlTv","bbcpersian"],"channels":{}}' > "$STATE"
           fi
-          echo "📋 state:"
           cat "$STATE"
 
           IS_SCHEDULE="false"
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             IS_SCHEDULE="true"
           fi
           echo "is_schedule=$IS_SCHEDULE" >> $GITHUB_OUTPUT
 
+          ADD_ONLY="${{ github.event.inputs.add_only_channels }}"
+          SKIP_SCRAPE="false"
+
+          if [ -n "$ADD_ONLY" ] && [ "$IS_SCHEDULE" != "true" ]; then
+            export ADD_ONLY
+            python3 << 'PY'
+          import json, os, re
+          from pathlib import Path
+          p = Path("State/telegram_news_state.json")
+          d = json.loads(p.read_text(encoding="utf-8"))
+          d.setdefault("channel_list", [])
+          d.setdefault("channels", {})
+          added = []
+          for part in re.split(r"[,\s]+", os.environ.get("ADD_ONLY", "").strip()):
+              ch = part.strip().lstrip("@")
+              if not ch:
+                  continue
+              if ch not in d["channel_list"]:
+                  d["channel_list"].append(ch)
+                  added.append(ch)
+              d["channels"].setdefault(ch, {})
+          p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          print("added:", added)
+          print("list:", d["channel_list"])
+          PY
+            echo "channels=[]" >> $GITHUB_OUTPUT
+            echo "skip_scrape=true" >> $GITHUB_OUTPUT
+            cat "$STATE"
+            exit 0
+          fi
+
           if [ "$IS_SCHEDULE" = "true" ]; then
-            CHANNELS=$(python3 -c "
-          import json
-          d=json.load(open('$STATE'))
-          ch=d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']
-          print(json.dumps(ch))
-          ")
+            CHANNELS=$(python3 -c "import json; d=json.load(open('$STATE')); ch=d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']; print(json.dumps(ch))")
           else
             CH="${{ github.event.inputs.channel }}"
             CH=$(echo "$CH" | sed 's/^@//' | xargs)
-            if [ -z "$CH" ]; then CH="IranintlTv"; fi
-            CHANNELS=$(python3 -c "import json; print(json.dumps(['$CH']))")
+            [ -z "$CH" ] && CH="IranintlTv"
+            export CH
+            python3 << 'PY'
+          import json, os
+          from pathlib import Path
+          ch = os.environ["CH"]
+          p = Path("State/telegram_news_state.json")
+          d = json.loads(p.read_text(encoding="utf-8"))
+          d.setdefault("channel_list", [])
+          d.setdefault("channels", {})
+          if ch not in d["channel_list"]:
+              d["channel_list"].append(ch)
+              print("added to list:", ch)
+          d["channels"].setdefault(ch, {})
+          p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          PY
+            CHANNELS=$(python3 -c "import json,os; print(json.dumps([os.environ['CH']]))")
           fi
           echo "channels=$CHANNELS" >> $GITHUB_OUTPUT
-          echo "✅ matrix channels: $CHANNELS (schedule=$IS_SCHEDULE)"
+          echo "skip_scrape=$SKIP_SCRAPE" >> $GITHUB_OUTPUT
+          echo "matrix=$CHANNELS schedule=$IS_SCHEDULE"
+
+      - name: Commit channel list if changed
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(telegram-news): update channel_list"
+          file_pattern: "State/telegram_news_state.json"
+          branch: ${{ github.ref_name }}
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
 
   scrape:
     needs: prepare
+    if: ${{ needs.prepare.outputs.skip_scrape != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -131,8 +186,7 @@ jobs:
       group: telegram-news-${{ matrix.channel }}
       cancel-in-progress: true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
@@ -141,24 +195,14 @@ jobs:
       - name: Resolve run parameters
         id: params
         run: |
-          CHANNEL="${{ matrix.channel }}"
-          CHANNEL=$(echo "$CHANNEL" | sed 's/^@//')
+          CHANNEL=$(echo "${{ matrix.channel }}" | sed 's/^@//')
           STATE="State/telegram_news_state.json"
           IS_SCHEDULE="${{ needs.prepare.outputs.is_schedule }}"
 
           if [ "$IS_SCHEDULE" = "true" ]; then
-            DEBUG="true"
-            SAVE_TO="repository"
-            LIMIT="50"
-            SCROLL="down"
-            SAVE_SHOTS="false"
-            RESUME="false"
-            START_LINK=""
-            CHANNEL_NAME=""
-            MAX_MEDIA="80"
-            TIMEOUT_SEC="0"
-            AUTO_EXT="true"
-            MAX_SCROLL="12"
+            DEBUG="true"; SAVE_TO="repository"; LIMIT="50"; SCROLL="down"
+            SAVE_SHOTS="false"; RESUME="false"; START_LINK=""; CHANNEL_NAME=""
+            MAX_MEDIA="80"; TIMEOUT_SEC="0"; AUTO_EXT="true"; MAX_SCROLL="12"
           else
             DEBUG="${{ github.event.inputs.debug_mode }}"
             SAVE_TO="${{ github.event.inputs.save_to }}"
@@ -176,87 +220,58 @@ jobs:
 
           LAST_POST=""
           if [ -f "$STATE" ]; then
-            LAST_POST=$(python3 -c "
-          import json
-          d=json.load(open('$STATE'))
-          print((d.get('channels') or {}).get('$CHANNEL', {}).get('last_post_id') or '')
-          ")
+            LAST_POST=$(python3 -c "import json; d=json.load(open('$STATE')); print((d.get('channels') or {}).get('$CHANNEL', {}).get('last_post_id') or '')")
           fi
-
           if [ -z "$START_LINK" ] && [ -n "$LAST_POST" ] && [ "$RESUME" != "true" ]; then
             START_LINK="https://t.me/${CHANNEL}/${LAST_POST}"
             SCROLL="down"
-            echo "🔄 ادامه از آخرین پست state: $LAST_POST (scroll=down)"
+            echo "continue from $LAST_POST"
           fi
 
-          {
-            echo "channel=$CHANNEL"
-            echo "channel_name=$CHANNEL_NAME"
-            echo "start_link=$START_LINK"
-            echo "scroll_direction=$SCROLL"
-            echo "limit=$LIMIT"
-            echo "max_media_mb=$MAX_MEDIA"
-            echo "debug_mode=$DEBUG"
-            echo "resume=$RESUME"
-            echo "save_screenshots=$SAVE_SHOTS"
-            echo "save_to=$SAVE_TO"
-            echo "timeout_seconds=$TIMEOUT_SEC"
-            echo "auto_extend_timeout=$AUTO_EXT"
-            echo "max_scroll_attempts=$MAX_SCROLL"
-            echo "last_post_id=$LAST_POST"
-          } >> $GITHUB_OUTPUT
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+          echo "channel_name=$CHANNEL_NAME" >> $GITHUB_OUTPUT
+          echo "start_link=$START_LINK" >> $GITHUB_OUTPUT
+          echo "scroll_direction=$SCROLL" >> $GITHUB_OUTPUT
+          echo "limit=$LIMIT" >> $GITHUB_OUTPUT
+          echo "max_media_mb=$MAX_MEDIA" >> $GITHUB_OUTPUT
+          echo "debug_mode=$DEBUG" >> $GITHUB_OUTPUT
+          echo "resume=$RESUME" >> $GITHUB_OUTPUT
+          echo "save_screenshots=$SAVE_SHOTS" >> $GITHUB_OUTPUT
+          echo "save_to=$SAVE_TO" >> $GITHUB_OUTPUT
+          echo "timeout_seconds=$TIMEOUT_SEC" >> $GITHUB_OUTPUT
+          echo "auto_extend_timeout=$AUTO_EXT" >> $GITHUB_OUTPUT
+          echo "max_scroll_attempts=$MAX_SCROLL" >> $GITHUB_OUTPUT
+          echo "last_post_id=$LAST_POST" >> $GITHUB_OUTPUT
 
-          echo "📌 channel=$CHANNEL last=$LAST_POST start=$START_LINK scroll=$SCROLL debug=$DEBUG save_to=$SAVE_TO limit=$LIMIT"
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Cache pip
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          restore-keys: ${{ runner.os }}-pip-
 
-      - name: Install Python deps
+      - name: Install deps
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Cache Playwright
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      - name: Install Playwright
-        run: |
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
-      - name: Decrypt browser profile
+      - name: Decrypt profile
         run: |
-          if [ ! -f config/browser_profile.tar.gz.gpg ]; then
-            echo "❌ config/browser_profile.tar.gz.gpg یافت نشد"
-            exit 1
-          fi
           gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
               --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
           tar -xzf config/browser_profile.tar.gz -C config/
-          echo "✅ profile ready"
 
-      - name: Update config.yaml
+      - name: Write config.yaml
         run: |
           python -c "
           import yaml
-          with open('config/config.yaml', 'r') as f:
-              c = yaml.safe_load(f) or {}
+          with open('config/config.yaml') as f: c = yaml.safe_load(f) or {}
           c['channel'] = '${{ steps.params.outputs.channel }}'
           c['channel_name'] = '''${{ steps.params.outputs.channel_name }}''' or ''
           c['limit'] = int('${{ steps.params.outputs.limit }}' or '50')
@@ -266,137 +281,84 @@ jobs:
           c['resume'] = resume_val
           start_link = '''${{ steps.params.outputs.start_link }}'''.strip()
           if resume_val:
-              c.pop('start_link', None)
-              c['scroll_direction'] = 'up'
+              c.pop('start_link', None); c['scroll_direction'] = 'up'
           else:
-              if start_link:
-                  c['start_link'] = start_link
-              else:
-                  c.pop('start_link', None)
+              if start_link: c['start_link'] = start_link
+              else: c.pop('start_link', None)
               c['scroll_direction'] = '${{ steps.params.outputs.scroll_direction }}' or 'down'
           c['save_screenshots'] = '${{ steps.params.outputs.save_screenshots }}'.lower() == 'true'
           c['debug_mode'] = '${{ steps.params.outputs.debug_mode }}'.lower() == 'true'
           c['timeout_seconds'] = int('${{ steps.params.outputs.timeout_seconds }}' or '0')
           c['auto_extend_timeout'] = '${{ steps.params.outputs.auto_extend_timeout }}'.lower() == 'true'
-          with open('config/config.yaml', 'w') as f:
-              yaml.dump(c, f, default_flow_style=False, allow_unicode=True)
-          print('config:', c)
+          with open('config/config.yaml', 'w') as f: yaml.dump(c, f, allow_unicode=True, default_flow_style=False)
+          print(c)
           "
 
-      - name: Run scraper (with media)
+      - name: Run scraper (media)
         if: ${{ steps.params.outputs.debug_mode != 'true' }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
 
-      - name: Run debug scraper (text only, no media)
+      - name: Run debug scraper (text)
         if: ${{ steps.params.outputs.debug_mode == 'true' }}
         run: xvfb-run python .github/scripts/debug_scraper.py
 
       - name: Verify output
-        if: ${{ always() }}
+        if: always()
         run: |
-          OUTPUT_DIR="Download/telegram_downloads/${{ steps.params.outputs.channel }}"
-          if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
-            echo "❌ No output found"
-            exit 1
-          fi
-          echo "✅ Output ready"
-          ls -la "$OUTPUT_DIR" | head -20
+          OUT="Download/telegram_downloads/${{ steps.params.outputs.channel }}"
+          [ -d "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null)" ] || { echo no output; exit 1; }
 
-      - name: Update permanent news state
-        if: ${{ always() }}
+      - name: Update state last_post_id
+        if: always()
         env:
           CHANNEL: ${{ steps.params.outputs.channel }}
-          STATE: State/telegram_news_state.json
-          JSON_FILE: Download/telegram_downloads/${{ steps.params.outputs.channel }}/${{ steps.params.outputs.channel }}_posts.json
-          RESUME_FILE: Download/telegram_downloads/${{ steps.params.outputs.channel }}/resume_state.json
         run: |
           mkdir -p State
+          STATE=State/telegram_news_state.json
           [ -f "$STATE" ] || echo '{"channel_list":[],"channels":{}}' > "$STATE"
+          export STATE JSON_FILE="Download/telegram_downloads/$CHANNEL/${CHANNEL}_posts.json"
+          export RESUME_FILE="Download/telegram_downloads/$CHANNEL/resume_state.json"
           python3 << 'PY'
           import json, os
           from pathlib import Path
           from datetime import datetime, timezone
-
           channel = os.environ["CHANNEL"]
           state_path = Path(os.environ["STATE"])
-          json_file = Path(os.environ["JSON_FILE"])
-          resume_file = Path(os.environ["RESUME_FILE"])
-
-          state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {"channel_list": [], "channels": {}}
+          state = json.loads(state_path.read_text(encoding="utf-8"))
           state.setdefault("channel_list", [])
           state.setdefault("channels", {})
-
           last_id = None
-          if json_file.exists():
-              try:
-                  posts = json.loads(json_file.read_text(encoding="utf-8"))
-                  ids = []
-                  for p in posts:
-                      i = p.get("id") or p.get("message_id") or p.get("post_id")
-                      if i is not None and str(i).isdigit():
-                          ids.append(int(i))
-                  if ids:
-                      last_id = str(max(ids))
-              except Exception as e:
-                  print("posts.json read error:", e)
-
-          if not last_id and resume_file.exists():
-              try:
-                  r = json.loads(resume_file.read_text(encoding="utf-8"))
+          jf = Path(os.environ["JSON_FILE"])
+          if jf.exists():
+              posts = json.loads(jf.read_text(encoding="utf-8"))
+              ids = [int(p.get("id") or p.get("message_id") or 0) for p in posts if str(p.get("id") or p.get("message_id") or "").isdigit()]
+              if ids: last_id = str(max(ids))
+          if not last_id:
+              rf = Path(os.environ["RESUME_FILE"])
+              if rf.exists():
+                  r = json.loads(rf.read_text(encoding="utf-8"))
                   last_id = str(r.get("last_msg_id") or r.get("last_post_id") or "") or None
-              except Exception as e:
-                  print("resume read error:", e)
-
           if last_id:
-              now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
               if channel not in state["channel_list"]:
                   state["channel_list"].append(channel)
               prev = state["channels"].get(channel) or {}
-              prev.update({"last_post_id": last_id, "last_updated": now})
+              prev.update({"last_post_id": last_id, "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
               state["channels"][channel] = prev
-              state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-              print(f"✅ state @{channel} → last_post_id={last_id}")
-          else:
-              print("⚠️ last_post_id پیدا نشد — state تغییر نکرد")
+              state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
+              print("state", channel, last_id)
           PY
 
-      - name: Setup Git LFS track
-        if: ${{ always() }}
-        run: |
-          git lfs install
-          mkdir -p "Download/telegram_downloads/${{ steps.params.outputs.channel }}/media"
-          mkdir -p "Download/telegram_downloads/${{ steps.params.outputs.channel }}/post_screenshots"
-          git lfs track "Download/telegram_downloads/**/media/*" || true
-          git lfs track "Download/telegram_downloads/**/post_screenshots/*" || true
-          git add .gitattributes || true
-
-      - name: Pull before commit
+      - name: Commit results
         if: ${{ steps.params.outputs.save_to == 'repository' }}
         run: |
-          git config pull.rebase true
+          git config user.name github-actions[bot]
+          git config user.email github-actions[bot]@users.noreply.github.com
           git pull --rebase --autostash origin ${{ github.ref_name }} || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git add "Download/telegram_downloads/${{ steps.params.outputs.channel }}" State/telegram_news_state.json || true
+          git diff --cached --quiet || git commit -m "📥 news scrape @${{ steps.params.outputs.channel }}"
+          git push origin HEAD:${{ github.ref_name }} || true
 
-      - name: Stage files
-        if: ${{ steps.params.outputs.save_to == 'repository' }}
-        run: |
-          git add "Download/telegram_downloads/${{ steps.params.outputs.channel }}" || true
-          git add "State/telegram_news_state.json" || true
-          git add .gitattributes || true
-          git status --short
-
-      - name: Commit and push
-        if: ${{ steps.params.outputs.save_to == 'repository' }}
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "📥 news scrape @${{ steps.params.outputs.channel }} (limit=${{ steps.params.outputs.limit }}, scroll=${{ steps.params.outputs.scroll_direction }})"
-          file_pattern: "Download/telegram_downloads/** State/telegram_news_state.json .gitattributes"
-          branch: ${{ github.ref_name }}
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-
-      - name: Upload artifact (optional)
+      - name: Upload artifact
         if: ${{ steps.params.outputs.save_to == 'artifact' && always() }}
         uses: actions/upload-artifact@v4
         with:
