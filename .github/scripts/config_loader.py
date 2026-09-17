@@ -21,6 +21,7 @@ class Config:
     scroll_direction: str = 'up'   # جهت اسکرول (up یا down)
     timeout_seconds: int = 0           # 0 = نامحدود (از مقدار پیش‌فرض در کد استفاده می‌شود)
     auto_extend_timeout: bool = True   # تمدید خودکار زمان در صورت ادامهٔ موفق اسکرپینگ
+    stop_before_id: str = ''           # از جدیدترین به عقب؛ id<=این مقدار جمع نشود
 
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
@@ -55,5 +56,6 @@ def load_config(path: str = "config.yaml") -> Config:
         save_screenshots=data.get('save_screenshots', True),
         scroll_direction=data.get('scroll_direction', 'up'),
         timeout_seconds=data.get('timeout_seconds', 0),
-        auto_extend_timeout=data.get('auto_extend_timeout', True)
+        auto_extend_timeout=data.get('auto_extend_timeout', True),
+        stop_before_id=str(data.get('stop_before_id') or '')
     )
