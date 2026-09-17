@@ -219,7 +219,7 @@ jobs:
           if n==0 and cp.exists():
               try:
                   with cp.open(encoding='utf-8') as f:
-                      n=max(0, sum(1 for _ in csv.DictReader(f))
+                      n=max(0, sum(1 for _ in csv.DictReader(f)))
               except Exception:
                   n=0
           print(n)
