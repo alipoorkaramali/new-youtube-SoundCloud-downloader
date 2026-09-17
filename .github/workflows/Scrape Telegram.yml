@@ -30,7 +30,7 @@ on:
         type: choice
         options: ['up', 'down']
       limit:
-        description: 'تعداد پست‌ها (فقط دستی). اتوماتیک: همهٔ پست‌های جدید تا last_post (سقف ایمنی ۱۰۰۰)'
+        description: 'تعداد پست‌ها (فقط دستی). اتوماتیک: FILL تا ۵۰ یا فقط جدیدها'
         required: false
         default: '50'
       max_media_mb:
@@ -201,15 +201,45 @@ jobs:
           fi
           LAST_POST=""
           [ -f "$STATE" ] && LAST_POST=$(python3 -c "import json;d=json.load(open('$STATE'));print((d.get('channels') or {}).get('$CHANNEL',{}).get('last_post_id') or '')")
+          ARCHIVE_COUNT=$(python3 -c "
+          import json, csv
+          from pathlib import Path
+          ch='$CHANNEL'
+          base=Path('Download/telegram_downloads')/ch
+          n=0
+          jp=base / f'{ch}_posts.json'
+          cp=base / f'{ch}_posts.csv'
+          if jp.exists():
+              try:
+                  data=json.loads(jp.read_text(encoding='utf-8'))
+                  if isinstance(data, list):
+                      n=len([p for p in data if isinstance(p, dict) and p.get('id')])
+              except Exception:
+                  n=0
+          if n==0 and cp.exists():
+              try:
+                  with cp.open(encoding='utf-8') as f:
+                      n=max(0, sum(1 for _ in csv.DictReader(f)))
+              except Exception:
+                  n=0
+          print(n)
+          ")
           STOP_BEFORE=""
           if [ "$IS_SCHEDULE" = "true" ]; then
             START_LINK=""
             SCROLL="up"
-            if [ -n "$LAST_POST" ]; then
+            echo "📊 archive_count=$ARCHIVE_COUNT last_post=$LAST_POST"
+            if [ "$ARCHIVE_COUNT" -lt 50 ]; then
+              NEED=$((50 - ARCHIVE_COUNT))
+              if [ "$LIMIT" -lt 50 ]; then LIMIT=50; fi
+              if [ "$NEED" -gt "$LIMIT" ]; then LIMIT=$NEED; fi
+              STOP_BEFORE=""
+              echo "🤖 auto FILL: archive has $ARCHIVE_COUNT (<50) → scrape up to limit=$LIMIT to reach 50"
+            elif [ -n "$LAST_POST" ]; then
               STOP_BEFORE="$LAST_POST"
-              echo "🤖 auto: newest → back until last_saved=$LAST_POST (fast-exit if none)"
+              echo "🤖 auto UPDATE: archive=$ARCHIVE_COUNT → only newer than $LAST_POST (fast-exit if none)"
             else
-              echo "🤖 auto: first time → newest then previous"
+              echo "🤖 auto: archive=$ARCHIVE_COUNT no last_post → newest then previous"
             fi
           else
             if [ -z "$START_LINK" ]; then
@@ -235,6 +265,7 @@ jobs:
           echo "max_scroll_attempts=$MAX_SCROLL" >> $GITHUB_OUTPUT
           echo "last_post_id=$LAST_POST" >> $GITHUB_OUTPUT
           echo "stop_before_id=$STOP_BEFORE" >> $GITHUB_OUTPUT
+          echo "archive_count=$ARCHIVE_COUNT" >> $GITHUB_OUTPUT
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
