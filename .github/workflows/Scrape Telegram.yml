@@ -219,7 +219,7 @@ jobs:
           if n==0 and cp.exists():
               try:
                   with cp.open(encoding='utf-8') as f:
-                      n=max(0, sum(1 for _ in csv.DictReader(f)))
+                      n=max(0, sum(1 for _ in csv.DictReader(f))
               except Exception:
                   n=0
           print(n)
@@ -231,15 +231,19 @@ jobs:
             echo "📊 archive_count=$ARCHIVE_COUNT last_post=$LAST_POST"
             if [ "$ARCHIVE_COUNT" -lt 50 ]; then
               NEED=$((50 - ARCHIVE_COUNT))
-              if [ "$LIMIT" -lt 50 ]; then LIMIT=50; fi
-              if [ "$NEED" -gt "$LIMIT" ]; then LIMIT=$NEED; fi
+              LIMIT=$((NEED + 10))
+              if [ "$LIMIT" -lt 20 ]; then LIMIT=20; fi
+              if [ "$LIMIT" -gt 50 ]; then LIMIT=50; fi
               STOP_BEFORE=""
-              echo "🤖 auto FILL: archive has $ARCHIVE_COUNT (<50) → scrape up to limit=$LIMIT to reach 50"
+              MAX_SCROLL=15
+              echo "🤖 auto FILL: archive=$ARCHIVE_COUNT → need ~$NEED older/new → limit=$LIMIT (NOT 1000)"
             elif [ -n "$LAST_POST" ]; then
+              LIMIT=1000
               STOP_BEFORE="$LAST_POST"
-              echo "🤖 auto UPDATE: archive=$ARCHIVE_COUNT → only newer than $LAST_POST (fast-exit if none)"
+              echo "🤖 auto UPDATE: archive=$ARCHIVE_COUNT → only newer than $LAST_POST (limit safety=$LIMIT, stop_before active)"
             else
-              echo "🤖 auto: archive=$ARCHIVE_COUNT no last_post → newest then previous"
+              LIMIT=50
+              echo "🤖 auto: archive=$ARCHIVE_COUNT no last_post → limit=$LIMIT newest→older"
             fi
           else
             if [ -z "$START_LINK" ]; then
