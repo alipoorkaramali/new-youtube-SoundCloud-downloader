@@ -30,7 +30,7 @@ on:
         type: choice
         options: ['up', 'down']
       limit:
-        description: 'تعداد پست‌ها'
+        description: 'تعداد پست‌ها (فقط دستی). اتوماتیک: همهٔ پست‌های جدید تا last_post (سقف ایمنی ۱۰۰۰)'
         required: false
         default: '50'
       max_media_mb:
@@ -180,9 +180,11 @@ jobs:
           STATE="State/telegram_news_state.json"
           IS_SCHEDULE="${{ needs.prepare.outputs.is_schedule }}"
           if [ "$IS_SCHEDULE" = "true" ]; then
-            DEBUG="true"; SAVE_TO="repository"; LIMIT="50"
+            # حداقل هدف ~۵۰؛ اگر پست جدید بیشتر بود همه را بگیر (سقف ایمنی ۱۰۰۰)
+            # توقف واقعی با stop_before_id (آخرین پست ذخیره‌شده) است نه با ۵۰
+            DEBUG="true"; SAVE_TO="repository"; LIMIT="1000"
             SAVE_SHOTS="false"; RESUME="false"; START_LINK=""; CHANNEL_NAME=""
-            MAX_MEDIA="80"; TIMEOUT_SEC="0"; AUTO_EXT="true"; MAX_SCROLL="12"; SCROLL="up"
+            MAX_MEDIA="80"; TIMEOUT_SEC="0"; AUTO_EXT="true"; MAX_SCROLL="40"; SCROLL="up"
           else
             DEBUG="${{ github.event.inputs.debug_mode }}"
             SAVE_TO="${{ github.event.inputs.save_to }}"
@@ -205,9 +207,9 @@ jobs:
             SCROLL="up"
             if [ -n "$LAST_POST" ]; then
               STOP_BEFORE="$LAST_POST"
-              echo "🤖 auto: newest → back until last_saved=$LAST_POST (up + stop_before)"
+              echo "🤖 auto: newest → back until last_saved=$LAST_POST (up + stop_before, limit safety=1000)"
             else
-              echo "🤖 auto: first time → newest then previous (up)"
+              echo "🤖 auto: first time → newest then previous (up, limit safety=1000)"
             fi
           else
             if [ -z "$START_LINK" ]; then
