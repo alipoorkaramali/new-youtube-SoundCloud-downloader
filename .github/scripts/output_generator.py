@@ -8,8 +8,7 @@ JSON / CSV / HTML / ZIP
 
 - همیشه با آرشیو قبلی ادغام می‌شود
 - مرتب‌سازی از جدید به قدیم (id نزولی)
-- پنجره ثابت: فقط N پست جدیدتر نگه داشته می‌شود (پیش‌فرض ۵۰)
-  → پست جدید اضافه، به همان تعداد قدیمی‌تر حذف
+- پنجره: هدف ۵۰ پست؛ اگر در یک run بیش از ۵۰ پست جدید آمد، همان تعداد بیشتر نگه داشته می‌شود
 """
 
 from __future__ import annotations
@@ -27,13 +26,10 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
-# تعداد ثابت پست در خروجی آرشیو (پنجره لغزان)
 DEFAULT_KEEP_LATEST = 50
 
 
 class OutputGenerator:
-    """تولیدکننده خروجی‌های چندفرمتی برای آرشیو تلگرام."""
-
     def __init__(
         self,
         base_dir: Path,
@@ -49,7 +45,6 @@ class OutputGenerator:
         self.posts = list(posts or [])
         self.media_map = media_map or {}
         self.debug_mode = debug_mode
-        # همیشه ادغام با قبلی انجام می‌شود تا آرشیو پاک نشود
         self.append_mode = True
         self.keep_latest = max(1, int(keep_latest or DEFAULT_KEEP_LATEST))
         self.logger = logging.getLogger("TelegramScraper")
@@ -73,8 +68,6 @@ class OutputGenerator:
             for div in soup.select("[data-msg-id], .post"):
                 msg_id = div.get("data-msg-id")
                 if not msg_id:
-                    # fallback: #number in .post-number
-                    num = div.select_one(".post-number")
                     continue
                 text_el = div.select_one(".post-text, .text, p")
                 text = text_el.get_text("\n", strip=True) if text_el else ""
@@ -91,7 +84,6 @@ class OutputGenerator:
             return []
 
     def _merge_with_existing_posts(self) -> list:
-        """ادغام پست‌های جدید با آرشیو قبلی + حذف تکراری."""
         json_path = self.base_dir / f"{self._safe_name}_posts.json"
         html_path = self.base_dir / f"{self._safe_name}_posts.html"
         existing_posts: List[Dict] = []
@@ -150,19 +142,22 @@ class OutputGenerator:
             self.posts.sort(key=lambda x: str(x.get("id", "0")), reverse=True)
 
     def _apply_rolling_window(self) -> None:
-        """فقط keep_latest پست جدیدتر را نگه دار (قدیمی‌ترها حذف)."""
+        """هدف ۵۰؛ اگر این run بیش از ۵۰ پست جدید آورد، همان تعداد بیشتر بماند."""
         self._sort_posts_newest_first()
         before = len(self.posts)
-        if before > self.keep_latest:
-            dropped = before - self.keep_latest
-            self.posts = self.posts[: self.keep_latest]
+        run_n = int(self._initial_post_count or 0)
+        effective = max(self.keep_latest, run_n) if run_n > self.keep_latest else self.keep_latest
+        if before > effective:
+            dropped = before - effective
+            self.posts = self.posts[:effective]
             self.logger.info(
-                f"🪟 پنجره {self.keep_latest}تایی: {before} → {len(self.posts)} "
-                f"(حذف {dropped} پست قدیمی‌تر)"
+                f"🪟 پنجره {effective}تایی: {before} → {len(self.posts)} "
+                f"(حذف {dropped} قدیمی‌تر؛ run_new={run_n})"
             )
         else:
             self.logger.info(
-                f"🪟 پنجره {self.keep_latest}تایی: {before} پست (کمتر از سقف)"
+                f"🪟 پنجره هدف={self.keep_latest} (effective={effective}): "
+                f"{before} پست؛ run_new={run_n}"
             )
         if self.posts:
             self.logger.info(
@@ -247,23 +242,17 @@ class OutputGenerator:
             self.logger.warning(f"⚠️ ساخت ZIP ناموفق: {e}")
 
     def run_all(self) -> None:
-        """ادغام با قبلی → مرتب‌سازی → پنجره ۵۰تایی → نوشتن خروجی."""
         self.logger.info("🚀 شروع تولید فایل‌های خروجی...")
         self.logger.info(f"📊 پست‌های این اجرا: {self._initial_post_count}")
         self.logger.info(f"🪟 keep_latest={self.keep_latest}")
 
         try:
-            # همیشه با آرشیو قبلی ادغام کن (حتی اگر append_mode ورودی False بود)
             self.posts = self._merge_with_existing_posts()
-
-            # جدیدترها بالا، فقط N تای اول
             self._apply_rolling_window()
-
             self.generate_json()
             self.generate_csv()
             self.generate_html()
             self.create_zip()
-
             self.logger.info("✅ خروجی‌ها آماده شد.")
             self.logger.info(f"📊 تعداد نهایی در آرشیو: {len(self.posts)}")
         except Exception as e:
