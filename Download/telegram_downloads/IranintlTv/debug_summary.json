@@ -1,8 +1,8 @@
 {
   "channel": "IranintlTv",
-  "limit": 1000,
-  "start_link": "https://t.me/IranintlTv/357783",
+  "limit": 22,
+  "start_link": "",
   "scroll_direction": "up",
-  "total_posts": 15,
+  "total_posts": 22,
   "debug_mode": true
 }
