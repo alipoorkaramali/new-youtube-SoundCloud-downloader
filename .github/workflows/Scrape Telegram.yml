@@ -169,6 +169,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
           fetch-depth: 1
+      - name: Patch scraper scroll / jump-to-bottom
+        run: python3 .github/scripts/patch_scraper_scroll.py .github/scripts/scraper.py
       - name: Resolve run parameters
         id: params
         run: |
