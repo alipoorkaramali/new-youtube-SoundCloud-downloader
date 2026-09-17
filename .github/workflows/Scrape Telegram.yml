@@ -171,6 +171,8 @@ jobs:
           fetch-depth: 1
       - name: Patch scraper scroll / jump-to-bottom
         run: python3 .github/scripts/patch_scraper_scroll.py .github/scripts/scraper.py
+      - name: Patch scraper stop_before (newest→saved)
+        run: python3 .github/scripts/patch_stop_before.py .github/scripts/scraper.py
       - name: Resolve run parameters
         id: params
         run: |
@@ -180,7 +182,7 @@ jobs:
           if [ "$IS_SCHEDULE" = "true" ]; then
             DEBUG="true"; SAVE_TO="repository"; LIMIT="50"
             SAVE_SHOTS="false"; RESUME="false"; START_LINK=""; CHANNEL_NAME=""
-            MAX_MEDIA="80"; TIMEOUT_SEC="0"; AUTO_EXT="true"; MAX_SCROLL="12"; SCROLL="down"
+            MAX_MEDIA="80"; TIMEOUT_SEC="0"; AUTO_EXT="true"; MAX_SCROLL="12"; SCROLL="up"
           else
             DEBUG="${{ github.event.inputs.debug_mode }}"
             SAVE_TO="${{ github.event.inputs.save_to }}"
@@ -197,14 +199,14 @@ jobs:
           fi
           LAST_POST=""
           [ -f "$STATE" ] && LAST_POST=$(python3 -c "import json;d=json.load(open('$STATE'));print((d.get('channels') or {}).get('$CHANNEL',{}).get('last_post_id') or '')")
+          STOP_BEFORE=""
           if [ "$IS_SCHEDULE" = "true" ]; then
-            if [ -n "$LAST_POST" ] && [ "$RESUME" != "true" ]; then
-              START_LINK="https://t.me/${CHANNEL}/${LAST_POST}"
-              SCROLL="down"
-              echo "🤖 auto: from last_saved=$LAST_POST → newer (down)"
+            START_LINK=""
+            SCROLL="up"
+            if [ -n "$LAST_POST" ]; then
+              STOP_BEFORE="$LAST_POST"
+              echo "🤖 auto: newest → back until last_saved=$LAST_POST (up + stop_before)"
             else
-              START_LINK=""
-              SCROLL="up"
               echo "🤖 auto: first time → newest then previous (up)"
             fi
           else
@@ -230,6 +232,7 @@ jobs:
           echo "auto_extend_timeout=$AUTO_EXT" >> $GITHUB_OUTPUT
           echo "max_scroll_attempts=$MAX_SCROLL" >> $GITHUB_OUTPUT
           echo "last_post_id=$LAST_POST" >> $GITHUB_OUTPUT
+          echo "stop_before_id=$STOP_BEFORE" >> $GITHUB_OUTPUT
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -272,6 +275,11 @@ jobs:
           c['debug_mode'] = '${{ steps.params.outputs.debug_mode }}'.lower() == 'true'
           c['timeout_seconds'] = int('${{ steps.params.outputs.timeout_seconds }}' or '0')
           c['auto_extend_timeout'] = '${{ steps.params.outputs.auto_extend_timeout }}'.lower() == 'true'
+          sb = '''${{ steps.params.outputs.stop_before_id }}'''.strip()
+          if sb:
+              c['stop_before_id'] = sb
+          else:
+              c.pop('stop_before_id', None)
           with open('config/config.yaml', 'w') as f: yaml.dump(c, f, allow_unicode=True, default_flow_style=False)
           print(c)
           "
@@ -318,10 +326,18 @@ jobs:
           if last_id:
               if channel not in state["channel_list"]: state["channel_list"].append(channel)
               prev = state["channels"].get(channel) or {}
-              prev.update({"last_post_id": last_id, "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
-              state["channels"][channel] = prev
-              state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
-              print("state", channel, last_id)
+              prev_id = str(prev.get("last_post_id") or "")
+              try:
+                  advance = (not prev_id) or (int(last_id) > int(prev_id))
+              except ValueError:
+                  advance = True
+              if advance:
+                  prev.update({"last_post_id": last_id, "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+                  state["channels"][channel] = prev
+                  state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
+                  print("state advanced", channel, prev_id, "->", last_id)
+              else:
+                  print("state keep", channel, prev_id, "(collected max", last_id, ")")
           PY
       - name: Commit results
         if: ${{ steps.params.outputs.save_to == 'repository' }}
