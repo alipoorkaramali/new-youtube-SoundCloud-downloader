@@ -5,7 +5,11 @@
 ماژول تولید خروجی‌های چندگانه برای اسکرپر تلگرام
 ---------------------------------------------
 JSON / CSV / HTML / ZIP
-مرتب‌سازی اجباری پست‌ها از جدید به قدیم (id نزولی) در HTML و JSON
+
+- همیشه با آرشیو قبلی ادغام می‌شود
+- مرتب‌سازی از جدید به قدیم (id نزولی)
+- پنجره ثابت: فقط N پست جدیدتر نگه داشته می‌شود (پیش‌فرض ۵۰)
+  → پست جدید اضافه، به همان تعداد قدیمی‌تر حذف
 """
 
 from __future__ import annotations
@@ -23,6 +27,9 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+# تعداد ثابت پست در خروجی آرشیو (پنجره لغزان)
+DEFAULT_KEEP_LATEST = 50
+
 
 class OutputGenerator:
     """تولیدکننده خروجی‌های چندفرمتی برای آرشیو تلگرام."""
@@ -35,13 +42,16 @@ class OutputGenerator:
         media_map: dict,
         debug_mode: bool = False,
         append_mode: bool = False,
+        keep_latest: int = DEFAULT_KEEP_LATEST,
     ):
         self.base_dir = Path(base_dir)
         self.channel = channel
         self.posts = list(posts or [])
         self.media_map = media_map or {}
         self.debug_mode = debug_mode
-        self.append_mode = append_mode
+        # همیشه ادغام با قبلی انجام می‌شود تا آرشیو پاک نشود
+        self.append_mode = True
+        self.keep_latest = max(1, int(keep_latest or DEFAULT_KEEP_LATEST))
         self.logger = logging.getLogger("TelegramScraper")
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._safe_name = self._sanitize_filename(self.channel)
@@ -63,6 +73,8 @@ class OutputGenerator:
             for div in soup.select("[data-msg-id], .post"):
                 msg_id = div.get("data-msg-id")
                 if not msg_id:
+                    # fallback: #number in .post-number
+                    num = div.select_one(".post-number")
                     continue
                 text_el = div.select_one(".post-text, .text, p")
                 text = text_el.get_text("\n", strip=True) if text_el else ""
@@ -79,6 +91,7 @@ class OutputGenerator:
             return []
 
     def _merge_with_existing_posts(self) -> list:
+        """ادغام پست‌های جدید با آرشیو قبلی + حذف تکراری."""
         json_path = self.base_dir / f"{self._safe_name}_posts.json"
         html_path = self.base_dir / f"{self._safe_name}_posts.html"
         existing_posts: List[Dict] = []
@@ -92,7 +105,7 @@ class OutputGenerator:
                         if self._validate_post_structure(post):
                             existing_posts.append(post)
                 self.logger.info(
-                    f"📄 {len(existing_posts)} پست معتبر از JSON قبلی: {json_path.name}"
+                    f"📄 {len(existing_posts)} پست از JSON قبلی: {json_path.name}"
                 )
             except Exception as e:
                 self.logger.warning(f"⚠️ خواندن JSON قبلی ناموفق: {e}")
@@ -102,10 +115,10 @@ class OutputGenerator:
             html_posts = self._extract_posts_from_html(html_path)
             if html_posts:
                 existing_posts = html_posts
-                self.logger.info(f"📄 {len(existing_posts)} پست از HTML قبلی استخراج شد.")
+                self.logger.info(f"📄 {len(existing_posts)} پست از HTML قبلی.")
 
         if not existing_posts:
-            self.logger.info("ℹ️ هیچ پست قبلی یافت نشد.")
+            self.logger.info("ℹ️ آرشیو قبلی خالی — فقط پست‌های این اجرا")
             return list(self.posts)
 
         all_posts = existing_posts + list(self.posts)
@@ -113,7 +126,7 @@ class OutputGenerator:
         unique_posts = []
         duplicate_count = 0
         for post in all_posts:
-            post_id = post.get("id")
+            post_id = str(post.get("id") or "")
             if not post_id:
                 continue
             if post_id not in seen_ids:
@@ -122,29 +135,40 @@ class OutputGenerator:
             else:
                 duplicate_count += 1
 
-        try:
-            unique_posts.sort(key=lambda x: int(x.get("id", 0) or 0), reverse=True)
-        except (ValueError, TypeError):
-            unique_posts.sort(key=lambda x: str(x.get("id", "0")), reverse=True)
-
         self.logger.info(
             f"🔄 ادغام: {len(existing_posts)} قبلی + {len(self.posts)} جدید = "
-            f"{len(unique_posts)} کل (حذف {duplicate_count} تکراری)"
+            f"{len(unique_posts)} یکتا (حذف {duplicate_count} تکراری)"
         )
         return unique_posts
 
     def _sort_posts_newest_first(self) -> None:
-        """مرتب‌سازی اجباری: جدیدترین پست بالا (id نزولی) — مثلاً ۵۰ → ۱."""
         if not self.posts:
             return
         try:
             self.posts.sort(key=lambda x: int(x.get("id", 0) or 0), reverse=True)
         except (ValueError, TypeError):
             self.posts.sort(key=lambda x: str(x.get("id", "0")), reverse=True)
-        self.logger.info(
-            f"🔃 ترتیب پست‌ها از جدید به قدیم "
-            f"(اول={self.posts[0].get('id')}, آخر={self.posts[-1].get('id')})"
-        )
+
+    def _apply_rolling_window(self) -> None:
+        """فقط keep_latest پست جدیدتر را نگه دار (قدیمی‌ترها حذف)."""
+        self._sort_posts_newest_first()
+        before = len(self.posts)
+        if before > self.keep_latest:
+            dropped = before - self.keep_latest
+            self.posts = self.posts[: self.keep_latest]
+            self.logger.info(
+                f"🪟 پنجره {self.keep_latest}تایی: {before} → {len(self.posts)} "
+                f"(حذف {dropped} پست قدیمی‌تر)"
+            )
+        else:
+            self.logger.info(
+                f"🪟 پنجره {self.keep_latest}تایی: {before} پست (کمتر از سقف)"
+            )
+        if self.posts:
+            self.logger.info(
+                f"🔃 ترتیب: جدید→قدیم (اول={self.posts[0].get('id')}, "
+                f"آخر={self.posts[-1].get('id')})"
+            )
 
     def generate_json(self) -> None:
         json_path = self.base_dir / f"{self._safe_name}_posts.json"
@@ -165,11 +189,7 @@ class OutputGenerator:
         self.logger.info(f"📄 CSV: {csv_path.name}")
 
     def generate_html(self) -> None:
-        if self.append_mode:
-            self.posts = self._merge_with_existing_posts()
-
         self._sort_posts_newest_first()
-
         html_path = self.base_dir / f"{self._safe_name}_posts.html"
         current_iran = (
             datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)
@@ -227,30 +247,25 @@ class OutputGenerator:
             self.logger.warning(f"⚠️ ساخت ZIP ناموفق: {e}")
 
     def run_all(self) -> None:
-        """اجرای تمام مراحل؛ ترتیب نهایی همیشه جدید → قدیم."""
+        """ادغام با قبلی → مرتب‌سازی → پنجره ۵۰تایی → نوشتن خروجی."""
         self.logger.info("🚀 شروع تولید فایل‌های خروجی...")
-        self.logger.info(f"📊 تعداد پست‌های ورودی: {self._initial_post_count}")
-        self.logger.info(f"📌 append_mode: {self.append_mode}")
+        self.logger.info(f"📊 پست‌های این اجرا: {self._initial_post_count}")
+        self.logger.info(f"🪟 keep_latest={self.keep_latest}")
 
         try:
-            if self.append_mode:
-                self.posts = self._merge_with_existing_posts()
-            else:
-                self.logger.info("ℹ️ append_mode غیرفعال — بدون ادغام")
+            # همیشه با آرشیو قبلی ادغام کن (حتی اگر append_mode ورودی False بود)
+            self.posts = self._merge_with_existing_posts()
 
-            self._sort_posts_newest_first()
+            # جدیدترها بالا، فقط N تای اول
+            self._apply_rolling_window()
 
             self.generate_json()
             self.generate_csv()
-
-            original_append = self.append_mode
-            self.append_mode = False
             self.generate_html()
-            self.append_mode = original_append
-
             self.create_zip()
-            self.logger.info("✅ تمام فایل‌های خروجی تولید شدند.")
-            self.logger.info(f"📊 تعداد نهایی پست‌ها: {len(self.posts)}")
+
+            self.logger.info("✅ خروجی‌ها آماده شد.")
+            self.logger.info(f"📊 تعداد نهایی در آرشیو: {len(self.posts)}")
         except Exception as e:
             self.logger.error(f"❌ خطا در تولید خروجی: {e}")
             raise
