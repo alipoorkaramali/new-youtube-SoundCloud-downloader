@@ -5,13 +5,13 @@
   ],
   "channels": {
     "IranintlTv": {
-      "last_post_id": "357913",
-      "last_updated": "2026-09-18T03:33:22Z",
+      "last_post_id": "357914",
+      "last_updated": "2026-09-18T04:33:24Z",
       "source": "seeded_from_posts_json_max"
     },
     "bbcpersian": {
-      "last_post_id": "291629",
-      "last_updated": "2026-09-18T03:33:41Z",
+      "last_post_id": "291630",
+      "last_updated": "2026-09-18T04:33:00Z",
       "source": "seeded_from_posts_json_max"
     }
   },
