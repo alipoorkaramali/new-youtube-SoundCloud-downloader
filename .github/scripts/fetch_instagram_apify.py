@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 """Fetch Instagram posts via Apify for one or many usernames.
 
-Optimization: probe latest post (1 item). If shortcode matches State, skip full Apify pull.
+Actor: apify/instagram-post-scraper (official Apify)
+Works with any number of APIFY_API_TOKEN accounts via round-robin.
+
+Optimization: probe latest post (1 item). If shortcode matches State, skip full pull.
 """
 import os
 import json
@@ -15,6 +18,9 @@ try:
 except ImportError:
     print("❌ apify-client not installed")
     raise SystemExit(1)
+
+# Official Apify actor — username[] + resultsLimit; field shortCode in output
+ACTOR_ID = "apify/instagram-post-scraper"
 
 
 def load_usernames():
@@ -42,7 +48,7 @@ def load_usernames():
     return users
 
 
-def maybe_save_to_channels_file(usernames: list) -> None:
+def maybe_save_to_channels_file(usernames):
     flag = (os.environ.get("ADD_TO_LIST") or "").strip().lower()
     if flag not in ("true", "1", "yes"):
         return
@@ -85,7 +91,7 @@ def maybe_save_to_channels_file(usernames: list) -> None:
         print(f"ℹ️ All usernames already in {channels_file}")
 
 
-def load_state(path: Path) -> dict:
+def load_state(path):
     if not path.exists():
         return {"channels": {}}
     try:
@@ -98,12 +104,13 @@ def load_state(path: Path) -> dict:
         return {"channels": {}}
 
 
-def save_state(path: Path, state: dict) -> None:
+def save_state(path, state):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def pick_token(token1, token2, counter_file: Path):
+def pick_token(token1, token2, counter_file):
+    """Round-robin between APIFY_API_TOKEN and APIFY_API_TOKEN_2."""
     counter = 0
     if counter_file.exists():
         try:
@@ -125,28 +132,45 @@ def pick_token(token1, token2, counter_file: Path):
     return token1, 1
 
 
-def fetch_posts(client: ApifyClient, username: str, post_count: int) -> list:
-    actor_id = "khadinakbar/instagram-posts-scraper"
+def extract_shortcode(item):
+    """Normalize shortcode from official actor output (shortCode)."""
+    for key in ("shortCode", "shortcode", "code"):
+        v = item.get(key)
+        if v:
+            return str(v).strip()
+    url = str(item.get("url") or item.get("inputUrl") or "")
+    m = re.search(r"/(?:p|reel|tv)/([A-Za-z0-9_-]+)", url)
+    return m.group(1) if m else ""
+
+
+def normalize_post(item):
+    """Stable shape for Issue table + state (shortcode + caption)."""
+    sc = extract_shortcode(item)
+    out = dict(item)
+    out["shortcode"] = sc
+    if out.get("caption") is None:
+        out["caption"] = ""
+    return out
+
+
+def fetch_posts(client, username, post_count):
     run_input = {
-        "instagramUsernames": [username],
-        "maxPostsPerTarget": post_count,
-        "includeRecentComments": True,
-        "proxyConfiguration": {
-            "useApifyProxy": True,
-            "apifyProxyGroups": ["RESIDENTIAL"],
-        },
+        "username": [username],
+        "resultsLimit": max(1, int(post_count)),
+        # basicData is cheaper; still includes shortCode, caption, url, type
+        "dataDetailLevel": "basicData",
     }
-    run = client.actor(actor_id).call(run_input=run_input)
-    print(f"   ✅ Actor run: {run['id']} (requested={post_count})")
+    run = client.actor(ACTOR_ID).call(run_input=run_input)
+    print(f"   ✅ Actor run: {run['id']} ({ACTOR_ID}, requested={post_count})")
     posts = []
     for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-        posts.append(item)
+        posts.append(normalize_post(item))
         if len(posts) >= post_count:
             break
     return posts
 
 
-def latest_shortcode(posts: list) -> str:
+def latest_shortcode(posts):
     if not posts:
         return ""
     return str(posts[0].get("shortcode") or "").strip()
@@ -179,10 +203,12 @@ def main():
 
     print(f"📋 Channels ({len(usernames)}): {', '.join('@' + u for u in usernames)}")
     print(f"📊 Posts per channel: {post_count} | force_refresh={force}")
+    print(f"🤖 Actor: {ACTOR_ID}")
 
     manifest = {
         "fetched_at": datetime.now().isoformat(),
         "post_count": post_count,
+        "actor": ACTOR_ID,
         "channels": [],
     }
 
@@ -234,6 +260,7 @@ def main():
                 "requested_posts": post_count,
                 "fetched_posts": len(posts),
                 "fetched_at": datetime.now().isoformat(),
+                "actor": ACTOR_ID,
                 "recent_posts": posts,
             }
             Path(rel).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -252,9 +279,12 @@ def main():
                 "ok": True,
                 "file": rel,
                 "fetched_posts": len(posts),
-                "issue_update": True,
+                "issue_update": bool(posts),  # no empty issue update
             })
-            print(f"   💾 {len(posts)} posts → {rel} (latest={sc})")
+            if not posts:
+                print(f"   ⚠️ 0 posts returned for @{username}")
+            else:
+                print(f"   💾 {len(posts)} posts → {rel} (latest={sc})")
         except Exception as e:
             entry["error"] = str(e)
             print(f"   ❌ @{username}: {e}")
