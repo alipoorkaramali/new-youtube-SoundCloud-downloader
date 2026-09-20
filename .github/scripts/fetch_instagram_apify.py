@@ -1,96 +1,150 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Fetch Instagram posts via Apify for one or many usernames."""
 import os
 import json
-from apify_client import ApifyClient
+import re
+from pathlib import Path
 from datetime import datetime
 
-def main():
-    username = os.environ.get('TARGET_USERNAME')
-    post_count_str = os.environ.get('POST_COUNT', '5')
-    output_file = os.environ.get('OUTPUT_FILE', 'instagram_posts.json')
+try:
+    from apify_client import ApifyClient
+except ImportError:
+    print("❌ apify-client not installed")
+    raise SystemExit(1)
 
-    # دریافت دو توکن از Secrets
-    token1 = os.environ.get('APIFY_API_TOKEN')
-    token2 = os.environ.get('APIFY_API_TOKEN_2')
 
-    if not token1:
-        print("❌ APIFY_API_TOKEN is not set")
-        exit(1)
+def load_usernames():
+    raw = (os.environ.get("USERNAMES_INPUT") or "").strip()
+    if raw:
+        parts = re.split(r"[\s,;]+", raw)
+        users = [p.lstrip("@").strip() for p in parts if p.strip() and not p.strip().startswith("#")]
+        return list(dict.fromkeys(users))
 
-    # فایل شمارنده برای انتخاب گردشی
-    counter_file = "token_counter.txt"
+    channels_file = Path(os.environ.get("CHANNELS_FILE", "config/instagram_channels.txt"))
+    if not channels_file.exists():
+        print(f"❌ No usernames input and file missing: {channels_file}")
+        raise SystemExit(1)
+
+    users = []
+    for line in channels_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        users.append(line.lstrip("@").strip())
+    users = list(dict.fromkeys([u for u in users if u]))
+    if not users:
+        print(f"❌ No usernames in {channels_file}")
+        raise SystemExit(1)
+    return users
+
+
+def pick_token(token1, token2, counter_file: Path):
     counter = 0
-    if os.path.exists(counter_file):
-        with open(counter_file, 'r') as f:
-            try:
-                counter = int(f.read().strip())
-            except:
-                counter = 0
+    if counter_file.exists():
+        try:
+            counter = int(counter_file.read_text(encoding="utf-8").strip() or "0")
+        except ValueError:
+            counter = 0
 
-    # انتخاب توکن: اگر توکن دوم وجود داشته باشد، به صورت یک در میان
     if token2:
         if counter % 2 == 0:
-            token = token1
-            account = 1
+            token, account = token1, 1
         else:
-            token = token2
-            account = 2
-        # افزایش شمارنده برای دفعه بعد
-        with open(counter_file, 'w') as f:
-            f.write(str(counter + 1))
-        print(f"🔄 Using account #{account} (Round Robin)")
-    else:
-        token = token1
-        print("ℹ️ Only one token available")
+            token, account = token2, 2
+        counter_file.parent.mkdir(parents=True, exist_ok=True)
+        counter_file.write_text(str(counter + 1), encoding="utf-8")
+        print(f"🔄 Using Apify account #{account} (round-robin, counter={counter})")
+        return token, account
 
-    # تبدیل تعداد پست به عدد
+    print("ℹ️ Only one Apify token available")
+    return token1, 1
+
+
+def fetch_one(client: ApifyClient, username: str, post_count: int):
+    actor_id = "khadinakbar/instagram-posts-scraper"
+    run_input = {
+        "instagramUsernames": [username],
+        "maxPostsPerTarget": post_count,
+        "includeRecentComments": True,
+        "proxyConfiguration": {
+            "useApifyProxy": True,
+            "apifyProxyGroups": ["RESIDENTIAL"],
+        },
+    }
+    run = client.actor(actor_id).call(run_input=run_input)
+    print(f"   ✅ Actor run: {run['id']}")
+    posts = []
+    for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+        posts.append(item)
+        if len(posts) >= post_count:
+            break
+    return posts
+
+
+def main():
+    token1 = os.environ.get("APIFY_API_TOKEN")
+    token2 = os.environ.get("APIFY_API_TOKEN_2") or None
+    if not token1:
+        print("❌ APIFY_API_TOKEN is not set")
+        raise SystemExit(1)
+
     try:
-        post_count = int(post_count_str)
-        if post_count not in [5, 10, 15, 20]:
+        post_count = int(os.environ.get("POST_COUNT", "5"))
+        if post_count not in (5, 10, 15, 20):
             post_count = 5
-    except:
+    except ValueError:
         post_count = 5
 
-    print(f"🔍 Fetching {post_count} posts from @{username}...")
+    counter_file = Path(os.environ.get("TOKEN_COUNTER_FILE", "State/apify_token_counter.txt"))
+    out_dir = Path("instagram_data")
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        client = ApifyClient(token)
-        actor_id = "khadinakbar/instagram-posts-scraper"
+    usernames = load_usernames()
+    print(f"📋 Channels to fetch ({len(usernames)}): {', '.join('@'+u for u in usernames)}")
+    print(f"📊 Posts per channel: {post_count}")
 
-        run_input = {
-            "instagramUsernames": [username],
-            "maxPostsPerTarget": post_count,
-            "includeRecentComments": True,
-            "proxyConfiguration": {
-                "useApifyProxy": True,
-                "apifyProxyGroups": ["RESIDENTIAL"]
+    manifest = {
+        "fetched_at": datetime.now().isoformat(),
+        "post_count": post_count,
+        "channels": [],
+    }
+
+    for username in usernames:
+        print(f"\n🔍 Fetching @{username} ...")
+        entry = {"username": username, "ok": False, "file": None, "fetched_posts": 0, "error": None}
+        try:
+            token, _ = pick_token(token1, token2, counter_file)
+            client = ApifyClient(token)
+            posts = fetch_one(client, username, post_count)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            rel = f"instagram_data/{username}_{ts}.json"
+            result = {
+                "target_username": username,
+                "requested_posts": post_count,
+                "fetched_posts": len(posts),
+                "fetched_at": datetime.now().isoformat(),
+                "recent_posts": posts,
             }
-        }
+            Path(rel).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            Path("instagram_posts.json").write_text(
+                json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            entry.update({"ok": True, "file": rel, "fetched_posts": len(posts)})
+            print(f"   💾 Saved {len(posts)} posts → {rel}")
+        except Exception as e:
+            entry["error"] = str(e)
+            print(f"   ❌ @{username}: {e}")
+        manifest["channels"].append(entry)
 
-        run = client.actor(actor_id).call(run_input=run_input)
-        print(f"✅ Actor run successful: {run['id']}")
+    Path("instagram_fetch_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    ok_n = sum(1 for c in manifest["channels"] if c["ok"])
+    print(f"\n🏁 Done: {ok_n}/{len(usernames)} channels OK")
+    if ok_n == 0:
+        raise SystemExit(1)
 
-        posts = []
-        for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-            posts.append(item)
-            if len(posts) >= post_count:
-                break
 
-        result = {
-            'target_username': username,
-            'requested_posts': post_count,
-            'fetched_posts': len(posts),
-            'fetched_at': datetime.now().isoformat(),
-            'recent_posts': posts
-        }
-
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-
-        print(f"✅ Saved {len(posts)} posts to {output_file}")
-
-    except Exception as e:
-        print(f"❌ Error: {str(e)}")
-        exit(1)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

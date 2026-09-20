@@ -3,12 +3,13 @@ name: 📸 دریافت پست‌های اینستاگرام
 on:
   workflow_dispatch:
     inputs:
-      username:
-        description: 'نام کاربری پیج (بدون @)'
-        required: true
-        default: 'bbcpersian'
+      usernames:
+        description: 'Optional usernames (comma-separated). Leave empty to use config/instagram_channels.txt'
+        required: false
+        default: ''
+        type: string
       post_count:
-        description: 'تعداد پست'
+        description: 'Posts per channel'
         required: true
         default: '5'
         type: choice
@@ -25,70 +26,79 @@ jobs:
       contents: write
       issues: write
     steps:
-      - name: 📥 دریافت کد مخزن
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: 📁 آماده‌سازی پوشه instagram_data
-        run: mkdir -p instagram_data
+      - name: 📁 Prepare dirs
+        run: |
+          mkdir -p instagram_data config State
+          if [ ! -f config/instagram_channels.txt ]; then
+            printf '%s\n' '# one Instagram username per line' 'bbcpersian' > config/instagram_channels.txt
+          fi
 
-      - name: 🐍 تنظیم پایتون
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 📦 نصب کتابخانه‌ها
+      - name: 📦 Install deps
         run: |
-          pip install apify-client
-          pip install requests
+          pip install apify-client requests
 
-      - name: 🚀 دریافت پست‌ها با Apify (Round Robin)
+      - name: 🚀 Fetch posts (all channels)
         env:
-          TARGET_USERNAME: ${{ github.event.inputs.username }}
+          USERNAMES_INPUT: ${{ github.event.inputs.usernames }}
+          CHANNELS_FILE: config/instagram_channels.txt
           POST_COUNT: ${{ github.event.inputs.post_count }}
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           APIFY_API_TOKEN_2: ${{ secrets.APIFY_API_TOKEN_2 }}
+          TOKEN_COUNTER_FILE: State/apify_token_counter.txt
         run: python .github/scripts/fetch_instagram_apify.py
 
-      - name: 💾 ذخیره JSON در instagram_data (با زمان)
-        id: save
-        run: |
-          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          USERNAME="${{ github.event.inputs.username }}"
-          NEW_FILE="instagram_data/${USERNAME}_${TIMESTAMP}.json"
-          if [ -f instagram_posts.json ]; then
-            cp instagram_posts.json "$NEW_FILE"
-            echo "✅ فایل ذخیره شد: $NEW_FILE"
-            echo "saved_file=$NEW_FILE" >> $GITHUB_OUTPUT
-          else
-            echo "❌ خطا: instagram_posts.json یافت نشد"
-            exit 1
-          fi
-
-      - name: 📤 Commit و Push فایل JSON به مخزن
+      - name: 📤 Commit JSON + state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add instagram_data/
-          git diff --staged --quiet || git commit -m "📸 اضافه شدن JSON جدید برای @${{ github.event.inputs.username }}"
-          git push
+          git add instagram_data/ State/apify_token_counter.txt config/instagram_channels.txt 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "📸 Instagram fetch: update JSON / channel list"
+          git push || true
 
-      - name: ❌ بستن ایشوهای قبلی برای همین پیج
+      - name: ❌ Close previous open issues per channel
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          USERNAME="${{ github.event.inputs.username }}"
-          echo "🔍 جستجوی ایشوهای باز با عنوان حاوی @$USERNAME ..."
-          ISSUE_NUMBERS=$(gh issue list --state open --search "in:title @$USERNAME" --json number --jq '.[].number')
-          if [ -z "$ISSUE_NUMBERS" ]; then
-            echo "✅ هیچ ایشوی باز قبلی یافت نشد."
-          else
-            for num in $ISSUE_NUMBERS; do
-              gh issue close "$num" --comment "این ایشو با درخواست جدید به‌روزرسانی شده و بسته می‌شود. اما همچنان می‌توانید با کامنت '/download shortcode' دانلود کنید."
-              echo "🔒 ایشو #$num بسته شد."
-            done
+          if [ ! -f instagram_fetch_manifest.json ]; then
+            echo "No manifest — nothing to close"
+            exit 0
           fi
+          python3 - <<'PY'
+          import json, subprocess, os
+          with open("instagram_fetch_manifest.json", encoding="utf-8") as f:
+              manifest = json.load(f)
+          for entry in manifest.get("channels", []):
+              if not entry.get("ok"):
+                  continue
+              username = entry["username"]
+              print(f"🔍 Closing open issues for @{username} ...")
+              r = subprocess.run(
+                  ["gh", "issue", "list", "--state", "open", "--search", f"in:title @{username}",
+                   "--json", "number", "--jq", ".[].number"],
+                  capture_output=True, text=True
+              )
+              nums = [n.strip() for n in r.stdout.splitlines() if n.strip()]
+              if not nums:
+                  print("  ✅ none open")
+                  continue
+              for num in nums:
+                  subprocess.run([
+                      "gh", "issue", "close", num, "--comment",
+                      "Closed: refreshed by a new Instagram fetch run. You can still use `/download shortcode` on older issues if needed."
+                  ], check=False)
+                  print(f"  🔒 closed #{num}")
+          PY
 
-      - name: 📝 ایجاد Issue جدید با لیست پست‌ها
+      - name: 📝 Create one Issue per channel
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python .github/scripts/create_issue_with_posts.py

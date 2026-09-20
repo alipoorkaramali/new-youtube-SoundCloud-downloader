@@ -1,0 +1,5 @@
+# Instagram channels to fetch (one username per line)
+# Lines starting with # are ignored
+# Override at runtime via workflow input "usernames" (comma-separated)
+
+bbcpersian
