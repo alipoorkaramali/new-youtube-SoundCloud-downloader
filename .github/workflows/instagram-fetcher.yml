@@ -79,45 +79,75 @@ jobs:
           git diff --staged --quiet || git commit -m "📸 Instagram fetch: update JSON / state / channel list"
           git push || true
 
-      - name: ❌ Close previous open issues (channels with updates only)
+      - name: 🗑️ Delete previous issues (channels with updates only)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Delete requires a PAT with admin/delete permission; GITHUB_TOKEN cannot delete issues
+          GH_TOKEN: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           if [ ! -f instagram_fetch_manifest.json ]; then
-            echo "No manifest — nothing to close"
+            echo "No manifest — nothing to delete"
             exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "❌ GH_PAT is required to delete issues"
+            exit 1
           fi
           python3 - <<'PY'
           import json, subprocess, os
           with open("instagram_fetch_manifest.json", encoding="utf-8") as f:
               manifest = json.load(f)
           repo = os.environ.get("GITHUB_REPOSITORY", "")
+          if not repo:
+              raise SystemExit("GITHUB_REPOSITORY missing")
+
           for entry in manifest.get("channels", []):
               if not entry.get("ok") or not entry.get("issue_update"):
                   continue
               username = entry["username"]
-              print(f"🔍 Closing open issues for @{username} ...")
+              print(f"🗑️ Deleting old issues for @{username} ...")
+              # open + closed so backlog is cleared
               r = subprocess.run(
-                  ["gh", "issue", "list", "--state", "open", "--search", f"in:title @{username}",
-                   "--json", "number", "--jq", ".[].number"],
+                  [
+                      "gh", "issue", "list",
+                      "--state", "all",
+                      "--search", f"in:title @{username} label:instagram-download",
+                      "--limit", "50",
+                      "--json", "number",
+                      "--jq", ".[].number",
+                  ],
                   capture_output=True, text=True,
               )
-              nums = [n.strip() for n in r.stdout.splitlines() if n.strip()]
+              nums = [n.strip() for n in r.stdout.splitlines() if n.strip().isdigit()]
+              # fallback without label filter if none found
               if not nums:
-                  print("  ✅ none open")
+                  r2 = subprocess.run(
+                      [
+                          "gh", "issue", "list",
+                          "--state", "all",
+                          "--search", f"in:title Instagram posts - @{username}",
+                          "--limit", "50",
+                          "--json", "number",
+                          "--jq", ".[].number",
+                      ],
+                      capture_output=True, text=True,
+                  )
+                  nums = [n.strip() for n in r2.stdout.splitlines() if n.strip().isdigit()]
+
+              if not nums:
+                  print("  ✅ none found")
                   continue
+
               for num in nums:
-                  subprocess.run([
-                      "gh", "issue", "close", num, "--comment",
-                      "Replaced by a fresh Instagram fetch (new posts detected)."
-                  ], check=False)
-                  if repo:
-                      subprocess.run(
-                          ["gh", "api", "-X", "DELETE", f"repos/{repo}/issues/{num}"],
-                          check=False, capture_output=True,
-                      )
-                  print(f"  🔒 closed/removed #{num}")
+                  del_r = subprocess.run(
+                      ["gh", "api", "-X", "DELETE", f"repos/{repo}/issues/{num}"],
+                      capture_output=True, text=True,
+                  )
+                  if del_r.returncode == 0:
+                      print(f"  🗑️ deleted #{num}")
+                  else:
+                      err = (del_r.stderr or del_r.stdout or "").strip()[:200]
+                      print(f"  ❌ delete #{num} failed: {err}")
           PY
 
       - name: 📝 Create one Issue per updated channel
