@@ -109,8 +109,26 @@ def save_state(path, state):
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def pick_token(token1, token2, counter_file):
-    """Round-robin between APIFY_API_TOKEN and APIFY_API_TOKEN_2."""
+def load_apify_tokens():
+    """Collect APIFY_API_TOKEN, APIFY_API_TOKEN_2, _3, ... (any non-empty)."""
+    tokens = []
+    t1 = (os.environ.get("APIFY_API_TOKEN") or "").strip()
+    if t1:
+        tokens.append(t1)
+    # Support APIFY_API_TOKEN_2 .. APIFY_API_TOKEN_20 for future expansion
+    for i in range(2, 21):
+        t = (os.environ.get(f"APIFY_API_TOKEN_{i}") or "").strip()
+        if t:
+            tokens.append(t)
+    return tokens
+
+
+def pick_token(tokens, counter_file):
+    """Round-robin across all available Apify tokens."""
+    if not tokens:
+        print("❌ No Apify tokens found (set APIFY_API_TOKEN and optionally APIFY_API_TOKEN_2, _3, ...)")
+        raise SystemExit(1)
+
     counter = 0
     if counter_file.exists():
         try:
@@ -118,18 +136,13 @@ def pick_token(token1, token2, counter_file):
         except ValueError:
             counter = 0
 
-    if token2:
-        if counter % 2 == 0:
-            token, account = token1, 1
-        else:
-            token, account = token2, 2
-        counter_file.parent.mkdir(parents=True, exist_ok=True)
-        counter_file.write_text(str(counter + 1), encoding="utf-8")
-        print(f"🔄 Using Apify account #{account} (round-robin, counter={counter})")
-        return token, account
-
-    print("ℹ️ Only one Apify token available")
-    return token1, 1
+    idx = counter % len(tokens)
+    account = idx + 1
+    token = tokens[idx]
+    counter_file.parent.mkdir(parents=True, exist_ok=True)
+    counter_file.write_text(str(counter + 1), encoding="utf-8")
+    print(f"🔄 Using Apify account #{account}/{len(tokens)} (round-robin, counter={counter})")
+    return token, account
 
 
 def extract_shortcode(item):
@@ -177,11 +190,11 @@ def latest_shortcode(posts):
 
 
 def main():
-    token1 = os.environ.get("APIFY_API_TOKEN")
-    token2 = os.environ.get("APIFY_API_TOKEN_2") or None
-    if not token1:
-        print("❌ APIFY_API_TOKEN is not set")
+    tokens = load_apify_tokens()
+    if not tokens:
+        print("❌ APIFY_API_TOKEN is not set (and no APIFY_API_TOKEN_2/3/...)")
         raise SystemExit(1)
+    print(f"🔑 Apify tokens loaded: {len(tokens)}")
 
     force = (os.environ.get("FORCE_REFRESH") or "").strip().lower() in ("true", "1", "yes")
 
@@ -227,7 +240,7 @@ def main():
         known = str(ch_state.get("last_shortcode") or "").strip()
 
         try:
-            token, _ = pick_token(token1, token2, counter_file)
+            token, _ = pick_token(tokens, counter_file)
             client = ApifyClient(token)
 
             if not force and known:
@@ -246,7 +259,7 @@ def main():
                     manifest["channels"].append(entry)
                     continue
                 print(f"   🆕 New content detected (probe={probe_sc or 'n/a'} ≠ known={known})")
-                token, _ = pick_token(token1, token2, counter_file)
+                token, _ = pick_token(tokens, counter_file)
                 client = ApifyClient(token)
             elif force:
                 print("   ⚡ force_refresh — full fetch")

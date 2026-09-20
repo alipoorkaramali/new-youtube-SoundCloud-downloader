@@ -67,6 +67,9 @@ jobs:
           POST_COUNT: ${{ github.event.inputs.post_count || '10' }}
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           APIFY_API_TOKEN_2: ${{ secrets.APIFY_API_TOKEN_2 }}
+          APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
+          APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
+          APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
           TOKEN_COUNTER_FILE: State/apify_token_counter.txt
           STATE_FILE: State/instagram_channel_state.json
         run: python .github/scripts/fetch_instagram_apify.py
