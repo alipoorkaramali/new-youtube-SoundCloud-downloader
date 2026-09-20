@@ -7,17 +7,12 @@ import re
 import requests
 from pathlib import Path
 
-# How many characters of caption to show in the Issue table
-CAPTION_PREVIEW_LEN = 300
 
-
-def format_caption(raw: str, limit: int = CAPTION_PREVIEW_LEN) -> str:
-    """Flatten whitespace and truncate for markdown table cell."""
+def format_caption(raw: str) -> str:
+    """Flatten whitespace for markdown table cell; keep full caption (no truncate)."""
     text = (raw or "").replace("\r", " ").replace("\n", " ")
     text = re.sub(r"\s+", " ", text).strip()
     text = text.replace("|", "\\|")
-    if len(text) > limit:
-        text = text[: limit - 1].rstrip() + "…"
     return text
 
 
@@ -30,8 +25,8 @@ def build_body(data: dict) -> str:
     body += f"_Updated: {fetched_at}_\n\n"
     body += "To download a post, comment:\n"
     body += "`/download shortcode`  (example: `/download CxYz123`)\n\n"
-    body += "| # | shortcode | caption (preview) |\n"
-    body += "|---|-----------|-------------------|\n"
+    body += "| # | shortcode | caption |\n"
+    body += "|---|-----------|---------|\n"
 
     for i, post in enumerate(posts, 1):
         shortcode = post.get("shortcode", "")
