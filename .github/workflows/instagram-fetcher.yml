@@ -27,7 +27,7 @@ on:
           - '15'
           - '20'
       force_refresh:
-        description: 'Ignore last-post check and always re-fetch + recreate issues'
+        description: 'Ignore last-post check and always re-fetch + update issues'
         required: false
         default: false
         type: boolean
@@ -79,76 +79,7 @@ jobs:
           git diff --staged --quiet || git commit -m "📸 Instagram fetch: update JSON / state / channel list"
           git push || true
 
-      - name: 🗑️ Delete previous issues (channels with updates only)
-        env:
-          # Needs a PAT that can delete issues (GITHUB_TOKEN cannot)
-          GH_TOKEN: ${{ secrets.ISSUES_DELETE_PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          if [ ! -f instagram_fetch_manifest.json ]; then
-            echo "No manifest — nothing to delete"
-            exit 0
-          fi
-          if [ -z "$GH_TOKEN" ]; then
-            echo "❌ Secret ISSUES_DELETE_PAT is required to delete issues"
-            exit 1
-          fi
-          python3 - <<'PY'
-          import json, subprocess, os
-          with open("instagram_fetch_manifest.json", encoding="utf-8") as f:
-              manifest = json.load(f)
-          repo = os.environ.get("GITHUB_REPOSITORY", "")
-          if not repo:
-              raise SystemExit("GITHUB_REPOSITORY missing")
-
-          for entry in manifest.get("channels", []):
-              if not entry.get("ok") or not entry.get("issue_update"):
-                  continue
-              username = entry["username"]
-              print(f"🗑️ Deleting old issues for @{username} ...")
-              r = subprocess.run(
-                  [
-                      "gh", "issue", "list",
-                      "--state", "all",
-                      "--search", f"in:title @{username} label:instagram-download",
-                      "--limit", "50",
-                      "--json", "number",
-                      "--jq", ".[].number",
-                  ],
-                  capture_output=True, text=True,
-              )
-              nums = [n.strip() for n in r.stdout.splitlines() if n.strip().isdigit()]
-              if not nums:
-                  r2 = subprocess.run(
-                      [
-                          "gh", "issue", "list",
-                          "--state", "all",
-                          "--search", f"in:title Instagram posts - @{username}",
-                          "--limit", "50",
-                          "--json", "number",
-                          "--jq", ".[].number",
-                      ],
-                      capture_output=True, text=True,
-                  )
-                  nums = [n.strip() for n in r2.stdout.splitlines() if n.strip().isdigit()]
-
-              if not nums:
-                  print("  ✅ none found")
-                  continue
-
-              for num in nums:
-                  del_r = subprocess.run(
-                      ["gh", "api", "-X", "DELETE", f"repos/{repo}/issues/{num}"],
-                      capture_output=True, text=True,
-                  )
-                  if del_r.returncode == 0:
-                      print(f"  🗑️ deleted #{num}")
-                  else:
-                      err = (del_r.stderr or del_r.stdout or "").strip()[:200]
-                      print(f"  ❌ delete #{num} failed: {err}")
-          PY
-
-      - name: 📝 Create one Issue per updated channel
+      - name: 📝 Create or update Issue per channel
         env:
           GH_PAT: ${{ secrets.ISSUES_DELETE_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
