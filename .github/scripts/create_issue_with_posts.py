@@ -3,8 +3,22 @@
 """Create or UPDATE one GitHub Issue per Instagram channel (no delete needed)."""
 import os
 import json
+import re
 import requests
 from pathlib import Path
+
+# How many characters of caption to show in the Issue table
+CAPTION_PREVIEW_LEN = 300
+
+
+def format_caption(raw: str, limit: int = CAPTION_PREVIEW_LEN) -> str:
+    """Flatten whitespace and truncate for markdown table cell."""
+    text = (raw or "").replace("\r", " ").replace("\n", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.replace("|", "\\|")
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return text
 
 
 def build_body(data: dict) -> str:
@@ -21,7 +35,7 @@ def build_body(data: dict) -> str:
 
     for i, post in enumerate(posts, 1):
         shortcode = post.get("shortcode", "")
-        caption = (post.get("caption") or "")[:80].replace("\n", " ").replace("|", "\\|")
+        caption = format_caption(post.get("caption") or "")
         body += f"| {i} | `{shortcode}` | {caption} |\n"
 
     if not posts:
