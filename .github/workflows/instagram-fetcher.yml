@@ -81,8 +81,8 @@ jobs:
 
       - name: 🗑️ Delete previous issues (channels with updates only)
         env:
-          # Delete requires a PAT with admin/delete permission; GITHUB_TOKEN cannot delete issues
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          # Needs a PAT that can delete issues (GITHUB_TOKEN cannot)
+          GH_TOKEN: ${{ secrets.ISSUES_DELETE_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           if [ ! -f instagram_fetch_manifest.json ]; then
@@ -90,7 +90,7 @@ jobs:
             exit 0
           fi
           if [ -z "$GH_TOKEN" ]; then
-            echo "❌ GH_PAT is required to delete issues"
+            echo "❌ Secret ISSUES_DELETE_PAT is required to delete issues"
             exit 1
           fi
           python3 - <<'PY'
@@ -106,7 +106,6 @@ jobs:
                   continue
               username = entry["username"]
               print(f"🗑️ Deleting old issues for @{username} ...")
-              # open + closed so backlog is cleared
               r = subprocess.run(
                   [
                       "gh", "issue", "list",
@@ -119,7 +118,6 @@ jobs:
                   capture_output=True, text=True,
               )
               nums = [n.strip() for n in r.stdout.splitlines() if n.strip().isdigit()]
-              # fallback without label filter if none found
               if not nums:
                   r2 = subprocess.run(
                       [
@@ -152,6 +150,6 @@ jobs:
 
       - name: 📝 Create one Issue per updated channel
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.ISSUES_DELETE_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python .github/scripts/create_issue_with_posts.py
