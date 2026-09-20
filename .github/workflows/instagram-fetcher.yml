@@ -8,6 +8,11 @@ on:
         required: false
         default: ''
         type: string
+      add_to_list:
+        description: 'Save these usernames into config/instagram_channels.txt for future runs?'
+        required: false
+        default: false
+        type: boolean
       post_count:
         description: 'Posts per channel'
         required: true
@@ -48,6 +53,7 @@ jobs:
       - name: 🚀 Fetch posts (all channels)
         env:
           USERNAMES_INPUT: ${{ github.event.inputs.usernames }}
+          ADD_TO_LIST: ${{ github.event.inputs.add_to_list }}
           CHANNELS_FILE: config/instagram_channels.txt
           POST_COUNT: ${{ github.event.inputs.post_count }}
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
