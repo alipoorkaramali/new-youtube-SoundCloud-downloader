@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Fetch Instagram posts via Apify for one or many usernames."""
+"""Fetch Instagram posts via Apify for one or many usernames.
+
+Optimization: probe latest post (1 item). If shortcode matches State, skip full Apify pull.
+"""
 import os
 import json
 import re
@@ -40,7 +43,6 @@ def load_usernames():
 
 
 def maybe_save_to_channels_file(usernames: list) -> None:
-    """If ADD_TO_LIST and user provided usernames via input, merge into channels file."""
     flag = (os.environ.get("ADD_TO_LIST") or "").strip().lower()
     if flag not in ("true", "1", "yes"):
         return
@@ -83,6 +85,24 @@ def maybe_save_to_channels_file(usernames: list) -> None:
         print(f"ℹ️ All usernames already in {channels_file}")
 
 
+def load_state(path: Path) -> dict:
+    if not path.exists():
+        return {"channels": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"channels": {}}
+        data.setdefault("channels", {})
+        return data
+    except Exception:
+        return {"channels": {}}
+
+
+def save_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def pick_token(token1, token2, counter_file: Path):
     counter = 0
     if counter_file.exists():
@@ -105,7 +125,7 @@ def pick_token(token1, token2, counter_file: Path):
     return token1, 1
 
 
-def fetch_one(client: ApifyClient, username: str, post_count: int):
+def fetch_posts(client: ApifyClient, username: str, post_count: int) -> list:
     actor_id = "khadinakbar/instagram-posts-scraper"
     run_input = {
         "instagramUsernames": [username],
@@ -117,13 +137,19 @@ def fetch_one(client: ApifyClient, username: str, post_count: int):
         },
     }
     run = client.actor(actor_id).call(run_input=run_input)
-    print(f"   ✅ Actor run: {run['id']}")
+    print(f"   ✅ Actor run: {run['id']} (requested={post_count})")
     posts = []
     for item in client.dataset(run["defaultDatasetId"]).iterate_items():
         posts.append(item)
         if len(posts) >= post_count:
             break
     return posts
+
+
+def latest_shortcode(posts: list) -> str:
+    if not posts:
+        return ""
+    return str(posts[0].get("shortcode") or "").strip()
 
 
 def main():
@@ -133,21 +159,26 @@ def main():
         print("❌ APIFY_API_TOKEN is not set")
         raise SystemExit(1)
 
+    force = (os.environ.get("FORCE_REFRESH") or "").strip().lower() in ("true", "1", "yes")
+
     try:
-        post_count = int(os.environ.get("POST_COUNT", "5"))
+        post_count = int(os.environ.get("POST_COUNT", "10"))
         if post_count not in (5, 10, 15, 20):
-            post_count = 5
+            post_count = 10
     except ValueError:
-        post_count = 5
+        post_count = 10
 
     counter_file = Path(os.environ.get("TOKEN_COUNTER_FILE", "State/apify_token_counter.txt"))
+    state_file = Path(os.environ.get("STATE_FILE", "State/instagram_channel_state.json"))
     out_dir = Path("instagram_data")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     usernames = load_usernames()
     maybe_save_to_channels_file(usernames)
-    print(f"📋 Channels to fetch ({len(usernames)}): {', '.join('@' + u for u in usernames)}")
-    print(f"📊 Posts per channel: {post_count}")
+    state = load_state(state_file)
+
+    print(f"📋 Channels ({len(usernames)}): {', '.join('@' + u for u in usernames)}")
+    print(f"📊 Posts per channel: {post_count} | force_refresh={force}")
 
     manifest = {
         "fetched_at": datetime.now().isoformat(),
@@ -156,12 +187,46 @@ def main():
     }
 
     for username in usernames:
-        print(f"\n🔍 Fetching @{username} ...")
-        entry = {"username": username, "ok": False, "file": None, "fetched_posts": 0, "error": None}
+        print(f"\n🔍 @{username} ...")
+        entry = {
+            "username": username,
+            "ok": False,
+            "file": None,
+            "fetched_posts": 0,
+            "error": None,
+            "skipped_unchanged": False,
+            "issue_update": False,
+        }
+        ch_state = state["channels"].get(username) or {}
+        known = str(ch_state.get("last_shortcode") or "").strip()
+
         try:
             token, _ = pick_token(token1, token2, counter_file)
             client = ApifyClient(token)
-            posts = fetch_one(client, username, post_count)
+
+            if not force and known:
+                print(f"   🔎 Probe latest post (known last={known}) ...")
+                probe = fetch_posts(client, username, 1)
+                probe_sc = latest_shortcode(probe)
+                if probe_sc and probe_sc == known:
+                    print(f"   ⏭️ Unchanged (latest still {probe_sc}) — skip full Apify pull & issue")
+                    entry.update({
+                        "ok": True,
+                        "skipped_unchanged": True,
+                        "issue_update": False,
+                        "fetched_posts": 0,
+                        "file": ch_state.get("last_file"),
+                    })
+                    manifest["channels"].append(entry)
+                    continue
+                print(f"   🆕 New content detected (probe={probe_sc or 'n/a'} ≠ known={known})")
+                token, _ = pick_token(token1, token2, counter_file)
+                client = ApifyClient(token)
+            elif force:
+                print("   ⚡ force_refresh — full fetch")
+
+            posts = fetch_posts(client, username, post_count)
+            sc = latest_shortcode(posts)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             rel = f"instagram_data/{username}_{ts}.json"
             result = {
@@ -175,18 +240,36 @@ def main():
             Path("instagram_posts.json").write_text(
                 json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
             )
-            entry.update({"ok": True, "file": rel, "fetched_posts": len(posts)})
-            print(f"   💾 Saved {len(posts)} posts → {rel}")
+
+            state["channels"][username] = {
+                "last_shortcode": sc,
+                "last_fetched_at": result["fetched_at"],
+                "last_file": rel,
+                "recent_shortcodes": [str(p.get("shortcode") or "") for p in posts[:20]],
+            }
+
+            entry.update({
+                "ok": True,
+                "file": rel,
+                "fetched_posts": len(posts),
+                "issue_update": True,
+            })
+            print(f"   💾 {len(posts)} posts → {rel} (latest={sc})")
         except Exception as e:
             entry["error"] = str(e)
             print(f"   ❌ @{username}: {e}")
+
         manifest["channels"].append(entry)
 
+    save_state(state_file, state)
     Path("instagram_fetch_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
     ok_n = sum(1 for c in manifest["channels"] if c["ok"])
-    print(f"\n🏁 Done: {ok_n}/{len(usernames)} channels OK")
+    upd_n = sum(1 for c in manifest["channels"] if c.get("issue_update"))
+    skip_n = sum(1 for c in manifest["channels"] if c.get("skipped_unchanged"))
+    print(f"\n🏁 OK={ok_n}/{len(usernames)} | issue updates={upd_n} | unchanged skips={skip_n}")
     if ok_n == 0:
         raise SystemExit(1)
 

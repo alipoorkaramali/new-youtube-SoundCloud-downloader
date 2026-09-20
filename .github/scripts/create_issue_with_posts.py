@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Create one GitHub Issue per channel from instagram_fetch_manifest.json."""
+"""Create one GitHub Issue per channel that has issue_update=true in the manifest."""
 import os
 import json
 import requests
@@ -10,18 +10,19 @@ from pathlib import Path
 def build_body(data: dict) -> str:
     posts = data.get("recent_posts", [])
     username = data.get("target_username", "unknown")
-    fetched_at = (data.get("fetched_at") or "")[:10]
+    fetched_at = (data.get("fetched_at") or "")[:19].replace("T", " ")
 
-    body = f"## 📸 Instagram posts – @{username} – {fetched_at}\n\n"
+    body = f"## 📸 Instagram posts – @{username}\n\n"
+    body += f"_Updated: {fetched_at}_\n\n"
     body += "To download a post, comment:\n"
     body += "`/download shortcode`  (example: `/download CxYz123`)\n\n"
-    body += "| shortcode | caption (preview) |\n"
-    body += "|-----------|-------------------|\n"
+    body += "| # | shortcode | caption (preview) |\n"
+    body += "|---|-----------|-------------------|\n"
 
-    for post in posts:
+    for i, post in enumerate(posts, 1):
         shortcode = post.get("shortcode", "")
         caption = (post.get("caption") or "")[:80].replace("\n", " ").replace("|", "\\|")
-        body += f"| `{shortcode}` | {caption} |\n"
+        body += f"| {i} | `{shortcode}` | {caption} |\n"
 
     if not posts:
         body += "\n_No posts returned by the scraper._\n"
@@ -57,29 +58,29 @@ def main():
 
     manifest_path = Path("instagram_fetch_manifest.json")
     if not manifest_path.exists():
-        single = Path("instagram_posts.json")
-        if not single.exists():
-            print("❌ No manifest and no instagram_posts.json")
-            raise SystemExit(1)
-        data = json.loads(single.read_text(encoding="utf-8"))
-        username = data.get("target_username", "unknown")
-        fetched_at = (data.get("fetched_at") or "")[:10]
-        title = f"📸 Instagram posts - @{username} - {fetched_at}"
-        url = create_issue(repo, token, title, build_body(data))
-        print(f"✅ Issue created: {url}")
+        print("ℹ️ No manifest — nothing to do")
         return
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     channels = manifest.get("channels") or []
     created = 0
+    skipped = 0
+
     for entry in channels:
-        if not entry.get("ok"):
-            print(f"⏭️ skip @{entry.get('username')}: {entry.get('error')}")
+        if entry.get("skipped_unchanged"):
+            print(f"⏭️ @{entry.get('username')}: unchanged — no new issue")
+            skipped += 1
             continue
+        if not entry.get("ok") or not entry.get("issue_update"):
+            if entry.get("error"):
+                print(f"⏭️ skip @{entry.get('username')}: {entry.get('error')}")
+            continue
+
         path = Path(entry["file"])
         if not path.exists():
             print(f"⚠️ missing file {path}")
             continue
+
         data = json.loads(path.read_text(encoding="utf-8"))
         username = data.get("target_username") or entry["username"]
         fetched_at = (data.get("fetched_at") or "")[:10]
@@ -91,9 +92,7 @@ def main():
         except Exception as e:
             print(f"❌ @{username}: {e}")
 
-    print(f"🏁 Issues created: {created}")
-    if created == 0:
-        raise SystemExit(1)
+    print(f"🏁 Issues created: {created} | unchanged skipped: {skipped}")
 
 
 if __name__ == "__main__":
