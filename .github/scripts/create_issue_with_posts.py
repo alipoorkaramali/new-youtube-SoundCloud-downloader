@@ -31,56 +31,70 @@ def build_body(data: dict) -> str:
 
 def api_headers(token: str) -> dict:
     return {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
     }
 
 
-def find_existing_issue(repo: str, token: str, username: str):
-    """Find open issue for this channel (prefer label + @username in title)."""
+def _title_matches(title: str, username: str) -> bool:
+    t = (title or "").lower()
+    u = username.lower()
+    if f"@{u}" not in t:
+        return False
+    # Instagram / اینستاگرام markers (English or Persian titles from older runs)
+    return (
+        "instagram" in t
+        or "اینستاگرام" in (title or "")
+        or "posts" in t
+        or "پست" in (title or "")
+    )
+
+
+def find_matching_open_issues(repo: str, token: str, username: str) -> list:
+    """Return all open issue numbers matching this channel (newest first)."""
     headers = api_headers(token)
-    q = f'repo:{repo} is:issue is:open label:instagram-download "@{username}" in:title'
-    r = requests.get(
-        "https://api.github.com/search/issues",
-        headers=headers,
-        params={"q": q, "per_page": 5},
-        timeout=60,
-    )
-    if r.status_code == 200:
-        items = r.json().get("items") or []
-        for it in items:
-            title = it.get("title") or ""
-            if f"@{username}" in title:
-                return it.get("number")
+    found = {}
 
-    r2 = requests.get(
-        f"https://api.github.com/repos/{repo}/issues",
-        headers=headers,
-        params={"state": "open", "labels": "instagram-download", "per_page": 50},
-        timeout=60,
-    )
-    if r2.status_code == 200:
-        for it in r2.json():
-            if it.get("pull_request"):
-                continue
-            title = it.get("title") or ""
-            if f"@{username}" in title and "Instagram" in title:
-                return it.get("number")
+    # 1) Search API
+    q = f'repo:{repo} is:issue is:open "@{username}" in:title'
+    try:
+        r = requests.get(
+            "https://api.github.com/search/issues",
+            headers=headers,
+            params={"q": q, "per_page": 20},
+            timeout=60,
+        )
+        if r.status_code == 200:
+            for it in r.json().get("items") or []:
+                if _title_matches(it.get("title") or "", username):
+                    found[int(it["number"])] = it
+        else:
+            print(f"   search API: {r.status_code}")
+    except Exception as e:
+        print(f"   search error: {e}")
 
-    r3 = requests.get(
-        f"https://api.github.com/repos/{repo}/issues",
-        headers=headers,
-        params={"state": "open", "per_page": 50},
-        timeout=60,
-    )
-    if r3.status_code == 200:
-        for it in r3.json():
-            if it.get("pull_request"):
-                continue
-            title = it.get("title") or ""
-            if f"@{username}" in title and ("Instagram" in title or "اینستاگرام" in title):
-                return it.get("number")
-    return None
+    # 2) List open issues (paginated lightly)
+    try:
+        r2 = requests.get(
+            f"https://api.github.com/repos/{repo}/issues",
+            headers=headers,
+            params={"state": "open", "per_page": 100},
+            timeout=60,
+        )
+        if r2.status_code == 200:
+            for it in r2.json():
+                if it.get("pull_request"):
+                    continue
+                if _title_matches(it.get("title") or "", username):
+                    found[int(it["number"])] = it
+        else:
+            print(f"   list issues: {r2.status_code} {r2.text[:120]}")
+    except Exception as e:
+        print(f"   list error: {e}")
+
+    # newest number first
+    return sorted(found.keys(), reverse=True)
 
 
 def create_issue(repo: str, token: str, title: str, body: str) -> str:
@@ -93,6 +107,12 @@ def create_issue(repo: str, token: str, title: str, body: str) -> str:
     resp = requests.post(url, headers=api_headers(token), json=payload, timeout=60)
     if resp.status_code == 201:
         return resp.json().get("html_url", "")
+    # Label might not exist yet — retry without labels
+    if resp.status_code == 422:
+        payload.pop("labels", None)
+        resp = requests.post(url, headers=api_headers(token), json=payload, timeout=60)
+        if resp.status_code == 201:
+            return resp.json().get("html_url", "")
     raise RuntimeError(f"create {resp.status_code} — {resp.text[:400]}")
 
 
@@ -102,12 +122,38 @@ def update_issue(repo: str, token: str, number: int, title: str, body: str) -> s
         "title": title,
         "body": body,
         "state": "open",
-        "labels": ["instagram-download"],
     }
     resp = requests.patch(url, headers=api_headers(token), json=payload, timeout=60)
     if resp.status_code == 200:
+        # try attach label (ignore failure if label missing)
+        try:
+            requests.post(
+                f"https://api.github.com/repos/{repo}/issues/{number}/labels",
+                headers=api_headers(token),
+                json={"labels": ["instagram-download"]},
+                timeout=30,
+            )
+        except Exception:
+            pass
         return resp.json().get("html_url", f"https://github.com/{repo}/issues/{number}")
     raise RuntimeError(f"update #{number} {resp.status_code} — {resp.text[:400]}")
+
+
+def close_issue(repo: str, token: str, number: int) -> None:
+    url = f"https://api.github.com/repos/{repo}/issues/{number}"
+    resp = requests.patch(
+        url,
+        headers=api_headers(token),
+        json={
+            "state": "closed",
+            "state_reason": "not_planned",
+        },
+        timeout=60,
+    )
+    if resp.status_code == 200:
+        print(f"  🔒 closed duplicate #{number}")
+    else:
+        print(f"  ⚠️ close #{number}: {resp.status_code}")
 
 
 def main():
@@ -151,12 +197,17 @@ def main():
         title = f"📸 Instagram posts - @{username}"
         body = build_body(data)
 
-        existing = find_existing_issue(repo, token, username)
+        matches = find_matching_open_issues(repo, token, username)
+        print(f"🔎 @{username}: open matches={matches}")
+
         try:
-            if existing:
-                url = update_issue(repo, token, int(existing), title, body)
-                print(f"♻️ @{username}: updated #{existing} → {url}")
+            if matches:
+                keep = matches[0]  # newest
+                url = update_issue(repo, token, keep, title, body)
+                print(f"♻️ @{username}: updated #{keep} → {url}")
                 updated += 1
+                for dup in matches[1:]:
+                    close_issue(repo, token, dup)
             else:
                 url = create_issue(repo, token, title, body)
                 print(f"✅ @{username}: created → {url}")
