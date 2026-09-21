@@ -2,10 +2,11 @@
   "channels": {
     "bbcpersian": {
       "last_shortcode": "DadB5jOCFPr",
-      "last_fetched_at": "2026-09-21T07:15:04.937337",
-      "last_file": "instagram_data/bbcpersian_20260921_054108.json",
+      "last_fetched_at": "2026-09-21T08:30:59.687717",
+      "last_file": "instagram_data/bbcpersian_20260921_083059.json",
       "recent_shortcodes": [
         "DadB5jOCFPr",
+        "Ddinv8UG-T9",
         "DdiaDfIF508",
         "DdiJSojjSNE",
         "Ddh6xLCiIqk",
@@ -13,13 +14,12 @@
         "DdhfmVMHIfn",
         "DdheyGylB9s",
         "DdhU4R7AWLc",
-        "DdhQZE2D0Go",
-        "DdhIXLloYAV"
+        "DdhQZE2D0Go"
       ]
     },
     "mohammadjavadhosseinii": {
       "last_shortcode": "DESr3W1t8o0",
-      "last_fetched_at": "2026-09-21T07:15:36.998596",
+      "last_fetched_at": "2026-09-21T08:31:22.651656",
       "last_file": "instagram_data/mohammadjavadhosseinii_20260921_054125.json",
       "recent_shortcodes": [
         "DESr3W1t8o0",
@@ -36,7 +36,7 @@
     },
     "alireza.mehrabii": {
       "last_shortcode": "DciPIUtI0zl",
-      "last_fetched_at": "2026-09-21T07:15:58.534426",
+      "last_fetched_at": "2026-09-21T08:32:02.455524",
       "last_file": "instagram_data/alireza.mehrabii_20260921_060339.json",
       "recent_shortcodes": [
         "DciPIUtI0zl",
@@ -53,19 +53,19 @@
     },
     "iranintltv": {
       "last_shortcode": "DdWFJ-llDB4",
-      "last_fetched_at": "2026-09-21T07:16:10.622298",
-      "last_file": "instagram_data/iranintltv_20260921_071610.json",
+      "last_fetched_at": "2026-09-21T08:32:49.832410",
+      "last_file": "instagram_data/iranintltv_20260921_083249.json",
       "recent_shortcodes": [
         "DdWFJ-llDB4",
         "DdGy91hsiyM",
+        "Ddiu0FQjapy",
+        "DdiuTihGylA",
+        "DdirpVRFhQf",
+        "DdiqezWDMIL",
+        "DdipCTPgS9U",
         "DdijYj1oOoS",
         "DdihZayCcCJ",
-        "DdigkRYlfXb",
-        "DdidwzXFVLA",
-        "DdiXESnFqWo",
-        "DdiS2UQCv0O",
-        "DdiQCvNgDmX",
-        "DdiPCSqFZSX"
+        "DdigkRYlfXb"
       ]
     }
   }
