@@ -111,22 +111,40 @@ def save_state(path, state):
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def mask_token(token: str) -> str:
+    """Show only last 4 chars so you can verify which secret was picked."""
+    t = (token or "").strip()
+    if len(t) <= 4:
+        return "****"
+    return f"…{t[-4:]}"
+
+
 def load_apify_tokens():
-    """Collect APIFY_API_TOKEN, APIFY_API_TOKEN_2, _3, ... (any non-empty)."""
-    tokens = []
+    """Collect named tokens: APIFY_API_TOKEN, APIFY_API_TOKEN_2, …
+
+    Returns list of dicts: {name, token, slot} where slot is 1-based display index.
+    """
+    pool = []
     t1 = (os.environ.get("APIFY_API_TOKEN") or "").strip()
     if t1:
-        tokens.append(t1)
+        pool.append({"name": "APIFY_API_TOKEN", "token": t1, "slot": 1})
     for i in range(2, 21):
-        t = (os.environ.get(f"APIFY_API_TOKEN_{i}") or "").strip()
+        name = f"APIFY_API_TOKEN_{i}"
+        t = (os.environ.get(name) or "").strip()
         if t:
-            tokens.append(t)
-    return tokens
+            pool.append({"name": name, "token": t, "slot": len(pool) + 1})
+    return pool
 
 
-def pick_token(tokens, counter_file):
-    """Round-robin across all available Apify tokens."""
-    if not tokens:
+def print_token_pool(pool):
+    print(f"🔑 Apify token pool: {len(pool)} secret(s) loaded")
+    for item in pool:
+        print(f"   #{item['slot']}  {item['name']}  {mask_token(item['token'])}")
+
+
+def pick_token(pool, counter_file):
+    """Round-robin across all available Apify tokens. Returns (token, meta)."""
+    if not pool:
         print("❌ No Apify tokens found (set APIFY_API_TOKEN and optionally APIFY_API_TOKEN_2, _3, ...)")
         raise SystemExit(1)
 
@@ -137,13 +155,17 @@ def pick_token(tokens, counter_file):
         except ValueError:
             counter = 0
 
-    idx = counter % len(tokens)
-    account = idx + 1
-    token = tokens[idx]
+    idx = counter % len(pool)
+    item = pool[idx]
     counter_file.parent.mkdir(parents=True, exist_ok=True)
     counter_file.write_text(str(counter + 1), encoding="utf-8")
-    print(f"🔄 Using Apify account #{account}/{len(tokens)} (round-robin, counter={counter})")
-    return token, account
+
+    print(
+        f"🔄 SELECTED token #{item['slot']}/{len(pool)}  "
+        f"secret={item['name']}  mask={mask_token(item['token'])}  "
+        f"(round-robin counter={counter} → next={counter + 1})"
+    )
+    return item["token"], item
 
 
 def extract_shortcode(item):
@@ -188,11 +210,11 @@ def shortcode_list(posts):
 
 
 def main():
-    tokens = load_apify_tokens()
-    if not tokens:
+    pool = load_apify_tokens()
+    if not pool:
         print("❌ APIFY_API_TOKEN is not set (and no APIFY_API_TOKEN_2/3/...)")
         raise SystemExit(1)
-    print(f"🔑 Apify tokens loaded: {len(tokens)}")
+    print_token_pool(pool)
 
     force = (os.environ.get("FORCE_REFRESH") or "").strip().lower() in ("true", "1", "yes")
 
@@ -233,12 +255,14 @@ def main():
             "error": None,
             "skipped_unchanged": False,
             "issue_update": False,
+            "apify_secret": None,
         }
         ch_state = state["channels"].get(username) or {}
         known_list = [str(x).strip() for x in (ch_state.get("recent_shortcodes") or []) if str(x).strip()]
 
         try:
-            token, _ = pick_token(tokens, counter_file)
+            token, meta = pick_token(pool, counter_file)
+            entry["apify_secret"] = meta["name"]
             client = ApifyClient(token)
 
             # Always fetch last N posts (pinned-safe)
@@ -262,7 +286,6 @@ def main():
                     "fetched_posts": len(posts),
                     "file": ch_state.get("last_file"),
                 })
-                # still refresh last_fetched_at lightly in state? keep old file path
                 state["channels"][username] = {
                     **ch_state,
                     "last_shortcode": sc or ch_state.get("last_shortcode", ""),
@@ -319,6 +342,9 @@ def main():
     upd_n = sum(1 for c in manifest["channels"] if c.get("issue_update"))
     skip_n = sum(1 for c in manifest["channels"] if c.get("skipped_unchanged"))
     print(f"\n🏁 OK={ok_n}/{len(usernames)} | issue updates={upd_n} | unchanged skips={skip_n}")
+    print("📌 Token used per channel:")
+    for c in manifest["channels"]:
+        print(f"   @{c.get('username')}: {c.get('apify_secret') or '—'}")
     if ok_n == 0:
         raise SystemExit(1)
 

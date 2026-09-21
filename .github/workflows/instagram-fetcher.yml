@@ -49,6 +49,27 @@ jobs:
             printf '%s\n' '# one Instagram username per line' 'bbcpersian' > config/instagram_channels.txt
           fi
 
+      - name: 🔑 Check Apify secrets present
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          APIFY_API_TOKEN_2: ${{ secrets.APIFY_API_TOKEN_2 }}
+          APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
+          APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
+          APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
+        run: |
+          echo "=== Apify secrets status (present / missing) ==="
+          for name in APIFY_API_TOKEN APIFY_API_TOKEN_2 APIFY_API_TOKEN_3 APIFY_API_TOKEN_4 APIFY_API_TOKEN_5; do
+            val="${!name}"
+            if [ -n "$val" ]; then
+              len=${#val}
+              tail="${val: -4}"
+              echo "  ✅ $name  set  (len=$len, mask=…$tail)"
+            else
+              echo "  ❌ $name  missing / empty"
+            fi
+          done
+          echo "==============================================="
+
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
