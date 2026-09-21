@@ -2,31 +2,36 @@
   "channels": {
     "bbcpersian": {
       "last_shortcode": "DadB5jOCFPr",
-      "last_fetched_at": "2026-09-20T19:15:53.208339",
-      "last_file": "instagram_data/bbcpersian_20260920_191553.json",
+      "last_fetched_at": "2026-09-21T05:41:08.139318",
+      "last_file": "instagram_data/bbcpersian_20260921_054108.json",
       "recent_shortcodes": [
         "DadB5jOCFPr",
+        "DdiaDfIF508",
+        "DdiJSojjSNE",
+        "Ddh6xLCiIqk",
+        "DdhwLNKiM_0",
+        "DdhfmVMHIfn",
+        "DdheyGylB9s",
+        "DdhU4R7AWLc",
         "DdhQZE2D0Go",
-        "DdhIXLloYAV",
-        "DdhEoBmFOXR",
-        "DdhD8nwlP8Q",
-        "Ddg8RurEQuc",
-        "Ddg8NS0o-FN",
-        "Ddg3aXODYGe",
-        "Ddg1StfDYE7",
-        "Ddgy_cgj436"
+        "DdhIXLloYAV"
       ]
     },
     "mohammadjavadhosseinii": {
       "last_shortcode": "DESr3W1t8o0",
-      "last_fetched_at": "2026-09-21T04:56:11.489724",
-      "last_file": "instagram_data/mohammadjavadhosseinii_20260921_045611.json",
+      "last_fetched_at": "2026-09-21T05:41:25.539295",
+      "last_file": "instagram_data/mohammadjavadhosseinii_20260921_054125.json",
       "recent_shortcodes": [
         "DESr3W1t8o0",
         "DcbEOTeMFYj",
         "DcGtaCAMHEx",
         "Db8cIuVM9N7",
-        "Db4-g8-smpk"
+        "Db4-g8-smpk",
+        "Dbd2iPnMuti",
+        "DbTUsdcsJmf",
+        "DbOEPY2MRUh",
+        "DbGwKPZMYfv",
+        "DbBgoXTs1QI"
       ]
     }
   }
