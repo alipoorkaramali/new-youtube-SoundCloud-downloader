@@ -39,18 +39,19 @@ jobs:
           echo "username=$USER" >> $GITHUB_OUTPUT
           echo "📌 issue channel hint: ${USER:-none}"
 
-      - name: 🔐 رمزگشایی کوکی اینستاگرام از فایل config/INSTAGRAM_COOKIES.gpg
+      - name: 🔐 رمزگشایی کوکی اینستاگرام از config/INSTAGRAM_COOCKIES.txt.gpg
         run: |
-          if [ ! -f "config/INSTAGRAM_COOKIES.gpg" ]; then
-            echo "⚠️ فایل config/INSTAGRAM_COOKIES.gpg یافت نشد. کوکی در دسترس نیست."
+          COOKIE_GPG="config/INSTAGRAM_COOCKIES.txt.gpg"
+          if [ ! -f "$COOKIE_GPG" ]; then
+            echo "⚠️ فایل $COOKIE_GPG یافت نشد. کوکی در دسترس نیست."
             exit 0
           fi
-          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt config/INSTAGRAM_COOKIES.gpg > cookies.txt
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" --decrypt "$COOKIE_GPG" > cookies.txt
           if [ ! -s cookies.txt ]; then
             echo "❌ رمزگشایی کوکی ناموفق بود یا فایل خالی است"
             exit 1
           fi
-          echo "✅ کوکی با موفقیت رمزگشایی شد"
+          echo "✅ کوکی با موفقیت رمزگشایی شد از $COOKIE_GPG"
           echo "INSTAGRAM_COOKIES_PATH=$(pwd)/cookies.txt" >> $GITHUB_ENV
 
       - name: نصب Python و کتابخانه‌ها
