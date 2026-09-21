@@ -3,6 +3,11 @@
 """Download one Instagram post by shortcode into:
 Download/instagram_downloads/{username}/{shortcode}/
 
+Download order:
+1) yt-dlp without cookies (default)
+2) yt-dlp with cookies (fallback)
+3) direct media_urls from JSON (last resort)
+
 Username resolution order:
 1) ISSUE_USERNAME env (from issue title @handle)
 2) Apify fields: ownerUsername / owner_username / username
@@ -109,7 +114,6 @@ def collect_media_urls(post: dict) -> list:
             urls.extend([u for u in v if u])
         elif isinstance(v, str) and v.startswith("http"):
             urls.append(v)
-    # dedupe preserve order
     seen = set()
     out = []
     for u in urls:
@@ -168,7 +172,8 @@ def download_ytdlp(shortcode, output_dir, cookies_file=None):
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ yt-dlp خطا: {e.stderr}")
+        err = (e.stderr or "")[-800:]
+        print(f"❌ yt-dlp خطا: {err}")
         return False
 
 
@@ -188,22 +193,33 @@ def save_metadata(download_dir, metadata):
 
 
 def resolve_username(post, channel_from_file: str) -> str:
-    # 1) from issue title (workflow sets ISSUE_USERNAME)
     env_user = (os.environ.get("ISSUE_USERNAME") or "").strip().lstrip("@")
     if env_user and env_user.lower() != "unknown":
         return env_user
 
-    # 2) from post object
     if post:
         u = post_username(post)
         if u:
             return u
 
-    # 3) from parent JSON target_username
     if channel_from_file and channel_from_file.lower() != "unknown":
         return channel_from_file
 
     return "unknown"
+
+
+def maybe_enrich_meta(metadata, username, shortcode, cookies_file=None):
+    if metadata is not None and username != "unknown":
+        return metadata, username
+    meta2 = extract_metadata_from_ytdlp(shortcode, cookies_file)
+    if not meta2:
+        return metadata, username
+    if metadata is None:
+        metadata = meta2
+    if meta2.get("username") and meta2["username"] != "unknown":
+        username = meta2["username"]
+        metadata["username"] = username
+    return metadata, username
 
 
 def main():
@@ -218,22 +234,19 @@ def main():
     username = resolve_username(post, channel_from_file)
     metadata = None
     media_urls = []
-    video_url = None
     post_type = ""
 
     if post:
         post_type = str(post.get("type") or post.get("post_type") or "")
         media_urls = collect_media_urls(post)
-        video_url = post.get("videoUrl") or post.get("video_url")
         metadata = extract_simple_metadata(post, username)
         print(
             f"📄 پست در JSON یافت شد | channel={username} | type={post_type} | "
-            f"media_urls={len(media_urls)} | video={'yes' if video_url else 'no'}"
+            f"media_urls={len(media_urls)}"
         )
     else:
-        print("⚠️ پست در فایل‌های JSON یافت نشد. مستقیماً به yt-dlp می‌رویم...")
+        print("⚠️ پست در فایل‌های JSON یافت نشد — فقط yt-dlp")
 
-    # Download/instagram_downloads/{username}/{shortcode}
     base = Path("Download") / "instagram_downloads"
     download_dir = base / username / shortcode
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -242,46 +255,39 @@ def main():
     success = False
     method = ""
 
-    is_video = bool(video_url) or post_type.lower() in ("video", "reel", "clips")
-    if post and not is_video and media_urls:
-        print("📸 پست عکس/کاروسل – تلاش با media_urls")
+    # —— 1) پیش‌فرض: yt-dlp بدون کوکی ——
+    print("▶️ مرحله ۱: yt-dlp (بدون کوکی)...")
+    if download_ytdlp(shortcode, download_dir):
+        success = True
+        method = "yt-dlp_no_cookie"
+        metadata, username = maybe_enrich_meta(metadata, username, shortcode)
+
+    # —— 2) اگر نشد: yt-dlp + کوکی ——
+    if not success:
+        cookies_path = os.environ.get("INSTAGRAM_COOKIES_PATH")
+        if cookies_path and Path(cookies_path).exists():
+            print("🍪 مرحله ۲: yt-dlp + کوکی...")
+            if download_ytdlp(shortcode, download_dir, cookies_path):
+                success = True
+                method = "yt-dlp_with_cookie"
+                metadata, username = maybe_enrich_meta(
+                    metadata, username, shortcode, cookies_path
+                )
+        else:
+            print("⚠️ فایل کوکی در دسترس نیست — مرحله ۲ رد شد")
+
+    # —— 3) آخرین راه: لینک مستقیم از JSON ——
+    if not success and post and media_urls:
+        print("🖼️ مرحله ۳: media_urls از JSON...")
         if download_media_urls(media_urls, download_dir, shortcode, post_type):
             success = True
             method = "media_urls"
 
     if not success:
-        print("🔄 مرحله ۲: yt-dlp (بدون کوکی)...")
-        if download_ytdlp(shortcode, download_dir):
-            success = True
-            method = "yt-dlp_no_cookie"
-            if metadata is None or username == "unknown":
-                meta2 = extract_metadata_from_ytdlp(shortcode)
-                if meta2:
-                    metadata = meta2
-                    if meta2.get("username") and meta2["username"] != "unknown":
-                        username = meta2["username"]
-
-    if not success:
-        cookies_path = os.environ.get("INSTAGRAM_COOKIES_PATH")
-        if cookies_path and Path(cookies_path).exists():
-            print("🍪 مرحله ۳: yt-dlp + کوکی...")
-            if download_ytdlp(shortcode, download_dir, cookies_path):
-                success = True
-                method = "yt-dlp_with_cookie"
-                if metadata is None or username == "unknown":
-                    meta2 = extract_metadata_from_ytdlp(shortcode, cookies_path)
-                    if meta2:
-                        metadata = meta2
-                        if meta2.get("username") and meta2["username"] != "unknown":
-                            username = meta2["username"]
-        else:
-            print("⚠️ فایل کوکی در دسترس نیست. مرحله ۳ رد شد.")
-
-    if not success:
         print(f"💥 همه روش‌ها شکست خوردند: {shortcode}")
         sys.exit(1)
 
-    # If username was refined after download into unknown/, move files
+    # اگر username بعداً معلوم شد و پوشه unknown بود → جابه‌جا کن
     final_dir = base / username / shortcode
     if final_dir.resolve() != download_dir.resolve():
         final_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -319,7 +325,7 @@ def main():
     with open(download_dir / "info.txt", "w", encoding="utf-8") as f:
         f.write(f"Method: {method}\nShortcode: {shortcode}\nUsername: {username}\n")
 
-    print(f"🎉 دانلود موفق | @{username} | {shortcode} | {download_dir}")
+    print(f"🎉 دانلود موفق | method={method} | @{username} | {shortcode} | {download_dir}")
 
 
 if __name__ == "__main__":
