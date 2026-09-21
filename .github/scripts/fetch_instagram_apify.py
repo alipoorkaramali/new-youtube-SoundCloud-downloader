@@ -5,7 +5,9 @@
 Actor: apify/instagram-post-scraper (official Apify)
 Works with any number of APIFY_API_TOKEN accounts via round-robin.
 
-Optimization: probe latest post (1 item). If shortcode matches State, skip full pull.
+Always fetches the last N posts (default 10). Pinned posts stay first in the
+feed, so a 1-post probe is unreliable. We compare the full shortcode list to
+State and only skip the GitHub Issue update when nothing changed.
 """
 import os
 import json
@@ -115,7 +117,6 @@ def load_apify_tokens():
     t1 = (os.environ.get("APIFY_API_TOKEN") or "").strip()
     if t1:
         tokens.append(t1)
-    # Support APIFY_API_TOKEN_2 .. APIFY_API_TOKEN_20 for future expansion
     for i in range(2, 21):
         t = (os.environ.get(f"APIFY_API_TOKEN_{i}") or "").strip()
         if t:
@@ -170,7 +171,6 @@ def fetch_posts(client, username, post_count):
     run_input = {
         "username": [username],
         "resultsLimit": max(1, int(post_count)),
-        # basicData is cheaper; still includes shortCode, caption, url, type
         "dataDetailLevel": "basicData",
     }
     run = client.actor(ACTOR_ID).call(run_input=run_input)
@@ -183,10 +183,8 @@ def fetch_posts(client, username, post_count):
     return posts
 
 
-def latest_shortcode(posts):
-    if not posts:
-        return ""
-    return str(posts[0].get("shortcode") or "").strip()
+def shortcode_list(posts):
+    return [str(p.get("shortcode") or "").strip() for p in posts if p.get("shortcode")]
 
 
 def main():
@@ -237,35 +235,43 @@ def main():
             "issue_update": False,
         }
         ch_state = state["channels"].get(username) or {}
-        known = str(ch_state.get("last_shortcode") or "").strip()
+        known_list = [str(x).strip() for x in (ch_state.get("recent_shortcodes") or []) if str(x).strip()]
 
         try:
             token, _ = pick_token(tokens, counter_file)
             client = ApifyClient(token)
 
-            if not force and known:
-                print(f"   🔎 Probe latest post (known last={known}) ...")
-                probe = fetch_posts(client, username, 1)
-                probe_sc = latest_shortcode(probe)
-                if probe_sc and probe_sc == known:
-                    print(f"   ⏭️ Unchanged (latest still {probe_sc}) — skip full Apify pull & issue")
-                    entry.update({
-                        "ok": True,
-                        "skipped_unchanged": True,
-                        "issue_update": False,
-                        "fetched_posts": 0,
-                        "file": ch_state.get("last_file"),
-                    })
-                    manifest["channels"].append(entry)
-                    continue
-                print(f"   🆕 New content detected (probe={probe_sc or 'n/a'} ≠ known={known})")
-                token, _ = pick_token(tokens, counter_file)
-                client = ApifyClient(token)
-            elif force:
-                print("   ⚡ force_refresh — full fetch")
-
+            # Always fetch last N posts (pinned-safe)
             posts = fetch_posts(client, username, post_count)
-            sc = latest_shortcode(posts)
+            codes = shortcode_list(posts)
+            sc = codes[0] if codes else ""
+
+            unchanged = (
+                not force
+                and bool(codes)
+                and bool(known_list)
+                and codes == known_list[: len(codes)]
+            )
+
+            if unchanged:
+                print(f"   ⏭️ Shortcode list unchanged ({len(codes)} posts) — skip Issue update")
+                entry.update({
+                    "ok": True,
+                    "skipped_unchanged": True,
+                    "issue_update": False,
+                    "fetched_posts": len(posts),
+                    "file": ch_state.get("last_file"),
+                })
+                # still refresh last_fetched_at lightly in state? keep old file path
+                state["channels"][username] = {
+                    **ch_state,
+                    "last_shortcode": sc or ch_state.get("last_shortcode", ""),
+                    "last_fetched_at": datetime.now().isoformat(),
+                    "recent_shortcodes": codes or known_list,
+                }
+                manifest["channels"].append(entry)
+                continue
+
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             rel = f"instagram_data/{username}_{ts}.json"
             result = {
@@ -285,19 +291,19 @@ def main():
                 "last_shortcode": sc,
                 "last_fetched_at": result["fetched_at"],
                 "last_file": rel,
-                "recent_shortcodes": [str(p.get("shortcode") or "") for p in posts[:20]],
+                "recent_shortcodes": codes[:20],
             }
 
             entry.update({
                 "ok": True,
                 "file": rel,
                 "fetched_posts": len(posts),
-                "issue_update": bool(posts),  # no empty issue update
+                "issue_update": bool(posts),
             })
             if not posts:
                 print(f"   ⚠️ 0 posts returned for @{username}")
             else:
-                print(f"   💾 {len(posts)} posts → {rel} (latest={sc})")
+                print(f"   💾 {len(posts)} posts → {rel} (first={sc})")
         except Exception as e:
             entry["error"] = str(e)
             print(f"   ❌ @{username}: {e}")

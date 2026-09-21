@@ -2,8 +2,8 @@ name: 📸 دریافت پست‌های اینستاگرام
 
 on:
   schedule:
-    # Every 6 hours (UTC)
-    - cron: '0 */6 * * *'
+    # Every 12 hours (UTC)
+    - cron: '0 */12 * * *'
   workflow_dispatch:
     inputs:
       usernames:
@@ -27,7 +27,7 @@ on:
           - '15'
           - '20'
       force_refresh:
-        description: 'Ignore last-post check and always re-fetch + update issues'
+        description: 'Always rewrite Issues even if shortcode list unchanged'
         required: false
         default: false
         type: boolean
