@@ -30,6 +30,7 @@ from output_generator import OutputGenerator
 # ═══════════════════ Constants ═══════════════════
 MAX_SCROLL_ATTEMPTS = 8
 SCROLL_UP = -1200
+SCROLL_DOWN = 1200
 HOME_URL = "https://web.telegram.org/a/"
 OVERALL_TIMEOUT = 35 * 60  # fallback
 RESUME_FILE = "resume_state.json"
@@ -151,6 +152,11 @@ class TelegramChannelScraper:
         self.logger.info(f"📁 دایرکتوری خروجی: {self.base_dir}")
         self.logger.info(f"🐞 حالت دیباگ: {'فعال' if self.debug_mode else 'غیرفعال'}")
         self.logger.info(f"📌 Resume: {'فعال (بارگذاری‌شده)' if self._resume_loaded else 'غیرفعال'}")
+        self.stop_before_id = str(getattr(config, "stop_before_id", "") or "").strip()
+        if self.stop_before_id:
+            self.logger.info(
+                f"🛑 مرز توقف (stop_before_id): {self.stop_before_id} — پست‌های قدیمی‌تر/مساوی جمع نمی‌شوند"
+            )
         self.logger.info(f"🧭 جهت اسکرول: {self.scroll_direction}")
 
     # ═══════════════════ Resume State Methods ═══════════════════
@@ -611,24 +617,57 @@ class TelegramChannelScraper:
             clicked = False
             scroll_button_selectors = [
                 'button[title="Go to bottom"]',
+                'button[aria-label="Go to bottom"]',
+                'button[aria-label="Scroll to bottom"]',
+                '[aria-label="Go to bottom"]',
+                '[aria-label="Scroll to bottom"]',
                 'div[class*="scroll-to-bottom"]',
                 'div[class*="ScrollButton"]',
-                '[aria-label="Scroll to bottom"]',
+                'button.scroll-to-bottom',
+                '.FloatingActionButtons button',
                 'button:has(svg[class*="arrow-down"])',
             ]
             for sel in scroll_button_selectors:
                 try:
                     btn = page.locator(sel).first
-                    if await btn.count() > 0:
-                        await btn.click(timeout=5000)
-                        self.logger.info("   ✅ روی دکمه فلش کلیک شد. منتظر بارگذاری جدیدترین پست‌ها...")
+                    if await btn.count() > 0 and await btn.is_visible():
+                        await btn.click(timeout=4000)
+                        self.logger.info(f"   ✅ دکمه پرش کلیک شد ({sel})")
                         clicked = True
                         await human_sleep(3.5, 0.4)
                         break
                 except Exception:
                     continue
             if not clicked:
-                self.logger.info("   ℹ️ دکمه پرش به پایین پیدا نشد. ادامه با وضعیت فعلی.")
+                self.logger.info("   ℹ️ دکمه پرش پیدا نشد — تلاش با End و اسکرول JS...")
+                try:
+                    await page.keyboard.press("End")
+                    await human_sleep(0.4, 0.1)
+                    await page.keyboard.press("Control+End")
+                    await human_sleep(0.5, 0.1)
+                except Exception:
+                    pass
+                try:
+                    await page.evaluate("""() => {
+                        const sels = ['.MessageList','[class*="MessageList"]','.messages-container',
+                                      '[class*="messages"]','.Transition_slide-active'];
+                        for (const s of sels) {
+                            const el = document.querySelector(s);
+                            if (el) { try { el.scrollTop = el.scrollHeight; } catch (e) {} }
+                        }
+                        if (document.scrollingElement) {
+                            document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight;
+                        }
+                        window.scrollTo(0, document.body.scrollHeight);
+                    }""")
+                    for _i in range(5):
+                        await page.evaluate("window.scrollBy(0, 1200)")
+                        await human_sleep(0.4, 0.1)
+                    self.logger.info("   ✅ اسکرول JS به انتهای لیست")
+                    clicked = True
+                except Exception as e:
+                    self.logger.warning(f"   ⚠️ اسکرول JS: {e}")
+
         elif self.start_link:
             self.logger.info("ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.")
         else:
@@ -691,9 +730,21 @@ class TelegramChannelScraper:
                     self.logger.info(f"🎯 شروع جمع‌آوری از پیام هدف {self.target_msg_id}")
                     
                     # ─── اسکرول اولیه برای بارگذاری پست‌های قدیمی‌تر ───
-                    self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                    if self.scroll_direction == "down":
+
+                        self.logger.info("⬇️ بارگذاری پست‌های جدیدتر با اسکرول به پایین...")
+
+                        _amt = 1200
+
+                    else:
+
+                        self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+
+                        _amt = SCROLL_UP
+
                     for scroll_step in range(3):
-                        await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+
+                        await page.evaluate(f"window.scrollBy(0, {_amt})")
                         await human_sleep(1.5, 0.3)
                         self.logger.debug(f"   اسکرول {scroll_step+1}/3 انجام شد")
             except Exception as e:
@@ -755,9 +806,21 @@ class TelegramChannelScraper:
                             await msg.scroll_into_view_if_needed()
                             await page.evaluate("window.scrollBy(0, -150)")
                             await human_sleep(1, 0.3)
-                            self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+                            if self.scroll_direction == "down":
+
+                                self.logger.info("⬇️ بارگذاری پست‌های جدیدتر با اسکرول به پایین...")
+
+                                _amt = 1200
+
+                            else:
+
+                                self.logger.info("⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...")
+
+                                _amt = SCROLL_UP
+
                             for scroll_step in range(3):
-                                await page.evaluate(f"window.scrollBy(0, {SCROLL_UP})")
+
+                                await page.evaluate(f"window.scrollBy(0, {_amt})")
                                 await human_sleep(1.5, 0.3)
                             found_any_post = True
                             break
@@ -822,9 +885,25 @@ class TelegramChannelScraper:
 
                         # ═══════════════ فقط پست‌های قدیمی‌تر از نقطه شروع را جمع کن ═══════════════
                         # در حالت start_link، فقط پست‌هایی با ID کوچکتر از target_msg_id را قبول کن
-                        if self.start_link and int(msg_id) >= int(self.target_msg_id):
-                            self.logger.debug(f"⏭️ پست {msg_id} جدیدتر یا مساوی هدف است، رد می‌شود.")
-                            continue
+                        if self.start_link and self.target_msg_id:
+                            try:
+                                mid, tid = int(msg_id), int(self.target_msg_id)
+                            except (TypeError, ValueError):
+                                mid, tid = 0, 0
+                            if self.scroll_direction == "down":
+                                if mid <= tid:
+                                    continue
+                            else:
+                                if mid >= tid:
+                                    continue
+
+                        # مرز last_post ذخیره‌شده: فقط پست‌های جدیدتر از آن
+                        if getattr(self, "stop_before_id", None):
+                            try:
+                                if int(msg_id) <= int(self.stop_before_id):
+                                    continue
+                            except (TypeError, ValueError):
+                                pass
 
                         # ═══════════════ استخراج هوشمند متن پست ═══════════════
                         text = ""
@@ -950,6 +1029,19 @@ class TelegramChannelScraper:
                     resume_last_id = None
             # در غیر این صورت (حالت عادی) هیچ اسکرول اضافی انجام نمی‌شود
 
+            # اگر به مرز stop_before رسیدیم، اسکرول را قطع کن
+            if getattr(self, "stop_before_id", None) and self.scroll_direction == "up":
+                try:
+                    boundary = int(self.stop_before_id)
+                    if seen_ids:
+                        min_seen = min(int(x) for x in seen_ids if str(x).isdigit())
+                        if min_seen <= boundary:
+                            self.logger.info(
+                                f"🛑 به مرز stop_before={self.stop_before_id} رسیدیم — توقف اسکرول"
+                            )
+                            scroll_attempts = self.max_scroll_attempts
+                except Exception:
+                    pass
             # ─── تاخیر برای جلوگیری از بارگذاری بیش از حد ──────
             if len(items) % 5 == 0 and len(items) > 0:
                 await human_sleep(1.5, 0.3)
