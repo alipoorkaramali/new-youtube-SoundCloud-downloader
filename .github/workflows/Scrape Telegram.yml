@@ -93,7 +93,33 @@ jobs:
         run: |
           STATE="State/telegram_news_state.json"
           mkdir -p State
-          [ -f "$STATE" ] || echo '{"channel_list":["IranintlTv","bbcpersian"],"channels":{}}' > "$STATE"
+          # Repair corrupt / merge-conflict state so prepare never dies on JSONDecodeError
+          python3 << 'PY'
+          import json, re
+          from pathlib import Path
+          p = Path("State/telegram_news_state.json")
+          default = {"channel_list": ["IranintlTv", "bbcpersian"], "channels": {}}
+          if not p.exists():
+              p.write_text(json.dumps(default, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+              print("created default state")
+          else:
+              raw = p.read_text(encoding="utf-8")
+              try:
+                  json.loads(raw)
+                  print("state JSON ok")
+              except Exception as e:
+                  print(f"⚠️ corrupt state ({e}); stripping conflict markers / resetting")
+                  cleaned = re.sub(r"^<<<<<<< .*$", "", raw, flags=re.M)
+                  cleaned = re.sub(r"^=======$", "", cleaned, flags=re.M)
+                  cleaned = re.sub(r"^>>>>>>> .*$", "", cleaned, flags=re.M)
+                  # Prefer higher last_post_id if both sides remain somehow
+                  try:
+                      d = json.loads(cleaned)
+                  except Exception:
+                      d = default
+                  p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                  print("state repaired")
+          PY
           IS_SCHEDULE="false"
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             IS_SCHEDULE="true"
@@ -107,7 +133,10 @@ jobs:
           import json,os,re
           from pathlib import Path
           p=Path('State/telegram_news_state.json')
-          d=json.loads(p.read_text(encoding='utf-8'))
+          try:
+            d=json.loads(p.read_text(encoding='utf-8'))
+          except Exception:
+            d={'channel_list':[],'channels':{}}
           d.setdefault('channel_list',[]); d.setdefault('channels',{})
           for part in re.split(r'[,\\s]+', os.environ.get('ADD_ONLY','').strip()):
             ch=part.strip().lstrip('@')
@@ -122,7 +151,16 @@ jobs:
             exit 0
           fi
           if [ "$IS_SCHEDULE" = "true" ]; then
-            CHANNELS=$(python3 -c "import json;d=json.load(open('$STATE'));print(json.dumps(d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']))")
+            CHANNELS=$(python3 -c "
+          import json
+          from pathlib import Path
+          p=Path('$STATE')
+          try:
+            d=json.loads(p.read_text(encoding='utf-8'))
+          except Exception:
+            d={'channel_list':['IranintlTv','bbcpersian'],'channels':{}}
+          print(json.dumps(d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']))
+          ")
           else
             CH=$(echo "${{ github.event.inputs.channel }}" | sed 's/^@//' | xargs)
             [ -z "$CH" ] && CH="IranintlTv"
@@ -131,7 +169,10 @@ jobs:
           import json,os
           from pathlib import Path
           ch=os.environ['CH']; p=Path('State/telegram_news_state.json')
-          d=json.loads(p.read_text(encoding='utf-8'))
+          try:
+            d=json.loads(p.read_text(encoding='utf-8'))
+          except Exception:
+            d={'channel_list':[],'channels':{}}
           d.setdefault('channel_list',[]); d.setdefault('channels',{})
           if ch not in d['channel_list']: d['channel_list'].append(ch)
           d['channels'].setdefault(ch,{})
@@ -200,7 +241,17 @@ jobs:
             MAX_SCROLL="${{ github.event.inputs.max_scroll_attempts }}"
           fi
           LAST_POST=""
-          [ -f "$STATE" ] && LAST_POST=$(python3 -c "import json;d=json.load(open('$STATE'));print((d.get('channels') or {}).get('$CHANNEL',{}).get('last_post_id') or '')")
+          if [ -f "$STATE" ]; then
+            LAST_POST=$(python3 -c "
+          import json
+          from pathlib import Path
+          try:
+            d=json.loads(Path('$STATE').read_text(encoding='utf-8'))
+            print((d.get('channels') or {}).get('$CHANNEL',{}).get('last_post_id') or '')
+          except Exception:
+            print('')
+          ")
+          fi
           ARCHIVE_COUNT=$(python3 -c "
           import json, csv
           from pathlib import Path
@@ -348,24 +399,40 @@ jobs:
           export STATE JSON_FILE="Download/telegram_downloads/$CHANNEL/${CHANNEL}_posts.json"
           export RESUME_FILE="Download/telegram_downloads/$CHANNEL/resume_state.json"
           python3 << 'PY'
-          import json, os
+          import json, os, re
           from pathlib import Path
           from datetime import datetime, timezone
           channel = os.environ["CHANNEL"]
           state_path = Path(os.environ["STATE"])
-          state = json.loads(state_path.read_text(encoding="utf-8"))
+          try:
+              state = json.loads(state_path.read_text(encoding="utf-8"))
+          except Exception:
+              raw = state_path.read_text(encoding="utf-8") if state_path.exists() else ""
+              cleaned = re.sub(r"^<<<<<<< .*$", "", raw, flags=re.M)
+              cleaned = re.sub(r"^=======$", "", cleaned, flags=re.M)
+              cleaned = re.sub(r"^>>>>>>> .*$", "", cleaned, flags=re.M)
+              try:
+                  state = json.loads(cleaned)
+              except Exception:
+                  state = {"channel_list": [], "channels": {}}
           state.setdefault("channel_list", []); state.setdefault("channels", {})
           last_id = None
           jf = Path(os.environ["JSON_FILE"])
           if jf.exists():
-              posts = json.loads(jf.read_text(encoding="utf-8"))
-              ids = [int(p.get("id") or p.get("message_id") or 0) for p in posts if str(p.get("id") or p.get("message_id") or "").isdigit()]
-              if ids: last_id = str(max(ids))
+              try:
+                  posts = json.loads(jf.read_text(encoding="utf-8"))
+                  ids = [int(p.get("id") or p.get("message_id") or 0) for p in posts if str(p.get("id") or p.get("message_id") or "").isdigit()]
+                  if ids: last_id = str(max(ids))
+              except Exception as e:
+                  print("posts json skip", e)
           if not last_id:
               rf = Path(os.environ["RESUME_FILE"])
               if rf.exists():
-                  r = json.loads(rf.read_text(encoding="utf-8"))
-                  last_id = str(r.get("last_msg_id") or r.get("last_post_id") or "") or None
+                  try:
+                      r = json.loads(rf.read_text(encoding="utf-8"))
+                      last_id = str(r.get("last_msg_id") or r.get("last_post_id") or "") or None
+                  except Exception:
+                      pass
           if last_id:
               if channel not in state["channel_list"]: state["channel_list"].append(channel)
               prev = state["channels"].get(channel) or {}
