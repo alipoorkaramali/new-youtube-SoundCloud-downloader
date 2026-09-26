@@ -3,7 +3,7 @@ channel: bbcpersian
 channel_name: ''
 debug_mode: true
 delay_between_posts: 1.5
-limit: 50
+limit: 1000
 max_media_mb: 80
 max_scroll_attempts: 40
 output_dir: Download
@@ -11,4 +11,5 @@ profile_dir: config/browser_profile
 resume: false
 save_screenshots: false
 scroll_direction: up
+stop_before_id: '292228'
 timeout_seconds: 0
