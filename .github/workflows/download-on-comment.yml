@@ -82,13 +82,48 @@ jobs:
           fi
           echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
 
+      - name: 📦 Split large files (>30MB) into zip parts
+        run: |
+          FULLPATH="${{ steps.info.outputs.fullpath }}"
+
+          if [ ! -d "$FULLPATH" ]; then
+            echo "⚠️ مسیر پیدا نشد: $FULLPATH"
+            exit 0
+          fi
+
+          cd "$FULLPATH"
+
+          # پیدا کردن فایل‌های بزرگ‌تر از ۳۰ مگابایت
+          find . -type f -size +30M | while read -r file; do
+            filename=$(basename "$file")
+            name="${filename%.*}"
+
+            echo "📦 فایل بزرگ پیدا شد: $filename ($(du -h "$file" | cut -f1))"
+
+            # ساخت زیپ چندقسمتی (هر قسمت حداکثر ۳۰ مگابایت)
+            zip -s 30m -9 "${name}.zip" "$filename"
+
+            # حذف فایل اصلی
+            rm -f "$filename"
+
+            echo "✅ تبدیل شد به:"
+            ls -lh "${name}".z* "${name}.zip" 2>/dev/null || true
+          done
+
+          echo "📁 محتویات نهایی پوشه:"
+          ls -lh
+
       - name: Commit and push downloaded files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Download/instagram_downloads/
-          git diff --staged --quiet || git commit -m "Add downloaded Instagram post ${{ steps.sc.outputs.shortcode }} (@${{ steps.info.outputs.username }})"
-          git push
+          if git diff --staged --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "Add downloaded Instagram post ${{ steps.sc.outputs.shortcode }} (@${{ steps.info.outputs.username }})"
+            git push
+          fi
 
       - name: Comment success
         if: success()
@@ -100,17 +135,30 @@ jobs:
           FULLPATH="${{ steps.info.outputs.fullpath }}"
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
-          FIRST_FILE=$(ls -1 "$FULLPATH" 2>/dev/null | head -1)
+
+          # لیست فایل‌ها برای نمایش در کامنت
+          FILE_LIST=$(ls -1 "$FULLPATH" 2>/dev/null | head -20)
+          FIRST_FILE=$(echo "$FILE_LIST" | head -1)
+
           if [ -n "$FIRST_FILE" ]; then
             FILE_URL="https://github.com/${REPO}/blob/${BRANCH}/${FULLPATH}/${FIRST_FILE}"
           else
             FILE_URL="https://github.com/${REPO}/tree/${BRANCH}/${FULLPATH}"
           fi
+
           BODY=$(mktemp)
           echo "✅ پست \`$SHORTCODE\` با موفقیت ذخیره شد." >> "$BODY"
           echo "👤 کانال: @$USERNAME" >> "$BODY"
           echo "📁 مسیر: \`${FULLPATH}/\`" >> "$BODY"
           echo "🔗 مشاهده: ${FILE_URL}" >> "$BODY"
+
+          # اگر فایل زیپ شده باشد توضیح بده
+          if ls "$FULLPATH"/*.z* 1>/dev/null 2>&1 || ls "$FULLPATH"/*.zip 1>/dev/null 2>&1; then
+            echo "" >> "$BODY"
+            echo "📦 **فایل بزرگ به چند قسمت زیپ تبدیل شد** (برای جلوگیری از محدودیت 100MB گیت‌هاب)" >> "$BODY"
+            echo "برای استخراج از **7-Zip** یا **WinRAR** استفاده کنید و همه قسمت‌ها را با هم انتخاب کنید." >> "$BODY"
+          fi
+
           gh issue comment "${{ github.event.issue.number }}" --body-file "$BODY"
 
       - name: Comment error
