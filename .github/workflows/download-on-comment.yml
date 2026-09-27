@@ -108,24 +108,23 @@ jobs:
           find . -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mov" -o -iname "*.m4v" -o -iname "*.webm" -o -iname "*.mkv" \) | while read -r file; do
             filename=$(basename "$file")
             name="${filename%.*}"
-            ext="${filename##*.}"
             tmpfile="${name}_compressed.mp4"
 
             ORIG_SIZE=$(du -h "$file" | cut -f1)
             echo ""
             echo "🔄 فشرده‌سازی: $filename ($ORIG_SIZE)"
 
-            # تنظیمات تجاوبی برای کم کردن حجم (مشابه روح دانلودر یوتیوب):
-            # - حداکثر 720p (برای ویدیوهای عمودی و افقی)
+            # تنظیمات تجاوبی برای کم کردن حجم:
+            # - حداکثر 720p (عمودی و افقی)
             # - CRF 28 (فشرده‌سازی قوی)
-            # - preset medium (تعادل سرعت/حجم)
+            # - preset medium
             # - صدای AAC 64k
             # - yuv420p + faststart
             if ffmpeg -y -i "$file" \
               -c:v libx264 \
               -preset medium \
               -crf 28 \
-              -vf "scale='min(720,iw)':min'(720,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+              -vf "scale=w='min(iw\,720)':h='min(ih\,720)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2" \
               -c:a aac \
               -b:a 64k \
               -ac 2 \
