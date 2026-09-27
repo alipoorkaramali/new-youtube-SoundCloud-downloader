@@ -60,6 +60,13 @@ jobs:
           python-version: '3.10'
       - run: pip install --upgrade yt-dlp requests
 
+      - name: 📦 نصب ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+          echo "✅ ffmpeg نصب شد"
+
       - name: دانلود پست
         env:
           ISSUE_USERNAME: ${{ steps.channel.outputs.username }}
@@ -82,6 +89,77 @@ jobs:
           fi
           echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
 
+      - name: 📽️ فشرده‌سازی ویدیوها (حداکثر کم کردن حجم)
+        run: |
+          FULLPATH="${{ steps.info.outputs.fullpath }}"
+
+          if [ ! -d "$FULLPATH" ]; then
+            echo "⚠️ مسیر پیدا نشد: $FULLPATH"
+            exit 0
+          fi
+
+          cd "$FULLPATH"
+
+          echo "📽️ شروع فشرده‌سازی ویدیوها..."
+          echo "محتویات قبل از فشرده‌سازی:"
+          ls -lh
+
+          # فشرده‌سازی تمام فایل‌های ویدیویی
+          find . -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mov" -o -iname "*.m4v" -o -iname "*.webm" -o -iname "*.mkv" \) | while read -r file; do
+            filename=$(basename "$file")
+            name="${filename%.*}"
+            ext="${filename##*.}"
+            tmpfile="${name}_compressed.mp4"
+
+            ORIG_SIZE=$(du -h "$file" | cut -f1)
+            echo ""
+            echo "🔄 فشرده‌سازی: $filename ($ORIG_SIZE)"
+
+            # تنظیمات تجاوبی برای کم کردن حجم (مشابه روح دانلودر یوتیوب):
+            # - حداکثر 720p (برای ویدیوهای عمودی و افقی)
+            # - CRF 28 (فشرده‌سازی قوی)
+            # - preset medium (تعادل سرعت/حجم)
+            # - صدای AAC 64k
+            # - yuv420p + faststart
+            if ffmpeg -y -i "$file" \
+              -c:v libx264 \
+              -preset medium \
+              -crf 28 \
+              -vf "scale='min(720,iw)':min'(720,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+              -c:a aac \
+              -b:a 64k \
+              -ac 2 \
+              -ar 44100 \
+              -movflags +faststart \
+              -pix_fmt yuv420p \
+              "$tmpfile" 2>/dev/null; then
+
+              NEW_SIZE=$(du -h "$tmpfile" | cut -f1)
+              ORIG_BYTES=$(stat -c%s "$file")
+              NEW_BYTES=$(stat -c%s "$tmpfile")
+
+              # فقط اگر فایل جدید کوچک‌تر شد جایگزین کن
+              if [ "$NEW_BYTES" -lt "$ORIG_BYTES" ]; then
+                mv -f "$tmpfile" "${name}.mp4"
+                # اگر اسم قبلی متفاوت بود، فایل قدیمی را حذف کن
+                if [ "$filename" != "${name}.mp4" ]; then
+                  rm -f "$file"
+                fi
+                echo "✅ فشرده شد: $ORIG_SIZE → $NEW_SIZE"
+              else
+                rm -f "$tmpfile"
+                echo "⚠️ فشرده‌سازی حجم را کم نکرد — فایل اصلی نگه داشته شد"
+              fi
+            else
+              rm -f "$tmpfile" 2>/dev/null || true
+              echo "❌ خطا در فشرده‌سازی $filename — فایل اصلی نگه داشته شد"
+            fi
+          done
+
+          echo ""
+          echo "📁 محتویات بعد از فشرده‌سازی:"
+          ls -lh
+
       - name: 📦 Split large files (>30MB) into zip parts
         run: |
           FULLPATH="${{ steps.info.outputs.fullpath }}"
@@ -94,7 +172,7 @@ jobs:
           cd "$FULLPATH"
 
           # پیدا کردن فایل‌های بزرگ‌تر از ۳۰ مگابایت
-          find . -type f -size +30M | while read -r file; do
+          find . -maxdepth 1 -type f -size +30M | while read -r file; do
             filename=$(basename "$file")
             name="${filename%.*}"
 
