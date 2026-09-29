@@ -4,6 +4,7 @@
 import os
 import sys
 import argparse
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -21,6 +22,21 @@ def parse_arguments():
     parser.add_argument('--dry-run', '-n', action='store_true',
                         help='فقط نمایش عملیات بدون حذف واقعی')
     return parser.parse_args()
+
+
+def get_git_commit_time(file_path: Path) -> datetime | None:
+    """تاریخ آخرین کامیتی که این فایل را تغییر داده (UTC)."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", "--", str(file_path)],
+            capture_output=True, text=True, check=True
+        )
+        ts = result.stdout.strip()
+        if ts:
+            return datetime.fromisoformat(ts)
+    except Exception as e:
+        print(f"⚠️ نتوانست تاریخ گیت را برای {file_path} بگیرد: {e}")
+    return None
 
 
 def cleanup_old_audio(max_age_hours, dry_run):
@@ -51,43 +67,50 @@ def cleanup_old_audio(max_age_hours, dry_run):
     deleted_files = 0
     kept_records = []
 
-    # ---- 2) اسکن واقعی پوشه فایل‌ها (منبع اصلی حقیقت = mtime) ----
+    # ---- 2) اسکن واقعی پوشه فایل‌ها ----
+    # اولویت:
+    #   1) زمان ثبت‌شده در TIMES_FILE (اگر وجود داشته باشد)
+    #   2) تاریخ آخرین کامیت گیت (قابل اعتماد در Actions)
+    #   3) mtime (فقط fallback محلی)
     if not AUDIO_FOLDER.exists():
         print(f"⚠️ پوشه یافت نشد: {AUDIO_FOLDER}")
     else:
-        for fname in os.listdir(AUDIO_FOLDER):
+        for fname in sorted(os.listdir(AUDIO_FOLDER)):
             file_path = AUDIO_FOLDER / fname
             if not file_path.is_file():
                 continue
 
-            # اولویت با mtime واقعی فایل
-            try:
-                mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
-            except Exception as e:
-                print(f"❌ خطا در خواندن mtime {file_path}: {e}")
-                continue
+            file_time = recorded.get(fname)
 
-            # اگر رکورد زمان داشتیم و جدیدتر بود، از آن استفاده کن (اختیاری)
-            file_time = recorded.get(fname, mtime)
-            # همیشه mtime را هم در نظر بگیر تا اگر رکورد قدیمی/اشتباه باشد، فایل پاک شود
-            effective_time = min(file_time, mtime)
+            if file_time is None:
+                file_time = get_git_commit_time(file_path)
 
-            age_hours = (now - effective_time).total_seconds() / 3600
+            if file_time is None:
+                try:
+                    file_time = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+                except Exception as e:
+                    print(f"❌ خطا در خواندن mtime {file_path}: {e}")
+                    continue
 
-            if effective_time < cutoff:
+            # اطمینان از timezone-aware
+            if file_time.tzinfo is None:
+                file_time = file_time.replace(tzinfo=timezone.utc)
+
+            age_hours = (now - file_time).total_seconds() / 3600
+
+            if file_time < cutoff:
                 if not dry_run:
                     try:
                         os.remove(file_path)
-                        print(f"🗑️ حذف فایل: {file_path} (سن: {age_hours:.1f} ساعت)")
+                        print(f"🗑️ حذف فایل: {file_path} (سن: {age_hours:.1f} ساعت | زمان: {file_time.isoformat()})")
                         deleted_files += 1
                     except Exception as e:
                         print(f"❌ خطا در حذف {file_path}: {e}")
                 else:
-                    print(f"🔍 [DRY-RUN] حذف خواهد شد: {file_path} (سن: {age_hours:.1f} ساعت)")
+                    print(f"🔍 [DRY-RUN] حذف خواهد شد: {file_path} (سن: {age_hours:.1f} ساعت | زمان: {file_time.isoformat()})")
                     deleted_files += 1
             else:
-                # نگه داشتن
-                kept_records.append(f"{fname} | {effective_time.isoformat()}")
+                kept_records.append(f"{fname} | {file_time.isoformat()}")
                 print(f"⏳ نگهداری: {file_path} (سن: {age_hours:.1f} ساعت)")
 
     # ---- 3) به‌روزرسانی فایل زمان‌بندی ----
