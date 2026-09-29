@@ -1,3 +1,16 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ثبت زمان آپلود فایل‌های جدید.
+
+تغییر مهم (برای جلوگیری از مشکلات قبلی):
+- برای فایل‌های جدید همیشه از datetime.now(UTC) استفاده می‌کنیم
+  نه از mtime فایل‌سیستم.
+  دلیل: در GitHub Actions بعد از checkout، mtime همه فایل‌ها
+  به زمان checkout تبدیل می‌شود و سن واقعی از بین می‌رود.
+- فقط فایل‌هایی که هنوز روی دیسک هستند نگه داشته می‌شوند.
+"""
+
 import sys
 import os
 from datetime import datetime, timezone
@@ -7,15 +20,13 @@ def main():
         print("❌ خطا: پوشه مقصد مشخص نشده است.")
         sys.exit(1)
 
-    folder = sys.argv[1].rstrip('/')  # حذف اسلش اضافی
-    # نام فایل رکورد بر اساس نام پوشه (با جایگزینی / با _)
+    folder = sys.argv[1].rstrip('/')
     safe_folder_name = folder.replace('/', '_')
     times_file = f"State/upload_times_{safe_folder_name}.txt"
 
-    # اطمینان از وجود پوشه State
     os.makedirs("State", exist_ok=True)
 
-    # خواندن رکوردهای موجود برای این پوشه
+    # خواندن رکوردهای موجود
     existing = {}
     if os.path.exists(times_file):
         with open(times_file, "r", encoding="utf-8") as f:
@@ -25,7 +36,9 @@ def main():
                     fname, time_str = line.split(" | ", 1)
                     existing[fname] = time_str
 
-    # اضافه کردن فایل‌های جدید در این پوشه
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # پیدا کردن فایل‌های جدید و ثبت زمان فعلی (نه mtime)
     new_entries = []
     if os.path.isdir(folder):
         for fname in os.listdir(folder):
@@ -33,20 +46,24 @@ def main():
                 continue
             file_path = os.path.join(folder, fname)
             if os.path.isfile(file_path):
-                mtime = os.path.getmtime(file_path)
-                file_time = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
-                new_entries.append(f"{fname} | {file_time}")
+                new_entries.append(f"{fname} | {now_iso}")
+                print(f"➕ ثبت جدید: {fname} @ {now_iso}")
 
-    # بازنویسی فایل رکورد مخصوص این پوشه: نگهداری همه رکوردهایی که فایلشان هنوز وجود دارد
+    # بازنویسی: فقط رکوردهایی که فایلشان هنوز وجود دارد + رکوردهای جدید
     with open(times_file, "w", encoding="utf-8") as f:
+        kept = 0
         for fname, t in existing.items():
             file_path = os.path.join(folder, fname)
             if os.path.isfile(file_path):
                 f.write(f"{fname} | {t}\n")
+                kept += 1
         for entry in new_entries:
             f.write(entry + "\n")
 
-    print(f"✅ رکورد زمان برای پوشه '{folder}' در فایل '{times_file}' به‌روز شد.")
+    print(f"✅ رکورد زمان برای پوشه '{folder}' به‌روز شد.")
+    print(f"   - رکوردهای قبلی نگه داشته‌شده: {kept}")
+    print(f"   - رکوردهای جدید: {len(new_entries)}")
+    print(f"   - فایل: {times_file}")
 
 if __name__ == "__main__":
     main()
