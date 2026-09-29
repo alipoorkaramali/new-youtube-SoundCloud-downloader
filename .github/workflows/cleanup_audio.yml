@@ -2,8 +2,8 @@ name: 🧹Cleanup old audio files
 
 on:
   schedule:
-    # هر ۲ ساعت یک‌بار (UTC) → حداکثر ۲ ساعت تأخیر
-    - cron: '0 */2 * * *'
+    # هر ۱۲ ساعت یک‌بار (UTC) — مثل قبل
+    - cron: '0 */12 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
