@@ -227,18 +227,99 @@ api_delete() {
     local repo=$1 path=$2 sha=$3
     local encoded_path=$(urlencode "$path")
     curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
         "https://api.github.com/repos/$repo/contents/$encoded_path" \
-        -d "{\"message\":\"Delete $path\",\"sha\":\"$sha\"}" | jq -r '.commit.message // .message'
+        -d "{\"message\":\"Delete $path\",\"sha\":\"$sha\"}" | jq -r '.commit.message // .message // empty'
+}
+
+# Recursive delete: GitHub has no "delete directory" — must delete every file bottom-up
+delete_path_recursive() {
+    local repo=$1
+    local path=$2
+    local indent="${3:-  }"
+
+    local items
+    items=$(api_list "$repo" "$path")
+
+    # If path is a single file (has .sha at top level), just delete it
+    if echo "$items" | jq -e '.sha' &>/dev/null && ! echo "$items" | jq -e 'type == "array"' &>/dev/null; then
+        local file_sha
+        file_sha=$(echo "$items" | jq -r '.sha')
+        echo -e "${indent}Deleting file: $path"
+        api_delete "$repo" "$path" "$file_sha" > /dev/null
+        return
+    fi
+
+    # Error from API?
+    if echo "$items" | jq -e '.message' &>/dev/null; then
+        echo -e "${RED}${indent}Cannot list $path: $(echo "$items" | jq -r '.message')${NC}"
+        return 1
+    fi
+
+    # Process children: dirs first (recurse), then files
+    local -a child_names child_types child_shas
+    child_names=()
+    child_types=()
+    child_shas=()
+    while IFS=$'\t' read -r ctype cname csha; do
+        [[ -z "$cname" ]] && continue
+        child_names+=("$cname")
+        child_types+=("$ctype")
+        child_shas+=("$csha")
+    done < <(echo "$items" | jq -r '.[] | "\(.type)\t\(.name)\t\(.sha)"')
+
+    # First recurse into directories
+    local i
+    for i in "${!child_names[@]}"; do
+        if [[ "${child_types[$i]}" == "dir" ]]; then
+            local child_path="${path}/${child_names[$i]}"
+            child_path="${child_path#/}"
+            echo -e "${indent}Entering dir: $child_path"
+            delete_path_recursive "$repo" "$child_path" "${indent}  "
+        fi
+    done
+
+    # Then delete files
+    for i in "${!child_names[@]}"; do
+        if [[ "${child_types[$i]}" == "file" ]]; then
+            local child_path="${path}/${child_names[$i]}"
+            child_path="${child_path#/}"
+            echo -e "${indent}Deleting file: $child_path"
+            api_delete "$repo" "$child_path" "${child_shas[$i]}" > /dev/null
+        fi
+    done
 }
 
 api_upload() {
     local repo=$1 local_file=$2 repo_path=$3
     local b64=$(base64 -w0 "$local_file")
-    local payload=$(jq -n --arg path "$repo_path" --arg content "$b64" \
-        '{message: "Add \($path)", content: $content}')
+    local encoded_path=$(urlencode "$repo_path")
+
+    # Check if file already exists to get its SHA (required for update)
+    local existing
+    existing=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$repo/contents/$encoded_path")
+
+    local sha=""
+    local msg="Add $repo_path"
+    if echo "$existing" | jq -e '.sha' &>/dev/null; then
+        sha=$(echo "$existing" | jq -r '.sha')
+        msg="Update $repo_path"
+    fi
+
+    local payload
+    if [[ -n "$sha" ]]; then
+        payload=$(jq -n --arg message "$msg" --arg content "$b64" --arg sha "$sha" \
+            '{message: $message, content: $content, sha: $sha}')
+    else
+        payload=$(jq -n --arg message "$msg" --arg content "$b64" \
+            '{message: $message, content: $content}')
+    fi
+
     echo "$payload" | curl -s -X PUT -H "Authorization: token $GITHUB_TOKEN" \
         -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$repo/contents/$(urlencode "$repo_path")" \
+        "https://api.github.com/repos/$repo/contents/$encoded_path" \
         -d @-
 }
 
