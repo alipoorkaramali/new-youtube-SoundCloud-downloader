@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p9-fribidi-reverse-lines
+# gitty-patch-id: p10-ig-dispatch-aligned
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -338,7 +338,7 @@ browse_issues() {
                 bot_border+=$(printf '%*s' "$box_w" '' | tr ' ' '-'); bot_border+="+"
 
                 echo -e "${YELLOW}${top_border}${NC}"
-                printf "${YELLOW}|${NC} ${BOLD}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "Body (preview · ✓p9)"
+                printf "${YELLOW}|${NC} ${BOLD}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "Body (preview · ✓p10)"
                 echo -e "${YELLOW}${mid_border}${NC}"
                 if [[ -z "$issue_body" || "$issue_body" == "null" ]]; then
                     echo -e "${YELLOW}|${NC} (empty)"
@@ -603,12 +603,26 @@ action_workflows() {
                         input_json=$(jq -n --arg youtube_channel_id "$yt_id" --arg soundcloud_url "$sc_url" '{youtube_channel_id: $youtube_channel_id, soundcloud_url: $soundcloud_url}')
                         ;;
                     *"YouTube Multi-Watcher"*| *"scan1"*) input_json="{}" ;;
-                    *"instagram-fetcher"*| *"Instagram"*)
-                        echo -ne "Username (without @): "; read username
-                        if [[ -z "$username" ]]; then echo -e "${RED}Username required.${NC}"; sleep 2; continue; fi
-                        echo -ne "Post count [5,10,15,20] (default 5): "; read post_count; post_count=${post_count:-5}
-                        if [[ ! "$post_count" =~ ^(5|10|15|20)$ ]]; then post_count=5; fi
-                        input_json=$(jq -n --arg username "$username" --arg post_count "$post_count" '{username: $username, post_count: $post_count}')
+                    *"instagram-fetcher"*|*"Instagram-fetcher"*|*"Instagram"*)
+                        # Aligned with .github/workflows/instagram-fetcher.yml
+                        # usernames optional → empty uses config/instagram_channels.txt
+                        echo -e "${CYAN}📸 Instagram-fetcher (same inputs as repo workflow)${NC}"
+                        echo -e "${YELLOW}Leave usernames empty → use config/instagram_channels.txt${NC}"
+                        echo -ne "Usernames (comma-separated, optional): "; read usernames
+                        usernames="${usernames// /}"  # strip spaces around list is fine; keep commas
+                        echo -ne "Save these usernames to channel list? (y/n) [n]: "; read add_to_list
+                        if [[ "$add_to_list" =~ ^[Yy]$ ]]; then add_to_list="true"; else add_to_list="false"; fi
+                        echo -ne "Post count [5,10,15,20] (default 10): "; read post_count; post_count=${post_count:-10}
+                        if [[ ! "$post_count" =~ ^(5|10|15|20)$ ]]; then post_count=10; fi
+                        echo -ne "Force refresh Issues even if unchanged? (y/n) [n]: "; read force_refresh
+                        if [[ "$force_refresh" =~ ^[Yy]$ ]]; then force_refresh="true"; else force_refresh="false"; fi
+                        input_json=$(jq -n \
+                            --arg usernames "$usernames" \
+                            --arg add_to_list "$add_to_list" \
+                            --arg post_count "$post_count" \
+                            --arg force_refresh "$force_refresh" \
+                            '{usernames: $usernames, add_to_list: $add_to_list, post_count: $post_count, force_refresh: $force_refresh}')
+                        echo -e "${GREEN}Dispatch inputs:${NC} $input_json"
                         ;;
                     *"Cleanup old audio files"*| *"cleanup_audio"*)
                         echo -ne "Dry run (true/false) [false]: "; read dry_run; dry_run=${dry_run:-false}
