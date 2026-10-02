@@ -1,5 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
+# gitty-patch-id: p4-fribidi-ltr-1to10
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -337,31 +338,37 @@ browse_issues() {
                 bot_border+=$(printf '%*s' "$box_w" '' | tr ' ' '-'); bot_border+="+"
 
                 echo -e "${YELLOW}${top_border}${NC}"
-                printf "${YELLOW}|${NC} ${BOLD}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "Body (preview)"
+                printf "${YELLOW}|${NC} ${BOLD}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "Body (preview · ✓p4)"
                 echo -e "${YELLOW}${mid_border}${NC}"
                 if [[ -z "$issue_body" || "$issue_body" == "null" ]]; then
-                    printf "${YELLOW}|${NC} ${YELLOW}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "(empty)"
+                    echo -e "${YELLOW}|${NC} (empty)"
                 else
-                    # Build clean preview lines (table rows as # / shortcode / caption)
-                    local -a preview_lines=()
                     local row_count=0
+                    local line_w=$((cols - 6)); [[ $line_w -lt 24 ]] && line_w=24
+                    # helper: print one Persian/English line readable in Termux
+                    _gitty_show() {
+                        local s="$1"
+                        [[ -z "$s" ]] && return
+                        if command -v fribidi &>/dev/null; then
+                            s=$(printf '%s' "$s" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$s")
+                        fi
+                        # U+202D LTR override ... U+202C pop — stop Termux re-reversing
+                        printf '%b\n' "${YELLOW}|${NC} "$'\u202D'"${s}"$'\u202C'
+                    }
                     while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
                         local trimmed="${raw_line#"${raw_line%%[![:space:]]*}"}"
-                        # Skip empty, separator, header, noise lines
                         [[ -z "$trimmed" ]] && continue
                         [[ "$trimmed" == *"---"* ]] && continue
                         [[ "$trimmed" == *":--"* || "$trimmed" == *"--:"* ]] && continue
                         [[ "$trimmed" == *"shortcode"* && "$trimmed" == *"caption"* ]] && continue
                         [[ "$trimmed" == *"Updated:"* || "$trimmed" == *"_Updated"* ]] && continue
-                        # Clean Instagram header → only @username
-                        if [[ "$trimmed" == *"Instagram"* ]] || [[ "$trimmed" == *"instagram"* ]]; then
+                        if [[ "$trimmed" == *"Instagram"* || "$trimmed" == *"instagram"* ]]; then
                             if [[ "$trimmed" == *"@"* ]]; then
                                 local atp="${trimmed##*@}"; atp="${atp%%[[:space:]]*}"; atp="${atp%%]*}"
-                                preview_lines+=("📷 @${atp}")
+                                echo -e "${YELLOW}|${NC} 📷 @${atp}"
                             fi
                             continue
                         fi
-                        # Markdown table data row
                         if [[ "$trimmed" == "|"* ]]; then
                             local clean="$trimmed"
                             clean="${clean#|}"; clean="${clean%|}"
@@ -376,42 +383,28 @@ browse_issues() {
                                 fi
                                 cidx=$((cidx+1))
                             done
-                            # Skip header-like rows
                             [[ "$num_col" == "#" || "$sc_col" == "shortcode" ]] && continue
                             [[ -z "$num_col" && -z "$sc_col" ]] && continue
-                            if command -v fribidi &>/dev/null && [[ -n "$cap_col" ]]; then
-                                cap_col=$(printf '%s' "$cap_col" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$cap_col")
-                            fi
-                            # Truncate long caption
-                            local maxc=$((box_w - 8)); [[ $maxc -lt 10 ]] && maxc=10
-                            if [[ ${#cap_col} -gt $maxc ]]; then cap_col="${cap_col:0:$((maxc-1))}…"; fi
-                            preview_lines+=("#${num_col}  ${sc_col}")
-                            [[ -n "$cap_col" ]] && preview_lines+=("  ${cap_col}")
-                            row_count=$((row_count+1))
-                            [[ $row_count -ge 4 ]] && break
-                            continue
-                        fi
-                        # Normal text line (skip download instruction noise)
-                        [[ "$trimmed" == *"/download"* ]] && continue
-                        [[ "$trimmed" == *"To download"* ]] && continue
-                        local dl="$trimmed"
-                        if command -v fribidi &>/dev/null; then
-                            dl=$(printf '%s' "$dl" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$dl")
-                        fi
-                        if [[ ${#dl} -gt $((box_w-4)) ]]; then dl="${dl:0:$((box_w-5))}…"; fi
-                        preview_lines+=("$dl")
-                        [[ ${#preview_lines[@]} -ge 8 ]] && break
-                    done <<< "$issue_body"
 
-                    if [[ ${#preview_lines[@]} -eq 0 ]]; then
-                        printf "${YELLOW}|${NC} ${YELLOW}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "(no preview)"
-                    else
-                        # Print in reverse so Termux RTL shows top-to-bottom correctly
-                        local pi
-                        for ((pi=${#preview_lines[@]}-1; pi>=0; pi--)); do
-                            printf "${YELLOW}|${NC} %-*s ${YELLOW}|${NC}\n" $((box_w-2)) "${preview_lines[$pi]}"
-                        done
-                    fi
+                            echo -e "${YELLOW}|${NC} ${BOLD}#${num_col}${NC}  ${GREEN}${sc_col}${NC}"
+                            # caption: logical start, up to 2 lines, then fribidi+LTR each line
+                            cap_col="${cap_col//$'\n'/ }"
+                            local max_total=$((line_w * 2))
+                            if [[ ${#cap_col} -gt $max_total ]]; then
+                                cap_col="${cap_col:0:$((max_total-1))}…"
+                            fi
+                            if [[ ${#cap_col} -gt $line_w ]]; then
+                                _gitty_show "  ${cap_col:0:$line_w}"
+                                _gitty_show "  ${cap_col:$line_w}"
+                            else
+                                _gitty_show "  ${cap_col}"
+                            fi
+
+                            row_count=$((row_count+1))
+                            [[ $row_count -ge 10 ]] && break
+                        fi
+                    done <<< "$issue_body"
+                    [[ $row_count -eq 0 ]] && echo -e "${YELLOW}|${NC} (no preview)"
                 fi
                 echo -e "${YELLOW}${bot_border}${NC}"
                 echo ""
