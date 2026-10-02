@@ -182,10 +182,18 @@ browse_repo() {
         while IFS=$'\t' read -r type name sha; do names+=("$name"); types+=("$type"); shas+=("$sha"); done < <(echo "$items_json" | jq -r '.[] | "\(.type)\t\(.name)\t\(.sha)"')
         display_indices=(); local idx=1
         for i in "${!names[@]}"; do
-            if [[ "${types[$i]}" == "dir" ]]; then print_item $idx "${types[$i]}" "${names[$i]}"; display_indices+=("$i"); ((idx++)); fi
+            if [[ "${types[$i]}" == "dir" ]]; then
+                print_item $idx "${types[$i]}" "${names[$i]}"
+                display_indices+=("$i")
+                idx=$((idx+1))
+            fi
         done
         for i in "${!names[@]}"; do
-            if [[ "${types[$i]}" == "file" ]]; then print_item $idx "${types[$i]}" "${names[$i]}"; display_indices+=("$i"); ((idx++)); fi
+            if [[ "${types[$i]}" == "file" ]]; then
+                print_item $idx "${types[$i]}" "${names[$i]}"
+                display_indices+=("$i")
+                idx=$((idx+1))
+            fi
         done
         echo ""
         echo -e "${CYAN}Commands: [number] enter | r<num> read | d<num> download | x<num> delete | b back | q quit${NC}"
@@ -206,8 +214,8 @@ browse_repo() {
                     if [[ "${types[$read_index]}" == "file" ]]; then
                         local full_path="${current_path:+$current_path/}${names[$read_index]}"
                         echo -e "${CYAN}--- ${full_path} ---${NC}"
-                        if command -v fribidi &>/dev/null; then api_get_file "$repo" "$full_path" | fribidi --nopad 2>/dev/null | less
-                        else api_get_file "$repo" "$full_path" | less; fi
+                        if command -v fribidi &>/dev/null; then api_get_file "$repo" "$full_path" | fribidi --nopad 2>/dev/null | less || true
+                        else api_get_file "$repo" "$full_path" | less || true; fi
                     else echo -e "${RED}Not a file.${NC}"; sleep 1; fi
                 else echo -e "${RED}Invalid file selection.${NC}"; sleep 1; fi
                 ;;
@@ -417,7 +425,7 @@ browse_issues() {
                                             else
                                                 if [[ -n "$cap_col" ]]; then cap_col="$cap_col | $c"; else cap_col="$c"; fi
                                             fi
-                                            ((cidx++))
+                                            cidx=$((cidx+1))
                                         done
                                         if command -v fribidi &>/dev/null && [[ -n "$cap_col" ]]; then
                                             cap_col=$(printf '%s' "$cap_col" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$cap_col")
@@ -450,7 +458,7 @@ browse_issues() {
                             echo ""
                             echo -e "${CYAN}+$(printf '%*s' $((fcols-2)) '' | tr ' ' '-')+${NC}"
                             echo -e "${YELLOW}(q to quit)${NC}"
-                        } | less -R
+                        } | less -R || true
                         ;;
                     3) continue ;;
                     *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
@@ -699,38 +707,25 @@ action_update_gitty() {
             cp "$target" "${target}.bak.$(date +%Y%m%d_%H%M%S)"
             echo -e "${GREEN}✅ Backup saved: ${target}.bak.*${NC}"
         fi
-
-        # 1) Replace the main script
-        cp "$tmpfile" "$target"
-        chmod +x "$target"
+        cp "$tmpfile" "$target"; chmod +x "$target"
         echo -e "${GREEN}✅ Updated: $target${NC}"
-
-        # 2) Also update ~/bin/gitty so plain "gitty" command works
         mkdir -p "$HOME/bin"
-        cp "$tmpfile" "$HOME/bin/gitty"
-        chmod +x "$HOME/bin/gitty"
+        cp "$tmpfile" "$HOME/bin/gitty"; chmod +x "$HOME/bin/gitty"
         echo -e "${GREEN}✅ Updated: $HOME/bin/gitty${NC}"
-
-        # 3) Clear bash hash cache so new version is used immediately
         hash -r 2>/dev/null || true
         echo -e "${GREEN}✅ Bash hash cache cleared${NC}"
-
-        # 4) Clean old numbered copies in Download and save latest there too
         if [[ -d "$download_dir" ]]; then
             echo -e "${CYAN}[*] Cleaning old gitty copies in Download...${NC}"
             find "$download_dir" -maxdepth 1 -type f \( -name "gitty.sh" -o -name "gitty-fixed.sh" -o -name "gitty*.sh" -o -name "gitty*.SH" \) -print -delete 2>/dev/null || true
             cp "$tmpfile" "$download_dir/gitty.sh"
             echo -e "${GREEN}✅ Latest also saved to: $download_dir/gitty.sh${NC}"
         fi
-
         rm -f "$tmpfile"
-
         echo ""
-        echo -e "${GREEN}✅ Gitty updated successfully to latest version!${NC}"
+        echo -e "${GREEN}✅ Gitty updated successfully!${NC}"
         echo -e "${YELLOW}You can now run:  gitty${NC}"
-        echo -e "${YELLOW}Or exit and run again from main menu.${NC}"
         echo ""
-        read -p "Press Enter to continue (or exit from main menu)."
+        read -p "Press Enter to continue."
     else
         echo -e "${RED}❌ Failed to download. Check internet or token.${NC}"
         rm -f "$tmpfile"; sleep 2
