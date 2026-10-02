@@ -1,4 +1,4 @@
-name: 📥 دانلود اینستاگرام و ذخیره در مخزن
+name: 📥 Instagram-downloader
 
 on:
   issue_comment:
