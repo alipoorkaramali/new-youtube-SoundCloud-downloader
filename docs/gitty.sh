@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p5-fullbody-order-1to10
+# gitty-patch-id: p9-fribidi-reverse-lines
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -338,7 +338,7 @@ browse_issues() {
                 bot_border+=$(printf '%*s' "$box_w" '' | tr ' ' '-'); bot_border+="+"
 
                 echo -e "${YELLOW}${top_border}${NC}"
-                printf "${YELLOW}|${NC} ${BOLD}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "Body (preview · ✓p5)"
+                printf "${YELLOW}|${NC} ${BOLD}%-*s${NC} ${YELLOW}|${NC}\n" $((box_w-2)) "Body (preview · ✓p9)"
                 echo -e "${YELLOW}${mid_border}${NC}"
                 if [[ -z "$issue_body" || "$issue_body" == "null" ]]; then
                     echo -e "${YELLOW}|${NC} (empty)"
@@ -479,6 +479,12 @@ browse_issues() {
                                             fi
                                             cidx=$((cidx+1))
                                         done
+                                        # skip markdown table header row
+                                        if [[ "$num_col" == "#" || "$sc_col" == "shortcode" || "$sc_col" == "Shortcode" || "$cap_col" == "caption" || "$cap_col" == "Caption" ]]; then
+                                            continue
+                                        fi
+                                        [[ -z "$num_col" && -z "$sc_col" ]] && continue
+                                        # fribidi for correct Persian letter shapes
                                         if command -v fribidi &>/dev/null && [[ -n "$cap_col" ]]; then
                                             cap_col=$(printf '%s' "$cap_col" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$cap_col")
                                         fi
@@ -487,12 +493,18 @@ browse_issues() {
                                         echo -e "${YELLOW}+-- shortcode --+${NC}"
                                         echo -e "${YELLOW}|${NC} ${GREEN}${sc_col}${NC}"
                                         echo -e "${YELLOW}+-- caption --+${NC}"
+                                        # wrap then print lines BOTTOM→TOP so sentence reads start→end on Termux
                                         local cap="$cap_col" maxc=$((fcols-4)); [[ $maxc -lt 10 ]] && maxc=10
+                                        local -a cap_lines=()
                                         while [[ ${#cap} -gt $maxc ]]; do
-                                            echo -e "${YELLOW}|${NC} ${cap:0:$maxc}"
+                                            cap_lines+=("${cap:0:$maxc}")
                                             cap="${cap:$maxc}"
                                         done
-                                        echo -e "${YELLOW}|${NC} $cap"
+                                        [[ -n "$cap" ]] && cap_lines+=("$cap")
+                                        local li
+                                        for ((li=${#cap_lines[@]}-1; li>=0; li--)); do
+                                            echo -e "${YELLOW}|${NC} ${cap_lines[$li]}"
+                                        done
                                         echo -e "${YELLOW}+------------+${NC}"
                                         echo ""
                                     else
