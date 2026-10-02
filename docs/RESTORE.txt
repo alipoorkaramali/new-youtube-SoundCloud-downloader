@@ -1,0 +1,16 @@
+gitty.sh was temporarily broken by a bad push.
+
+To restore the last good version in Termux:
+
+curl -sL -H "Authorization: token $GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github.raw" \
+  "https://api.github.com/repos/alipoorkaramali/new-youtube-SoundCloud-downloader/contents/docs/gitty.sh?ref=85b99db864a1a5f521bba051b3e787a464f84a3c" \
+  -o $HOME/gitty.sh
+
+chmod +x $HOME/gitty.sh
+cp $HOME/gitty.sh $HOME/bin/gitty
+chmod +x $HOME/bin/gitty
+hash -r
+gitty
+
+Body preview fix is ready and will be pushed next.
