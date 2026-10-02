@@ -1,4 +1,4 @@
-name: 📸 دریافت پست‌های اینستاگرام
+name: 📸 Instagram-fetcher
 
 on:
   schedule:
