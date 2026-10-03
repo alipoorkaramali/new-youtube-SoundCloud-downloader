@@ -779,9 +779,12 @@ action_upload_files() {
     echo -e "${CYAN}  Bulk upload (file or folder)${NC}"
     echo -e "${CYAN}==============================${NC}"
     echo -e "  For uploading ${BOLD}many files${NC} / a whole folder."
+    echo -e "  Put files in ${BOLD}Download/Termux/${NC} then pick by number."
     echo -e "  Folder structure is kept. Each file becomes one commit."
-    echo -e "  For ${BOLD}one file + your own commit message${NC} → use menu ${YELLOW}7${NC}."
+    echo -e "  For ${BOLD}one file + commit message${NC} → use menu ${YELLOW}7${NC}."
     echo -e "  ${YELLOW}Type q anytime to cancel.${NC}"
+    echo ""
+    echo -e "${CYAN}Share folder:${NC} $(termux_share_dir)"
     echo ""
 
     local target_repo
@@ -790,16 +793,17 @@ action_upload_files() {
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
 
-    echo -e "${YELLOW}Local file or folder path (q = cancel):${NC}"
-    echo -e "  e.g.  ~/project   /sdcard/Download/myapp   ./data"
-    read -r local_path
-    if [[ "$local_path" == "q" || "$local_path" == "Q" || -z "$local_path" ]]; then
+    echo -e "${CYAN}Pick from Download/Termux (or type path):${NC}"
+    local local_path
+    local_path=$(pick_local_item any)
+    if [[ -z "$local_path" ]]; then
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
-    local_path="${local_path/#\~/$HOME}"
     if [[ ! -e "$local_path" ]]; then
         echo -e "${RED}❌ Not found: $local_path${NC}"; sleep 1; return
     fi
+    echo -e "${GREEN}Selected:${NC} $local_path"
+    echo ""
 
     echo -e "${YELLOW}Folder inside repo (Enter = root, q = cancel):${NC}"
     echo -e "  e.g.  docs   data/config   (leave empty for top level)"
@@ -920,6 +924,148 @@ action_update_gitty() {
         echo -e "${RED}❌ Failed to download. Check internet or token.${NC}"
         rm -f "$tmpfile"; sleep 2
     fi
+}
+
+# ─── Shared folder: Download/Termux ─────────────────────────
+termux_share_dir() {
+    local d
+    if [[ -d "$HOME/storage/shared/Download" ]]; then
+        d="$HOME/storage/shared/Download/Termux"
+    elif [[ -d "/sdcard/Download" ]]; then
+        d="/sdcard/Download/Termux"
+    else
+        d="$HOME/TermuxShare"
+    fi
+    mkdir -p "$d" 2>/dev/null || true
+    echo "$d"
+}
+
+# List files/folders in Download/Termux (or subfolder) and let user pick by number.
+# mode: file = only files | any = files+dirs
+# prints selected absolute path to stdout; empty = cancel
+pick_local_item() {
+    local mode="${1:-any}"   # file | any
+    local start_dir
+    start_dir=$(termux_share_dir)
+    local current="$start_dir"
+
+    while true; do
+        echo -e "${CYAN}------------------------------${NC}" >&2
+        echo -e "${CYAN}  Folder: ${BOLD}$current${NC}" >&2
+        echo -e "${CYAN}------------------------------${NC}" >&2
+
+        local -a entries=()
+        local -a types=()
+        # parent
+        if [[ "$current" != "$start_dir" ]]; then
+            entries+=("..")
+            types+=("up")
+        fi
+        # dirs first, then files
+        local item
+        while IFS= read -r item; do
+            [[ -z "$item" ]] && continue
+            entries+=("$item")
+            types+=("dir")
+        done < <(find "$current" -mindepth 1 -maxdepth 1 -type d ! -name '.*' 2>/dev/null | sort)
+        while IFS= read -r item; do
+            [[ -z "$item" ]] && continue
+            entries+=("$item")
+            types+=("file")
+        done < <(find "$current" -mindepth 1 -maxdepth 1 -type f ! -name '.*' 2>/dev/null | sort)
+
+        if [[ ${#entries[@]} -eq 0 ]]; then
+            echo -e "${YELLOW}  (empty — put files in Download/Termux)${NC}" >&2
+        fi
+
+        local i name disp
+        for i in "${!entries[@]}"; do
+            name="${entries[$i]}"
+            if [[ "${types[$i]}" == "up" ]]; then
+                printf "  ${CYAN}%2d)${NC}  ../\n" "$((i+1))" >&2
+            elif [[ "${types[$i]}" == "dir" ]]; then
+                disp=$(basename "$name")
+                printf "  ${CYAN}%2d)${NC}  ${BOLD}%s/${NC}\n" "$((i+1))" "$disp" >&2
+            else
+                disp=$(basename "$name")
+                printf "  ${YELLOW}%2d)${NC}  %s\n" "$((i+1))" "$disp" >&2
+            fi
+        done
+        echo "" >&2
+        echo -e "  ${YELLOW}[num]${NC} select   ${YELLOW}m${NC} type path manually   ${YELLOW}q${NC} cancel" >&2
+        if [[ "$mode" == "any" ]]; then
+            echo -e "  ${YELLOW}a${NC} upload ${BOLD}entire this folder${NC} (bulk)" >&2
+        fi
+        echo -ne "${YELLOW}> ${NC}" >&2
+        read choice
+
+        case "$choice" in
+            q|Q) echo ""; return 0 ;;
+            m|M)
+                echo -ne "${YELLOW}Full path: ${NC}" >&2
+                read manual
+                if [[ "$manual" == "q" || "$manual" == "Q" || -z "$manual" ]]; then echo ""; return 0; fi
+                manual="${manual/#\~/$HOME}"
+                if [[ ! -e "$manual" ]]; then
+                    echo -e "${RED}Not found.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                if [[ "$mode" == "file" && ! -f "$manual" ]]; then
+                    echo -e "${RED}Need a file, not a folder.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                echo "$manual"
+                return 0
+                ;;
+            a|A)
+                if [[ "$mode" != "any" ]]; then
+                    echo -e "${RED}Only a file is allowed here.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                echo "$current"
+                return 0
+                ;;
+            *)
+                if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
+                    echo -e "${RED}Invalid.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                local idx=$((choice - 1))
+                if [[ $idx -lt 0 || $idx -ge ${#entries[@]} ]]; then
+                    echo -e "${RED}Invalid number.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                local sel="${entries[$idx]}"
+                local typ="${types[$idx]}"
+                if [[ "$typ" == "up" ]]; then
+                    current=$(dirname "$current")
+                    continue
+                fi
+                if [[ "$typ" == "dir" ]]; then
+                    if [[ "$mode" == "file" ]]; then
+                        current="$sel"
+                        continue
+                    fi
+                    # any mode: ask enter folder or select folder
+                    echo -ne "${YELLOW}Open folder or select it? (o=open / s=select / q): ${NC}" >&2
+                    read sub
+                    case "$sub" in
+                        q|Q) echo ""; return 0 ;;
+                        s|S) echo "$sel"; return 0 ;;
+                        *) current="$sel"; continue ;;
+                    esac
+                fi
+                # file
+                echo "$sel"
+                return 0
+                ;;
+        esac
+    done
 }
 
 # ─── Editor + Quick commit ─────────────────────────────────
@@ -1103,25 +1249,27 @@ action_quick_commit() {
     echo -e "${CYAN}==============================${NC}"
     echo -e "${CYAN}  Commit one local file${NC}"
     echo -e "${CYAN}==============================${NC}"
-    echo -e "  1) Save fixed file on phone (Downloads)"
-    echo -e "  2) ${BOLD}Paste commit message from chat${NC} when asked"
-    echo -e "  3) Confirm → real commit on GitHub"
+    echo -e "  Put files in: ${BOLD}Download/Termux/${NC}"
+    echo -e "  Then pick by number, paste commit message, confirm."
     echo -e "  ${YELLOW}Type q anytime to cancel.${NC}"
     echo ""
 
     local repo local_file repo_path commit_msg default_name path_hint
-    local dl1="$HOME/storage/shared/Download" dl2="/sdcard/Download"
-    local gitty_candidate=""
+    local share_dir gitty_candidate=""
+    share_dir=$(termux_share_dir)
+    echo -e "${CYAN}Share folder:${NC} $share_dir"
+    echo ""
 
     for cand in \
-        "$dl1/gitty-fixed.sh" "$dl2/gitty-fixed.sh" \
-        "$dl1/gitty.sh" "$dl2/gitty.sh" \
+        "$share_dir/gitty-fixed.sh" "$share_dir/gitty.sh" \
+        "$HOME/storage/shared/Download/gitty-fixed.sh" \
+        "/sdcard/Download/gitty-fixed.sh" \
         "$HOME/gitty.sh"; do
         if [[ -f "$cand" ]]; then gitty_candidate="$cand"; break; fi
     done
 
     if [[ -n "$gitty_candidate" ]]; then
-        echo -e "${GREEN}Found file:${NC} $gitty_candidate"
+        echo -e "${GREEN}Found:${NC} $gitty_candidate"
         echo -ne "${YELLOW}Gitty self-update to docs/gitty.sh? (y/n/q): ${NC}"
         read use_gitty
         if [[ "$use_gitty" == "q" || "$use_gitty" == "Q" ]]; then
@@ -1159,16 +1307,16 @@ action_quick_commit() {
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
 
-    echo -e "${YELLOW}Local file path (q = cancel):${NC}"
-    echo -e "  e.g.  /sdcard/Download/gitty-fixed.sh"
-    read -r local_file
-    if [[ "$local_file" == "q" || "$local_file" == "Q" || -z "$local_file" ]]; then
+    echo -e "${CYAN}Pick a file from Download/Termux:${NC}"
+    local_file=$(pick_local_item file)
+    if [[ -z "$local_file" ]]; then
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
-    local_file="${local_file/#\~/$HOME}"
     if [[ ! -f "$local_file" ]]; then
         echo -e "${RED}❌ File not found: $local_file${NC}"; sleep 1; return
     fi
+    echo -e "${GREEN}Selected:${NC} $local_file"
+    echo ""
 
     default_name=$(basename "$local_file")
     path_hint="$default_name"
