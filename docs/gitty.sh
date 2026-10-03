@@ -177,64 +177,85 @@ delete_path_recursive() {
 api_upload() {
     local repo=$1 local_file=$2 repo_path=$3
     local custom_msg="${4:-}"
-    local b64 encoded_path existing sha msg payload tmp_payload http_body
+    local encoded_path sha msg tmp_payload http_body attempt err
 
     if [[ ! -f "$local_file" ]]; then
         echo '{"message":"Local file not found"}'
         return 1
     fi
 
-    # base64: -w0 on GNU; fallback for busybox
-    b64=$(base64 -w0 "$local_file" 2>/dev/null || base64 "$local_file" 2>/dev/null | tr -d '\n\r')
-    if [[ -z "$b64" ]]; then
-        echo '{"message":"base64 encode failed"}'
-        return 1
-    fi
-
     encoded_path=$(urlencode "$repo_path")
-    existing=$(curl -s --connect-timeout 15 --max-time 60 \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$repo/contents/$encoded_path" 2>/dev/null || true)
-
-    sha=""
-    msg="Add $repo_path"
-    if echo "$existing" | jq -e '.sha' &>/dev/null; then
-        sha=$(echo "$existing" | jq -r '.sha')
-        msg="Update $repo_path"
+    if [[ -n "$custom_msg" ]]; then
+        msg="$custom_msg"
+    else
+        msg="Update $repo_path via Gitty"
     fi
-    [[ -n "$custom_msg" ]] && msg="$custom_msg"
 
     tmp_payload=$(mktemp "$HOME/gitty-payload-XXXXXX" 2>/dev/null || mktemp)
-    if [[ -n "$sha" ]]; then
-        jq -n --arg message "$msg" --arg content "$b64" --arg sha "$sha" \
-            '{message: $message, content: $content, sha: $sha}' > "$tmp_payload" 2>/dev/null
-    else
-        jq -n --arg message "$msg" --arg content "$b64" \
-            '{message: $message, content: $content}' > "$tmp_payload" 2>/dev/null
-    fi
 
-    if [[ ! -s "$tmp_payload" ]]; then
-        rm -f "$tmp_payload"
-        echo '{"message":"Failed to build JSON payload (file too large for memory?)"}'
-        return 1
-    fi
+    for attempt in 1 2; do
+        # fetch current sha (needed to UPDATE an existing path)
+        sha=$(curl -s --connect-timeout 20 --max-time 60 \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$repo/contents/$encoded_path" 2>/dev/null \
+            | jq -r '.sha // empty' 2>/dev/null)
 
-    http_body=$(curl -s --connect-timeout 15 --max-time 120 \
-        -X PUT \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        "https://api.github.com/repos/$repo/contents/$encoded_path" \
-        --data-binary @"$tmp_payload" 2>/dev/null || true)
+        # python builds JSON reliably (jq --arg fails on large files in Termux)
+        if ! python3 - "$local_file" "$msg" "$sha" "$tmp_payload" <<'PY'
+import base64, json, sys
+path, message, sha, out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+with open(path, "rb") as f:
+    content = base64.b64encode(f.read()).decode("ascii")
+obj = {"message": message, "content": content}
+if sha:
+    obj["sha"] = sha
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(obj, f)
+PY
+        then
+            rm -f "$tmp_payload"
+            echo '{"message":"Failed to build JSON payload (python)"}'
+            return 1
+        fi
+
+        if [[ ! -s "$tmp_payload" ]]; then
+            rm -f "$tmp_payload"
+            echo '{"message":"Empty payload file"}'
+            return 1
+        fi
+
+        http_body=$(curl -s --connect-timeout 20 --max-time 180 \
+            -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$repo/contents/$encoded_path" \
+            --data-binary @"$tmp_payload" 2>/dev/null || true)
+
+        if echo "$http_body" | jq -e '.content.path' &>/dev/null; then
+            rm -f "$tmp_payload"
+            echo "$http_body"
+            return 0
+        fi
+
+        err=$(echo "$http_body" | jq -r '.message // empty' 2>/dev/null)
+        # retry once if GitHub complains about sha (stale/missing)
+        if [[ "$attempt" -eq 1 ]]; then
+            if echo "$err" | grep -qiE 'sha|invalid request|not a blob|is not null'; then
+                continue
+            fi
+        fi
+        break
+    done
+
     rm -f "$tmp_payload"
-
     if [[ -z "$http_body" ]]; then
         echo '{"message":"Empty response from GitHub (network/timeout)"}'
         return 1
     fi
     echo "$http_body"
-    return 0
+    return 1
 }
 
 browse_repo() {
