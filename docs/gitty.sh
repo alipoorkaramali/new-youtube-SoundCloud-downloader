@@ -805,15 +805,19 @@ action_upload_files() {
     echo -e "${GREEN}Selected:${NC} $local_path"
     echo ""
 
-    echo -e "${YELLOW}Folder inside repo (Enter = root, q = cancel):${NC}"
-    echo -e "  e.g.  docs   data/config   (leave empty for top level)"
-    read -r dest_path
-    if [[ "$dest_path" == "q" || "$dest_path" == "Q" ]]; then
+    echo -e "${CYAN}Where to put files inside the repo?${NC}"
+    echo -e "  Browse folders below, then press ${YELLOW}s${NC} on the folder you want."
+    echo ""
+    local dest_path
+    if ! dest_path=$(pick_remote_folder "$target_repo"); then
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
+    [[ "$dest_path" == "." ]] && dest_path=""
     dest_path="${dest_path#/}"
     dest_path="${dest_path%/}"
     [[ -n "$dest_path" ]] && dest_path="${dest_path}/"
+    echo -e "${GREEN}Destination:${NC} /${dest_path}"
+    echo ""
 
     local file_count=0
     if [[ -f "$local_path" ]]; then
@@ -1063,6 +1067,115 @@ pick_local_item() {
                 # file
                 echo "$sel"
                 return 0
+                ;;
+        esac
+    done
+}
+
+# Browse remote repo folders (like Browse, dirs only) and pick upload destination.
+# stdout: "." = repo root | "docs/foo" = path | empty + return 1 = cancel
+pick_remote_folder() {
+    local repo=$1
+    local current_path=""
+    if [[ -z "$repo" ]]; then
+        echo -e "${RED}Repo required.${NC}" >&2
+        return 1
+    fi
+
+    while true; do
+        echo -e "${CYAN}==============================${NC}" >&2
+        echo -e "${CYAN}  Repo map: ${BOLD}$repo${NC}" >&2
+        echo -e "${CYAN}  Path: /${current_path}${NC}" >&2
+        echo -e "${CYAN}==============================${NC}" >&2
+
+        local items_json
+        items_json=$(api_list "$repo" "$current_path")
+        if echo "$items_json" | jq -e '.message' &>/dev/null; then
+            echo -e "${RED}$(echo "$items_json" | jq -r '.message')${NC}" >&2
+            echo -ne "${YELLOW}Type path manually (or q): ${NC}" >&2
+            read manual
+            [[ "$manual" == "q" || "$manual" == "Q" ]] && return 1
+            [[ -z "$manual" ]] && echo "." && return 0
+            echo "${manual#/}"
+            return 0
+        fi
+
+        local -a dir_names=()
+        local name
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            dir_names+=("$name")
+        done < <(echo "$items_json" | jq -r '.[] | select(.type=="dir") | .name' 2>/dev/null)
+
+        # also show a few files as context (not selectable as dest)
+        local file_sample
+        file_sample=$(echo "$items_json" | jq -r '.[] | select(.type=="file") | .name' 2>/dev/null | head -8)
+
+        if [[ ${#dir_names[@]} -eq 0 ]]; then
+            echo -e "${YELLOW}  (no subfolders here)${NC}" >&2
+        else
+            local i
+            for i in "${!dir_names[@]}"; do
+                printf "  ${CYAN}%2d)${NC}  ${BOLD}%s/${NC}\n" "$((i+1))" "${dir_names[$i]}" >&2
+            done
+        fi
+        if [[ -n "$file_sample" ]]; then
+            echo -e "${CYAN}  --- files here (info) ---${NC}" >&2
+            while IFS= read -r name; do
+                [[ -z "$name" ]] && continue
+                echo -e "       · $name" >&2
+            done <<< "$file_sample"
+        fi
+
+        echo "" >&2
+        echo -e "  ${YELLOW}[num]${NC} open folder" >&2
+        echo -e "  ${YELLOW}s${NC} select ${BOLD}this path${NC} as upload destination" >&2
+        echo -e "  ${YELLOW}r${NC} select ${BOLD}repo root${NC}   ${YELLOW}b${NC} back up   ${YELLOW}m${NC} type path   ${YELLOW}q${NC} cancel" >&2
+        echo -ne "${YELLOW}> ${NC}" >&2
+        read choice
+
+        case "$choice" in
+            q|Q) return 1 ;;
+            s|S)
+                if [[ -z "$current_path" ]]; then echo "."; else echo "$current_path"; fi
+                return 0
+                ;;
+            r|R) echo "."; return 0 ;;
+            b|B)
+                if [[ -z "$current_path" ]]; then
+                    echo -e "${YELLOW}Already at root.${NC}" >&2
+                    sleep 1
+                else
+                    current_path=$(dirname "$current_path")
+                    [[ "$current_path" == "." ]] && current_path=""
+                fi
+                ;;
+            m|M)
+                echo -ne "${YELLOW}Path (empty=root, q=cancel): ${NC}" >&2
+                read manual
+                [[ "$manual" == "q" || "$manual" == "Q" ]] && return 1
+                manual="${manual#/}"
+                manual="${manual%/}"
+                [[ -z "$manual" ]] && echo "." || echo "$manual"
+                return 0
+                ;;
+            *)
+                if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
+                    echo -e "${RED}Invalid.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                local idx=$((choice - 1))
+                if [[ $idx -lt 0 || $idx -ge ${#dir_names[@]} ]]; then
+                    echo -e "${RED}Invalid number.${NC}" >&2
+                    sleep 1
+                    continue
+                fi
+                if [[ -z "$current_path" ]]; then
+                    current_path="${dir_names[$idx]}"
+                else
+                    current_path="${current_path}/${dir_names[$idx]}"
+                fi
                 ;;
         esac
     done
@@ -1319,17 +1432,33 @@ action_quick_commit() {
     echo ""
 
     default_name=$(basename "$local_file")
+    echo -e "${CYAN}Pick folder on GitHub for this file:${NC}"
+    echo -e "  Navigate with numbers, then ${YELLOW}s${NC} to choose that folder."
+    echo ""
+    local remote_dir
+    if ! remote_dir=$(pick_remote_folder "$repo"); then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+    [[ "$remote_dir" == "." ]] && remote_dir=""
+    remote_dir="${remote_dir#/}"
+    remote_dir="${remote_dir%/}"
+
     path_hint="$default_name"
+    [[ -n "$remote_dir" ]] && path_hint="${remote_dir}/${default_name}"
     if [[ "$default_name" == gitty*.sh || "$default_name" == gitty*.SH ]]; then
         path_hint="docs/gitty.sh"
     fi
-    echo -e "${YELLOW}Path on GitHub [default: $path_hint] (q = cancel):${NC}"
+
+    echo -e "${YELLOW}Filename on GitHub [default: $path_hint] (q = cancel):${NC}"
+    echo -e "  Enter = ${BOLD}$path_hint${NC}   or type a different path"
     read -r repo_path
     if [[ "$repo_path" == "q" || "$repo_path" == "Q" ]]; then
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
     repo_path="${repo_path:-$path_hint}"
     repo_path="${repo_path#./}"
+    echo -e "${GREEN}Will write:${NC} $repo/$repo_path"
+    echo ""
 
     echo ""
     echo -e "${YELLOW}Paste commit message from chat (q = cancel):${NC}"
