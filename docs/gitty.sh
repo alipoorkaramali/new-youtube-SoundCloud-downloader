@@ -229,7 +229,7 @@ browse_repo() {
                     echo -ne "${YELLOW}Save as (default: $out_name): ${NC}"; read out; out=${out:-$HOME/storage/shared/Download/$out_name}
                     mkdir -p "$(dirname "$out")"
                     echo -e "${CYAN}Downloading $full_path ...${NC}"
-                    local encoded_path=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$full_path', safe=''))")
+                    local encoded_path=$(urlencode "$full_path")
                     if curl -L --progress-bar --retry 5 --retry-delay 2 --retry-max-time 60 --continue-at - -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/${repo}/contents/${encoded_path}" --output "$out"; then
                         echo -e "${GREEN}✅ Saved to $out${NC}"
                     else echo -e "${RED}❌ Download failed.${NC}"; rm -f "$out"; fi
