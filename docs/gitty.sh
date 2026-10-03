@@ -177,18 +177,64 @@ delete_path_recursive() {
 api_upload() {
     local repo=$1 local_file=$2 repo_path=$3
     local custom_msg="${4:-}"
-    local b64=$(base64 -w0 "$local_file") encoded_path=$(urlencode "$repo_path")
-    local existing=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$repo/contents/$encoded_path")
-    local sha="" msg="Add $repo_path"
-    if echo "$existing" | jq -e '.sha' &>/dev/null; then sha=$(echo "$existing" | jq -r '.sha'); msg="Update $repo_path"; fi
-    [[ -n "$custom_msg" ]] && msg="$custom_msg"
-    local payload
-    if [[ -n "$sha" ]]; then
-        payload=$(jq -n --arg message "$msg" --arg content "$b64" --arg sha "$sha" '{message: $message, content: $content, sha: $sha}')
-    else
-        payload=$(jq -n --arg message "$msg" --arg content "$b64" '{message: $message, content: $content}')
+    local b64 encoded_path existing sha msg payload tmp_payload http_body
+
+    if [[ ! -f "$local_file" ]]; then
+        echo '{"message":"Local file not found"}'
+        return 1
     fi
-    echo "$payload" | curl -s -X PUT -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$repo/contents/$encoded_path" -d @-
+
+    # base64: -w0 on GNU; fallback for busybox
+    b64=$(base64 -w0 "$local_file" 2>/dev/null || base64 "$local_file" 2>/dev/null | tr -d '\n\r')
+    if [[ -z "$b64" ]]; then
+        echo '{"message":"base64 encode failed"}'
+        return 1
+    fi
+
+    encoded_path=$(urlencode "$repo_path")
+    existing=$(curl -s --connect-timeout 15 --max-time 60 \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$repo/contents/$encoded_path" 2>/dev/null || true)
+
+    sha=""
+    msg="Add $repo_path"
+    if echo "$existing" | jq -e '.sha' &>/dev/null; then
+        sha=$(echo "$existing" | jq -r '.sha')
+        msg="Update $repo_path"
+    fi
+    [[ -n "$custom_msg" ]] && msg="$custom_msg"
+
+    tmp_payload=$(mktemp "$HOME/gitty-payload-XXXXXX" 2>/dev/null || mktemp)
+    if [[ -n "$sha" ]]; then
+        jq -n --arg message "$msg" --arg content "$b64" --arg sha "$sha" \
+            '{message: $message, content: $content, sha: $sha}' > "$tmp_payload" 2>/dev/null
+    else
+        jq -n --arg message "$msg" --arg content "$b64" \
+            '{message: $message, content: $content}' > "$tmp_payload" 2>/dev/null
+    fi
+
+    if [[ ! -s "$tmp_payload" ]]; then
+        rm -f "$tmp_payload"
+        echo '{"message":"Failed to build JSON payload (file too large for memory?)"}'
+        return 1
+    fi
+
+    http_body=$(curl -s --connect-timeout 15 --max-time 120 \
+        -X PUT \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        -H "Content-Type: application/json" \
+        "https://api.github.com/repos/$repo/contents/$encoded_path" \
+        --data-binary @"$tmp_payload" 2>/dev/null || true)
+    rm -f "$tmp_payload"
+
+    if [[ -z "$http_body" ]]; then
+        echo '{"message":"Empty response from GitHub (network/timeout)"}'
+        return 1
+    fi
+    echo "$http_body"
+    return 0
 }
 
 browse_repo() {
@@ -845,7 +891,9 @@ action_upload_files() {
         fname=$(basename "$file")
         repo_path="${dest}${fname}"
         echo -ne "  Uploading: $repo_path ... "
+        set +e
         resp=$(api_upload "$target_repo" "$file" "$repo_path" 2>/dev/null)
+        set -e
         if echo "$resp" | jq -e '.content.path' &>/dev/null; then
             echo -e "${GREEN}OK${NC}"
             ok=$((ok + 1))
@@ -932,26 +980,56 @@ action_update_gitty() {
 
 # ─── Shared folder: Download/Termux ─────────────────────────
 termux_share_dir() {
-    local d
-    if [[ -d "$HOME/storage/shared/Download" ]]; then
-        d="$HOME/storage/shared/Download/Termux"
-    elif [[ -d "/sdcard/Download" ]]; then
-        d="/sdcard/Download/Termux"
-    else
-        d="$HOME/TermuxShare"
-    fi
-    mkdir -p "$d" 2>/dev/null || true
-    echo "$d"
+    # Prefer the path that already has files; create both when possible
+    local candidates=(
+        "/sdcard/Download/Termux"
+        "$HOME/storage/shared/Download/Termux"
+        "$HOME/TermuxShare"
+    )
+    local d best="" count=0
+    for d in "${candidates[@]}"; do
+        mkdir -p "$d" 2>/dev/null || true
+        [[ ! -d "$d" ]] && continue
+        local n
+        n=$(ls -1 "$d" 2>/dev/null | wc -l | tr -d ' ')
+        if [[ -z "$best" ]]; then best="$d"; count="$n"; fi
+        if [[ "${n:-0}" -gt "${count:-0}" ]]; then best="$d"; count="$n"; fi
+    done
+    [[ -z "$best" ]] && best="$HOME/TermuxShare" && mkdir -p "$best" 2>/dev/null || true
+    echo "$best"
 }
 
-# List files/folders in Download/Termux (or subfolder) and let user pick by number.
-# mode: file = only files | any = files+dirs
-# prints selected absolute path to stdout; empty = cancel
+# Safe directory listing (never trips set -e)
+_list_dir_entries() {
+    local dir=$1 kind=$2   # kind: d | f
+    local item
+    if [[ ! -d "$dir" ]]; then return 0; fi
+    if [[ "$kind" == "d" ]]; then
+        for item in "$dir"/*/; do
+            [[ -d "$item" ]] || continue
+            item="${item%/}"
+            [[ "$(basename "$item")" == .* ]] && continue
+            printf '%s\n' "$item"
+        done 2>/dev/null | sort
+    else
+        for item in "$dir"/*; do
+            [[ -f "$item" ]] || continue
+            [[ "$(basename "$item")" == .* ]] && continue
+            printf '%s\n' "$item"
+        done 2>/dev/null | sort
+    fi
+    return 0
+}
+
+# List files/folders; pick by number. mode: file | any
+# stdout = selected path; empty = cancel. Never aborts the script.
 pick_local_item() {
-    local mode="${1:-any}"   # file | any
-    local start_dir
+    local mode="${1:-any}"
+    local start_dir current
+    set +e
     start_dir=$(termux_share_dir)
-    local current="$start_dir"
+    current="$start_dir"
+    mkdir -p "$current" 2>/dev/null || true
 
     while true; do
         echo -e "${CYAN}------------------------------${NC}" >&2
@@ -960,58 +1038,88 @@ pick_local_item() {
 
         local -a entries=()
         local -a types=()
-        # parent
+        local item
+
         if [[ "$current" != "$start_dir" ]]; then
             entries+=("..")
             types+=("up")
         fi
-        # dirs first, then files
-        local item
+
         while IFS= read -r item; do
             [[ -z "$item" ]] && continue
             entries+=("$item")
             types+=("dir")
-        done < <(find "$current" -mindepth 1 -maxdepth 1 -type d ! -name '.*' 2>/dev/null | sort)
+        done < <(_list_dir_entries "$current" d)
+
         while IFS= read -r item; do
             [[ -z "$item" ]] && continue
             entries+=("$item")
             types+=("file")
-        done < <(find "$current" -mindepth 1 -maxdepth 1 -type f ! -name '.*' 2>/dev/null | sort)
+        done < <(_list_dir_entries "$current" f)
 
         if [[ ${#entries[@]} -eq 0 ]]; then
-            echo -e "${YELLOW}  (empty — put files in Download/Termux)${NC}" >&2
+            echo -e "${YELLOW}  (empty)${NC}" >&2
+            echo -e "${YELLOW}  Put files in: $start_dir${NC}" >&2
+            # offer alternate known folders as jump targets
+            local alt
+            for alt in "/sdcard/Download/Termux" "$HOME/storage/shared/Download/Termux" "/sdcard/Download" "$HOME/storage/shared/Download"; do
+                if [[ -d "$alt" && "$alt" != "$current" ]]; then
+                    local nc
+                    nc=$(ls -1 "$alt" 2>/dev/null | wc -l | tr -d ' ')
+                    echo -e "  ${CYAN}hint:${NC} $alt  (${nc} items)" >&2
+                fi
+            done
+        else
+            local i name disp
+            for i in "${!entries[@]}"; do
+                name="${entries[$i]}"
+                if [[ "${types[$i]}" == "up" ]]; then
+                    printf "  ${CYAN}%2d)${NC}  ../\n" "$((i+1))" >&2
+                elif [[ "${types[$i]}" == "dir" ]]; then
+                    disp=$(basename "$name")
+                    printf "  ${CYAN}%2d)${NC}  ${BOLD}%s/${NC}\n" "$((i+1))" "$disp" >&2
+                else
+                    disp=$(basename "$name")
+                    printf "  ${YELLOW}%2d)${NC}  %s\n" "$((i+1))" "$disp" >&2
+                fi
+            done
         fi
 
-        local i name disp
-        for i in "${!entries[@]}"; do
-            name="${entries[$i]}"
-            if [[ "${types[$i]}" == "up" ]]; then
-                printf "  ${CYAN}%2d)${NC}  ../\n" "$((i+1))" >&2
-            elif [[ "${types[$i]}" == "dir" ]]; then
-                disp=$(basename "$name")
-                printf "  ${CYAN}%2d)${NC}  ${BOLD}%s/${NC}\n" "$((i+1))" "$disp" >&2
-            else
-                disp=$(basename "$name")
-                printf "  ${YELLOW}%2d)${NC}  %s\n" "$((i+1))" "$disp" >&2
-            fi
-        done
         echo "" >&2
-        echo -e "  ${YELLOW}[num]${NC} select   ${YELLOW}m${NC} type path manually   ${YELLOW}q${NC} cancel" >&2
+        echo -e "  ${YELLOW}[num]${NC} select   ${YELLOW}m${NC} type path   ${YELLOW}q${NC} cancel" >&2
         if [[ "$mode" == "any" ]]; then
-            echo -e "  ${YELLOW}a${NC} upload ${BOLD}entire this folder${NC} (bulk)" >&2
+            echo -e "  ${YELLOW}a${NC} use entire this folder (bulk)" >&2
         fi
+        echo -e "  ${YELLOW}j${NC} jump to another Download folder" >&2
         echo -ne "${YELLOW}> ${NC}" >&2
         read choice
 
         case "$choice" in
-            q|Q) echo ""; return 0 ;;
+            q|Q) echo ""; set -e; return 0 ;;
+            j|J)
+                echo -e "  1) /sdcard/Download/Termux" >&2
+                echo -e "  2) \$HOME/storage/shared/Download/Termux" >&2
+                echo -e "  3) /sdcard/Download" >&2
+                echo -e "  4) \$HOME/storage/shared/Download" >&2
+                echo -ne "${YELLOW}Jump to: ${NC}" >&2
+                read jn
+                case "$jn" in
+                    1) current="/sdcard/Download/Termux"; mkdir -p "$current" 2>/dev/null ;;
+                    2) current="$HOME/storage/shared/Download/Termux"; mkdir -p "$current" 2>/dev/null ;;
+                    3) current="/sdcard/Download" ;;
+                    4) current="$HOME/storage/shared/Download" ;;
+                    *) echo -e "${RED}Invalid.${NC}" >&2; sleep 1 ;;
+                esac
+                start_dir="$current"
+                continue
+                ;;
             m|M)
                 echo -ne "${YELLOW}Full path: ${NC}" >&2
                 read manual
-                if [[ "$manual" == "q" || "$manual" == "Q" || -z "$manual" ]]; then echo ""; return 0; fi
+                if [[ "$manual" == "q" || "$manual" == "Q" || -z "$manual" ]]; then echo ""; set -e; return 0; fi
                 manual="${manual/#\~/$HOME}"
                 if [[ ! -e "$manual" ]]; then
-                    echo -e "${RED}Not found.${NC}" >&2
+                    echo -e "${RED}Not found: $manual${NC}" >&2
                     sleep 1
                     continue
                 fi
@@ -1021,6 +1129,7 @@ pick_local_item() {
                     continue
                 fi
                 echo "$manual"
+                set -e
                 return 0
                 ;;
             a|A)
@@ -1030,6 +1139,7 @@ pick_local_item() {
                     continue
                 fi
                 echo "$current"
+                set -e
                 return 0
                 ;;
             *)
@@ -1055,17 +1165,16 @@ pick_local_item() {
                         current="$sel"
                         continue
                     fi
-                    # any mode: ask enter folder or select folder
                     echo -ne "${YELLOW}Open folder or select it? (o=open / s=select / q): ${NC}" >&2
                     read sub
                     case "$sub" in
-                        q|Q) echo ""; return 0 ;;
-                        s|S) echo "$sel"; return 0 ;;
+                        q|Q) echo ""; set -e; return 0 ;;
+                        s|S) echo "$sel"; set -e; return 0 ;;
                         *) current="$sel"; continue ;;
                     esac
                 fi
-                # file
                 echo "$sel"
+                set -e
                 return 0
                 ;;
         esac
@@ -1082,20 +1191,35 @@ pick_remote_folder() {
         return 1
     fi
 
+    set +e
     while true; do
-        echo -e "${CYAN}==============================${NC}" >&2
-        echo -e "${CYAN}  Repo map: ${BOLD}$repo${NC}" >&2
-        echo -e "${CYAN}  Path: /${current_path}${NC}" >&2
-        echo -e "${CYAN}==============================${NC}" >&2
+        echo "" >&2
+        echo -e "${CYAN}╔══════════════════════════════╗${NC}" >&2
+        echo -e "${CYAN}║  GitHub folder map           ║${NC}" >&2
+        echo -e "${CYAN}╠══════════════════════════════╣${NC}" >&2
+        echo -e "${CYAN}║  Repo: ${BOLD}$repo${NC}" >&2
+        echo -e "${CYAN}║  Now:  /${current_path:-}${NC}" >&2
+        echo -e "${CYAN}╚══════════════════════════════╝${NC}" >&2
 
         local items_json
-        items_json=$(api_list "$repo" "$current_path")
-        if echo "$items_json" | jq -e '.message' &>/dev/null; then
-            echo -e "${RED}$(echo "$items_json" | jq -r '.message')${NC}" >&2
-            echo -ne "${YELLOW}Type path manually (or q): ${NC}" >&2
+        items_json=$(api_list "$repo" "$current_path" 2>/dev/null)
+
+        if [[ -z "$items_json" ]]; then
+            echo -e "${RED}  Could not load folder (network?).${NC}" >&2
+            echo -ne "${YELLOW}  Type path manually (empty=root, q=cancel): ${NC}" >&2
             read manual
             [[ "$manual" == "q" || "$manual" == "Q" ]] && return 1
-            [[ -z "$manual" ]] && echo "." && return 0
+            [[ -z "$manual" ]] && { echo "."; return 0; }
+            echo "${manual#/}"
+            return 0
+        fi
+
+        if echo "$items_json" | jq -e 'type == "object" and .message' &>/dev/null; then
+            echo -e "${RED}  API: $(echo "$items_json" | jq -r '.message')${NC}" >&2
+            echo -ne "${YELLOW}  Type path manually (empty=root, q=cancel): ${NC}" >&2
+            read manual
+            [[ "$manual" == "q" || "$manual" == "Q" ]] && return 1
+            [[ -z "$manual" ]] && { echo "."; return 0; }
             echo "${manual#/}"
             return 0
         fi
@@ -1103,16 +1227,15 @@ pick_remote_folder() {
         local -a dir_names=()
         local name
         while IFS= read -r name; do
-            [[ -z "$name" ]] && continue
+            [[ -z "$name" || "$name" == "null" ]] && continue
             dir_names+=("$name")
-        done < <(echo "$items_json" | jq -r '.[] | select(.type=="dir") | .name' 2>/dev/null)
+        done < <(echo "$items_json" | jq -r '.[]? | select(.type=="dir") | .name' 2>/dev/null)
 
-        # also show a few files as context (not selectable as dest)
         local file_sample
-        file_sample=$(echo "$items_json" | jq -r '.[] | select(.type=="file") | .name' 2>/dev/null | head -8)
+        file_sample=$(echo "$items_json" | jq -r '.[]? | select(.type=="file") | .name' 2>/dev/null | head -10)
 
         if [[ ${#dir_names[@]} -eq 0 ]]; then
-            echo -e "${YELLOW}  (no subfolders here)${NC}" >&2
+            echo -e "${YELLOW}  (no subfolders — you can press s to use this path)${NC}" >&2
         else
             local i
             for i in "${!dir_names[@]}"; do
@@ -1120,17 +1243,17 @@ pick_remote_folder() {
             done
         fi
         if [[ -n "$file_sample" ]]; then
-            echo -e "${CYAN}  --- files here (info) ---${NC}" >&2
+            echo -e "  ${CYAN}── files in this folder ──${NC}" >&2
             while IFS= read -r name; do
                 [[ -z "$name" ]] && continue
-                echo -e "       · $name" >&2
+                echo -e "      · $name" >&2
             done <<< "$file_sample"
         fi
 
         echo "" >&2
         echo -e "  ${YELLOW}[num]${NC} open folder" >&2
-        echo -e "  ${YELLOW}s${NC} select ${BOLD}this path${NC} as upload destination" >&2
-        echo -e "  ${YELLOW}r${NC} select ${BOLD}repo root${NC}   ${YELLOW}b${NC} back up   ${YELLOW}m${NC} type path   ${YELLOW}q${NC} cancel" >&2
+        echo -e "  ${YELLOW}s${NC}  ★ use ${BOLD}/${current_path:-}${NC} as destination" >&2
+        echo -e "  ${YELLOW}r${NC}  repo root    ${YELLOW}b${NC} back    ${YELLOW}m${NC} type path    ${YELLOW}q${NC} cancel" >&2
         echo -ne "${YELLOW}> ${NC}" >&2
         read choice
 
@@ -1296,31 +1419,40 @@ do_commit_file() {
         echo -e "${RED}❌ Local file not found: $local_file${NC}" >&2
         return 1
     fi
-    # strip leading ./ from repo path
     repo_path="${repo_path#./}"
     [[ -z "$commit_msg" ]] && commit_msg="Update $repo_path via Gitty"
 
+    local fsize
+    fsize=$(wc -c < "$local_file" 2>/dev/null | tr -d ' ')
     echo -e "${CYAN}[*] Committing...${NC}"
     echo -e "  Repo:    ${BOLD}$repo${NC}"
     echo -e "  Path:    ${BOLD}$repo_path${NC}"
-    echo -e "  Local:   ${BOLD}$local_file${NC}"
+    echo -e "  Local:   ${BOLD}$local_file${NC} (${fsize} bytes)"
     echo -e "  Message: ${BOLD}$commit_msg${NC}"
     echo ""
 
+    # set -e must not kill the whole TUI on upload failure
     local response
+    set +e
     response=$(api_upload "$repo" "$local_file" "$repo_path" "$commit_msg")
+    local up_rc=$?
+    set -e
 
-    if echo "$response" | jq -e '.content.path' &>/dev/null; then
+    if [[ $up_rc -eq 0 ]] && echo "$response" | jq -e '.content.path' &>/dev/null; then
         local commit_url html_url
-        commit_url=$(echo "$response" | jq -r '.commit.html_url // empty')
-        html_url=$(echo "$response" | jq -r '.content.html_url // empty')
+        commit_url=$(echo "$response" | jq -r '.commit.html_url // empty' 2>/dev/null)
+        html_url=$(echo "$response" | jq -r '.content.html_url // empty' 2>/dev/null)
         echo -e "${GREEN}✅ Committed successfully.${NC}"
         [[ -n "$commit_url" ]] && echo -e "  Commit: $commit_url"
         [[ -n "$html_url" ]] && echo -e "  File:   $html_url"
         return 0
     else
         echo -e "${RED}❌ Commit failed.${NC}"
-        echo "$response" | jq -r '.message // .' 2>/dev/null || echo "$response"
+        if [[ -n "$response" ]]; then
+            echo "$response" | jq -r '.message // .' 2>/dev/null || echo "$response"
+        else
+            echo -e "${RED}No response (network or script error).${NC}"
+        fi
         return 1
     fi
 }
@@ -1432,35 +1564,45 @@ action_quick_commit() {
     echo ""
 
     default_name=$(basename "$local_file")
-    echo -e "${CYAN}Pick folder on GitHub for this file:${NC}"
-    echo -e "  Navigate with numbers, then ${YELLOW}s${NC} to choose that folder."
+    # Special case: our own script usually lives at docs/gitty.sh
+    if [[ "$default_name" == gitty*.sh || "$default_name" == gitty*.SH ]]; then
+        default_name="gitty.sh"
+    fi
+
     echo ""
+    echo -e "${CYAN}>>> Step: choose folder ON GitHub (repo map)${NC}"
+    echo -e "  Open folders with numbers, then press ${YELLOW}s${NC} when you are inside the right folder."
     local remote_dir
-    if ! remote_dir=$(pick_remote_folder "$repo"); then
+    set +e
+    remote_dir=$(pick_remote_folder "$repo")
+    local map_rc=$?
+    set -e
+    if [[ $map_rc -ne 0 ]]; then
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
     [[ "$remote_dir" == "." ]] && remote_dir=""
     remote_dir="${remote_dir#/}"
     remote_dir="${remote_dir%/}"
 
-    path_hint="$default_name"
-    [[ -n "$remote_dir" ]] && path_hint="${remote_dir}/${default_name}"
-    if [[ "$default_name" == gitty*.sh || "$default_name" == gitty*.SH ]]; then
-        path_hint="docs/gitty.sh"
+    if [[ -n "$remote_dir" ]]; then
+        path_hint="${remote_dir}/${default_name}"
+        echo -e "${GREEN}Folder selected:${NC} /${remote_dir}/"
+    else
+        path_hint="$default_name"
+        echo -e "${GREEN}Folder selected:${NC} / (repo root)"
     fi
 
-    echo -e "${YELLOW}Filename on GitHub [default: $path_hint] (q = cancel):${NC}"
-    echo -e "  Enter = ${BOLD}$path_hint${NC}   or type a different path"
+    echo -e "${YELLOW}File name on GitHub [default: ${BOLD}$path_hint${NC}${YELLOW}] (q = cancel):${NC}"
+    echo -e "  Press Enter to use default, or type full path like docs/gitty.sh"
     read -r repo_path
     if [[ "$repo_path" == "q" || "$repo_path" == "Q" ]]; then
         echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
     repo_path="${repo_path:-$path_hint}"
     repo_path="${repo_path#./}"
-    echo -e "${GREEN}Will write:${NC} $repo/$repo_path"
+    echo -e "${GREEN}Final path:${NC} $repo/$repo_path"
     echo ""
 
-    echo ""
     echo -e "${YELLOW}Paste commit message from chat (q = cancel):${NC}"
     echo -e "  ${CYAN}(long-press in Termux → Paste)${NC}"
     read -r commit_msg
