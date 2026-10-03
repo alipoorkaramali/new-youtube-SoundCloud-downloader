@@ -64,38 +64,61 @@ print_item() {
 
 get_repo_selection() {
     local prompt="${1:-Repository (user/repo):}"
-    echo -e "${YELLOW}Choose repository:${NC}" >&2
+    echo -e "${YELLOW}Choose repository (q = cancel):${NC}" >&2
     echo "  1) Enter manually" >&2
     echo "  2) Select from your repositories" >&2
     echo -ne "${YELLOW}> ${NC}" >&2
     read choice
     case $choice in
-        1) echo -ne "${YELLOW}${prompt}${NC}" >&2; read repo; echo "$repo" ;;
+        q|Q) echo ""; return ;;
+        1)
+            echo -ne "${YELLOW}${prompt} (q = cancel): ${NC}" >&2
+            read repo
+            [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+            ;;
         2)
             if ! command -v jq &> /dev/null; then
                 echo -e "${RED}❌ jq is not installed.${NC}" >&2
-                echo -ne "${YELLOW}Enter manually: ${NC}" >&2; read repo; echo "$repo"; return
+                echo -ne "${YELLOW}Enter manually (q = cancel): ${NC}" >&2; read repo
+                [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+                return
             fi
             echo -e "${CYAN}Fetching your repositories...${NC}" >&2
             repos_json=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/user/repos?per_page=100&sort=updated")
             if [[ -z "$repos_json" ]]; then
                 echo -e "${RED}❌ Failed to fetch.${NC}" >&2
-                echo -ne "${YELLOW}Enter manually: ${NC}" >&2; read repo; echo "$repo"; return
+                echo -ne "${YELLOW}Enter manually (q = cancel): ${NC}" >&2; read repo
+                [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+                return
             fi
             repo_names=()
             while IFS= read -r line; do repo_names+=("$line"); done < <(echo "$repos_json" | jq -r '.[] | .full_name' 2>/dev/null)
             if [[ ${#repo_names[@]} -eq 0 ]]; then
                 echo -e "${RED}No repositories found.${NC}" >&2
-                echo -ne "${YELLOW}Enter manually: ${NC}" >&2; read repo; echo "$repo"; return
+                echo -ne "${YELLOW}Enter manually (q = cancel): ${NC}" >&2; read repo
+                [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+                return
             fi
             echo -e "${CYAN}Your repositories:${NC}" >&2
             for i in "${!repo_names[@]}"; do echo "  $((i+1))) ${repo_names[$i]}" >&2; done
-            echo -ne "${YELLOW}Select number (or 0 for manual input): ${NC}" >&2; read num
-            if [[ "$num" == "0" ]]; then echo -ne "${YELLOW}${prompt}${NC}" >&2; read repo; echo "$repo"
-            elif [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#repo_names[@]} )); then echo "${repo_names[$((num-1))]}"
-            else echo -e "${RED}Invalid selection.${NC}" >&2; echo -ne "${YELLOW}Enter manually: ${NC}" >&2; read repo; echo "$repo"; fi
+            echo -ne "${YELLOW}Select number (0 = manual, q = cancel): ${NC}" >&2; read num
+            if [[ "$num" == "q" || "$num" == "Q" ]]; then echo ""
+            elif [[ "$num" == "0" ]]; then
+                echo -ne "${YELLOW}${prompt} (q = cancel): ${NC}" >&2; read repo
+                [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+            elif [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#repo_names[@]} )); then
+                echo "${repo_names[$((num-1))]}"
+            else
+                echo -e "${RED}Invalid selection.${NC}" >&2
+                echo -ne "${YELLOW}Enter manually (q = cancel): ${NC}" >&2; read repo
+                [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+            fi
             ;;
-        *) echo -e "${RED}Invalid option.${NC}" >&2; echo -ne "${YELLOW}Enter manually: ${NC}" >&2; read repo; echo "$repo" ;;
+        *)
+            echo -e "${RED}Invalid option.${NC}" >&2
+            echo -ne "${YELLOW}Enter manually (q = cancel): ${NC}" >&2; read repo
+            [[ "$repo" == "q" || "$repo" == "Q" ]] && echo "" || echo "$repo"
+            ;;
     esac
 }
 
@@ -153,10 +176,12 @@ delete_path_recursive() {
 
 api_upload() {
     local repo=$1 local_file=$2 repo_path=$3
+    local custom_msg="${4:-}"
     local b64=$(base64 -w0 "$local_file") encoded_path=$(urlencode "$repo_path")
     local existing=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$repo/contents/$encoded_path")
     local sha="" msg="Add $repo_path"
     if echo "$existing" | jq -e '.sha' &>/dev/null; then sha=$(echo "$existing" | jq -r '.sha'); msg="Update $repo_path"; fi
+    [[ -n "$custom_msg" ]] && msg="$custom_msg"
     local payload
     if [[ -n "$sha" ]]; then
         payload=$(jq -n --arg message "$msg" --arg content "$b64" --arg sha "$sha" '{message: $message, content: $content, sha: $sha}')
@@ -197,7 +222,9 @@ browse_repo() {
             fi
         done
         echo ""
-        echo -e "${CYAN}Commands: [number] enter | r<num> read | d<num> download | x<num> delete | b back | q quit${NC}"
+        echo -e "${CYAN}Commands:${NC}"
+        echo -e "  ${YELLOW}[num]${NC} enter folder   ${YELLOW}r[num]${NC} read   ${YELLOW}d[num]${NC} download"
+        echo -e "  ${YELLOW}e[num]${NC} edit+commit (nano)   ${YELLOW}x[num]${NC} delete   ${YELLOW}b${NC} back   ${YELLOW}q${NC} quit"
         echo -ne "${YELLOW}> ${NC}"; read choice
         case "$choice" in
             [0-9]*)
@@ -235,6 +262,20 @@ browse_repo() {
                     else echo -e "${RED}❌ Download failed.${NC}"; rm -f "$out"; fi
                     sleep 1
                 else echo -e "${RED}Invalid file selection.${NC}"; sleep 1; fi
+                ;;
+            e*)
+                local ed_num=${choice#e} disp_index=$((ed_num - 1))
+                if [[ $disp_index -ge 0 && $disp_index -lt ${#display_indices[@]} ]]; then
+                    local ed_index=${display_indices[$disp_index]}
+                    if [[ "${types[$ed_index]}" != "file" ]]; then
+                        echo -e "${RED}Not a file.${NC}"; sleep 1
+                    else
+                        local full_path="${current_path:+$current_path/}${names[$ed_index]}"
+                        edit_and_commit_file "$repo" "$full_path"
+                        echo ""
+                        read -p "Press Enter to continue."
+                    fi
+                else echo -e "${RED}Invalid selection.${NC}"; sleep 1; fi
                 ;;
             x*)
                 local del_num=${choice#x} disp_index=$((del_num - 1))
@@ -734,27 +775,98 @@ action_create_repo() {
 }
 
 action_upload_files() {
-    local target_repo=$(get_repo_selection "Target repository (user/repo):")
-    echo -e "${YELLOW}Local file or folder path:${NC}"; read -r local_path
-    local_path="${local_path/#\~/$HOME}"
-    if [[ ! -e "$local_path" ]]; then echo -e "${RED}❌ Not found.${NC}"; return; fi
-    echo -e "${YELLOW}Destination path in repo (e.g., data/ or empty for root):${NC}"; read -r dest_path
-    dest_path="${dest_path%/}"; [[ -n "$dest_path" ]] && dest_path="${dest_path}/"
-    upload_single() {
-        local file=$1 dest=$2 fname=$(basename "$file") repo_path="${dest}${fname}"
-        echo -ne "  Uploading: $repo_path ... "
-        api_upload "$target_repo" "$file" "$repo_path" > /dev/null && echo -e "${GREEN}OK${NC}" || echo -e "${RED}FAIL${NC}"
-    }
-    if [[ -f "$local_path" ]]; then upload_single "$local_path" "$dest_path"
-    elif [[ -d "$local_path" ]]; then
-        cd "$local_path"
-        find . -type f | while read -r file; do
-            local rel="${file#./}" subdest="$dest_path$(dirname "$rel")/"
-            [[ "$subdest" == "./" ]] && subdest="$dest_path"
-            upload_single "$(pwd)/$rel" "$subdest"
-        done
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "${CYAN}  Bulk upload (file or folder)${NC}"
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "  For uploading ${BOLD}many files${NC} / a whole folder."
+    echo -e "  Folder structure is kept. Each file becomes one commit."
+    echo -e "  For ${BOLD}one file + your own commit message${NC} → use menu ${YELLOW}7${NC}."
+    echo -e "  ${YELLOW}Type q anytime to cancel.${NC}"
+    echo ""
+
+    local target_repo
+    target_repo=$(get_repo_selection "Target repository (user/repo):")
+    if [[ -z "$target_repo" || "$target_repo" == "q" || "$target_repo" == "Q" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
     fi
-    echo -e "${GREEN}✅ Upload complete.${NC}"
+
+    echo -e "${YELLOW}Local file or folder path (q = cancel):${NC}"
+    echo -e "  e.g.  ~/project   /sdcard/Download/myapp   ./data"
+    read -r local_path
+    if [[ "$local_path" == "q" || "$local_path" == "Q" || -z "$local_path" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+    local_path="${local_path/#\~/$HOME}"
+    if [[ ! -e "$local_path" ]]; then
+        echo -e "${RED}❌ Not found: $local_path${NC}"; sleep 1; return
+    fi
+
+    echo -e "${YELLOW}Folder inside repo (Enter = root, q = cancel):${NC}"
+    echo -e "  e.g.  docs   data/config   (leave empty for top level)"
+    read -r dest_path
+    if [[ "$dest_path" == "q" || "$dest_path" == "Q" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+    dest_path="${dest_path#/}"
+    dest_path="${dest_path%/}"
+    [[ -n "$dest_path" ]] && dest_path="${dest_path}/"
+
+    local file_count=0
+    if [[ -f "$local_path" ]]; then
+        file_count=1
+    elif [[ -d "$local_path" ]]; then
+        file_count=$(find "$local_path" -type f ! -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    echo ""
+    echo -e "  Repo:   ${BOLD}$target_repo${NC}"
+    echo -e "  Source: ${BOLD}$local_path${NC}"
+    echo -e "  Dest:   ${BOLD}/${dest_path}${NC}"
+    echo -e "  Files:  ${BOLD}$file_count${NC}"
+    echo ""
+    echo -ne "${YELLOW}Start upload? (yes / no / q): ${NC}"
+    read confirm
+    if [[ "$confirm" != "yes" && "$confirm" != "y" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+
+    local ok=0 fail=0
+    _upload_one() {
+        local file=$1 dest=$2
+        local fname repo_path resp
+        fname=$(basename "$file")
+        repo_path="${dest}${fname}"
+        echo -ne "  Uploading: $repo_path ... "
+        resp=$(api_upload "$target_repo" "$file" "$repo_path" 2>/dev/null)
+        if echo "$resp" | jq -e '.content.path' &>/dev/null; then
+            echo -e "${GREEN}OK${NC}"
+            ok=$((ok + 1))
+        else
+            echo -e "${RED}FAIL${NC}"
+            fail=$((fail + 1))
+        fi
+    }
+
+    if [[ -f "$local_path" ]]; then
+        _upload_one "$local_path" "$dest_path"
+    elif [[ -d "$local_path" ]]; then
+        local abs_base rel subdest
+        abs_base=$(cd "$local_path" && pwd)
+        while IFS= read -r -d '' file; do
+            rel="${file#$abs_base/}"
+            if [[ "$(dirname "$rel")" == "." ]]; then
+                subdest="$dest_path"
+            else
+                subdest="$dest_path$(dirname "$rel")/"
+            fi
+            _upload_one "$file" "$subdest"
+        done < <(find "$abs_base" -type f ! -path '*/.git/*' -print0 2>/dev/null)
+    fi
+
+    echo ""
+    echo -e "${GREEN}✅ Upload finished.${NC}  OK: $ok   Fail: $fail"
+    echo ""
+    read -p "Press Enter to continue."
 }
 
 action_update_gitty() {
@@ -810,6 +922,343 @@ action_update_gitty() {
     fi
 }
 
+# ─── Editor + Quick commit ─────────────────────────────────
+pick_editor() {
+    if [[ -n "${EDITOR:-}" ]] && command -v "$EDITOR" &>/dev/null; then
+        echo "$EDITOR"
+    elif command -v nano &>/dev/null; then
+        echo "nano"
+    elif command -v vim &>/dev/null; then
+        echo "vim"
+    elif command -v vi &>/dev/null; then
+        echo "vi"
+    else
+        echo ""
+    fi
+}
+
+# Download remote file → open in editor → ask commit → push
+edit_and_commit_file() {
+    local repo=$1 repo_path=$2
+    repo_path="${repo_path#./}"
+    if [[ -z "$repo" || -z "$repo_path" ]]; then
+        echo -e "${RED}Repo and path required.${NC}" >&2
+        return 1
+    fi
+
+    local editor
+    editor=$(pick_editor)
+    if [[ -z "$editor" ]]; then
+        echo -e "${YELLOW}[*] nano not found, installing...${NC}"
+        pkg install nano -y 2>/dev/null || true
+        editor=$(pick_editor)
+        if [[ -z "$editor" ]]; then
+            echo -e "${RED}❌ No editor found. Install: pkg install nano${NC}"
+            return 1
+        fi
+    fi
+
+    local tmpdir tmpfile
+    tmpdir=$(mktemp -d "$HOME/gitty-edit-XXXXXX")
+    tmpfile="$tmpdir/$(basename "$repo_path")"
+
+    echo -e "${CYAN}[*] Downloading $repo/$repo_path ...${NC}"
+    if ! api_get_file "$repo" "$repo_path" > "$tmpfile" 2>/dev/null; then
+        echo -e "${RED}❌ Download failed.${NC}"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    if [[ ! -s "$tmpfile" ]]; then
+        echo -e "${RED}❌ Empty download (file missing or no access?).${NC}"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    if head -c 30 "$tmpfile" 2>/dev/null | grep -q '"message"'; then
+        echo -e "${RED}❌ API error:${NC}"
+        cat "$tmpfile"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
+    local size_before
+    size_before=$(wc -c < "$tmpfile" | tr -d ' ')
+    echo -e "${GREEN}✅ Downloaded (${size_before} bytes)${NC}"
+    echo -e "${CYAN}[*] Opening ${BOLD}$editor${NC}${CYAN} — save & exit when done${NC}"
+    echo -e "${YELLOW}    nano: Ctrl+O save, Ctrl+X exit${NC}"
+    sleep 1
+
+    "$editor" "$tmpfile"
+
+    if [[ ! -f "$tmpfile" ]]; then
+        echo -e "${RED}❌ Temp file missing after edit.${NC}"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
+    local size_after
+    size_after=$(wc -c < "$tmpfile" | tr -d ' ')
+
+    echo ""
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "${CYAN}  Commit changes?${NC}"
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "  Repo:  ${BOLD}$repo${NC}"
+    echo -e "  Path:  ${BOLD}$repo_path${NC}"
+    echo -e "  Size:  ${size_before} → ${size_after} bytes"
+    echo ""
+    echo -ne "${YELLOW}Commit these changes? (yes/no): ${NC}"
+    read confirm
+    if [[ "$confirm" != "yes" && "$confirm" != "y" ]]; then
+        echo -e "${YELLOW}Cancelled. Draft kept: $tmpfile${NC}"
+        return 0
+    fi
+
+    echo -ne "${YELLOW}Commit message [Update $repo_path via Gitty]: ${NC}"
+    read commit_msg
+
+    do_commit_file "$repo" "$tmpfile" "$repo_path" "$commit_msg"
+    local rc=$?
+    rm -rf "$tmpdir"
+    return $rc
+}
+
+# ─── Quick commit: any local file → any repo path (creates GitHub commit) ───
+# CLI:  bash gitty.sh commit owner/repo path/in/repo ./local/file [-m "message"]
+#       bash gitty.sh edit owner/repo path/in/repo
+# Menu: 7=commit, 8=edit+commit
+do_commit_file() {
+    local repo=$1 local_file=$2 repo_path=$3 commit_msg=$4
+    local_file="${local_file/#\~/$HOME}"
+    if [[ -z "$repo" || -z "$local_file" || -z "$repo_path" ]]; then
+        echo -e "${RED}Usage: repo, local_file, and repo_path are required.${NC}" >&2
+        return 1
+    fi
+    if [[ ! -f "$local_file" ]]; then
+        echo -e "${RED}❌ Local file not found: $local_file${NC}" >&2
+        return 1
+    fi
+    # strip leading ./ from repo path
+    repo_path="${repo_path#./}"
+    [[ -z "$commit_msg" ]] && commit_msg="Update $repo_path via Gitty"
+
+    echo -e "${CYAN}[*] Committing...${NC}"
+    echo -e "  Repo:    ${BOLD}$repo${NC}"
+    echo -e "  Path:    ${BOLD}$repo_path${NC}"
+    echo -e "  Local:   ${BOLD}$local_file${NC}"
+    echo -e "  Message: ${BOLD}$commit_msg${NC}"
+    echo ""
+
+    local response
+    response=$(api_upload "$repo" "$local_file" "$repo_path" "$commit_msg")
+
+    if echo "$response" | jq -e '.content.path' &>/dev/null; then
+        local commit_url html_url
+        commit_url=$(echo "$response" | jq -r '.commit.html_url // empty')
+        html_url=$(echo "$response" | jq -r '.content.html_url // empty')
+        echo -e "${GREEN}✅ Committed successfully.${NC}"
+        [[ -n "$commit_url" ]] && echo -e "  Commit: $commit_url"
+        [[ -n "$html_url" ]] && echo -e "  File:   $html_url"
+        return 0
+    else
+        echo -e "${RED}❌ Commit failed.${NC}"
+        echo "$response" | jq -r '.message // .' 2>/dev/null || echo "$response"
+        return 1
+    fi
+}
+
+cli_commit() {
+    local repo="" local_file="" repo_path="" commit_msg=""
+    # parse: commit <repo> <repo_path> <local_file> [-m message]
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -m|--message)
+                shift
+                commit_msg="${1:-}"
+                shift || true
+                ;;
+            -h|--help)
+                echo "Usage: gitty commit <owner/repo> <path/in/repo> <local/file> [-m \"message\"]"
+                echo ""
+                echo "Examples:"
+                echo "  gitty commit myuser/myrepo docs/readme.md ./README.md -m \"docs: update readme\""
+                echo "  gitty commit myuser/myrepo src/app.js ~/projects/app.js"
+                return 0
+                ;;
+            *)
+                if [[ -z "$repo" ]]; then repo="$1"
+                elif [[ -z "$repo_path" ]]; then repo_path="$1"
+                elif [[ -z "$local_file" ]]; then local_file="$1"
+                else
+                    echo -e "${RED}Unexpected argument: $1${NC}" >&2
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    do_commit_file "$repo" "$local_file" "$repo_path" "$commit_msg"
+}
+
+action_quick_commit() {
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "${CYAN}  Commit one local file${NC}"
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "  1) Save fixed file on phone (Downloads)"
+    echo -e "  2) ${BOLD}Paste commit message from chat${NC} when asked"
+    echo -e "  3) Confirm → real commit on GitHub"
+    echo -e "  ${YELLOW}Type q anytime to cancel.${NC}"
+    echo ""
+
+    local repo local_file repo_path commit_msg default_name path_hint
+    local dl1="$HOME/storage/shared/Download" dl2="/sdcard/Download"
+    local gitty_candidate=""
+
+    for cand in \
+        "$dl1/gitty-fixed.sh" "$dl2/gitty-fixed.sh" \
+        "$dl1/gitty.sh" "$dl2/gitty.sh" \
+        "$HOME/gitty.sh"; do
+        if [[ -f "$cand" ]]; then gitty_candidate="$cand"; break; fi
+    done
+
+    if [[ -n "$gitty_candidate" ]]; then
+        echo -e "${GREEN}Found file:${NC} $gitty_candidate"
+        echo -ne "${YELLOW}Gitty self-update to docs/gitty.sh? (y/n/q): ${NC}"
+        read use_gitty
+        if [[ "$use_gitty" == "q" || "$use_gitty" == "Q" ]]; then
+            echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+        fi
+        if [[ "$use_gitty" == "y" || "$use_gitty" == "yes" ]]; then
+            repo="alipoorkaramali/new-youtube-SoundCloud-downloader"
+            local_file="$gitty_candidate"
+            repo_path="docs/gitty.sh"
+            echo -e "  → ${BOLD}$repo/$repo_path${NC}"
+            echo ""
+            echo -e "${YELLOW}Paste commit message from chat:${NC}"
+            echo -e "  ${CYAN}(long-press in Termux → Paste)${NC}"
+            read -r commit_msg
+            if [[ -z "$commit_msg" || "$commit_msg" == "q" || "$commit_msg" == "Q" ]]; then
+                echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+            fi
+            echo -ne "${YELLOW}Commit now? (yes/no/q): ${NC}"
+            read confirm
+            if [[ "$confirm" != "yes" && "$confirm" != "y" ]]; then
+                echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+            fi
+            do_commit_file "$repo" "$local_file" "$repo_path" "$commit_msg"
+            echo ""
+            echo -e "${CYAN}One-liner for next time:${NC}"
+            printf '  gitty commit %s %s "%s" -m "%s"\n' "$repo" "$repo_path" "$local_file" "$commit_msg"
+            echo ""
+            read -p "Press Enter to continue."
+            return
+        fi
+    fi
+
+    repo=$(get_repo_selection "Target repository (user/repo):")
+    if [[ -z "$repo" || "$repo" == "q" || "$repo" == "Q" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+
+    echo -e "${YELLOW}Local file path (q = cancel):${NC}"
+    echo -e "  e.g.  /sdcard/Download/gitty-fixed.sh"
+    read -r local_file
+    if [[ "$local_file" == "q" || "$local_file" == "Q" || -z "$local_file" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+    local_file="${local_file/#\~/$HOME}"
+    if [[ ! -f "$local_file" ]]; then
+        echo -e "${RED}❌ File not found: $local_file${NC}"; sleep 1; return
+    fi
+
+    default_name=$(basename "$local_file")
+    path_hint="$default_name"
+    if [[ "$default_name" == gitty*.sh || "$default_name" == gitty*.SH ]]; then
+        path_hint="docs/gitty.sh"
+    fi
+    echo -e "${YELLOW}Path on GitHub [default: $path_hint] (q = cancel):${NC}"
+    read -r repo_path
+    if [[ "$repo_path" == "q" || "$repo_path" == "Q" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+    repo_path="${repo_path:-$path_hint}"
+    repo_path="${repo_path#./}"
+
+    echo ""
+    echo -e "${YELLOW}Paste commit message from chat (q = cancel):${NC}"
+    echo -e "  ${CYAN}(long-press in Termux → Paste)${NC}"
+    read -r commit_msg
+    if [[ "$commit_msg" == "q" || "$commit_msg" == "Q" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+    [[ -z "$commit_msg" ]] && commit_msg="Update $repo_path via Gitty"
+
+    echo ""
+    echo -e "  ${BOLD}$local_file${NC}"
+    echo -e "    →  ${BOLD}$repo/$repo_path${NC}"
+    echo -e "  msg: $commit_msg"
+    echo ""
+    echo -ne "${YELLOW}Commit now? (yes / no / q): ${NC}"
+    read confirm
+    if [[ "$confirm" != "yes" && "$confirm" != "y" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; sleep 1; return
+    fi
+
+    do_commit_file "$repo" "$local_file" "$repo_path" "$commit_msg"
+    echo ""
+    echo -e "${CYAN}One-liner for next time:${NC}"
+    printf '  gitty commit %s %s "%s" -m "%s"\n' "$repo" "$repo_path" "$local_file" "$commit_msg"
+    echo ""
+    read -p "Press Enter to continue."
+}
+
+action_edit_commit() {
+    echo -e "${CYAN}==============================${NC}"
+    echo -e "${CYAN}  Edit on GitHub (nano → commit)${NC}"
+    echo -e "${CYAN}==============================${NC}"
+    echo ""
+    local repo repo_path
+    repo=$(get_repo_selection "Repository (user/repo):")
+    if [[ -z "$repo" ]]; then echo -e "${RED}Repo required.${NC}"; sleep 1; return; fi
+    echo -e "${YELLOW}Path inside repo (e.g. docs/gitty.sh):${NC}"
+    read -r repo_path
+    if [[ -z "$repo_path" ]]; then echo -e "${RED}Path required.${NC}"; sleep 1; return; fi
+    echo ""
+    edit_and_commit_file "$repo" "$repo_path"
+    echo ""
+    read -p "Press Enter to continue."
+}
+
+# CLI entry
+if [[ "${1:-}" == "commit" ]]; then
+    shift
+    cli_commit "$@"
+    exit $?
+fi
+if [[ "${1:-}" == "edit" ]]; then
+    shift
+    if [[ $# -lt 2 ]]; then
+        echo "Usage: gitty edit <owner/repo> <path/in/repo>"
+        echo "Example: gitty edit myuser/myrepo docs/readme.md"
+        exit 1
+    fi
+    edit_and_commit_file "$1" "$2"
+    exit $?
+fi
+if [[ "${1:-}" == "help" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    echo "Gitty - GitHub Manager for Termux"
+    echo ""
+    echo "  bash gitty.sh                 Interactive TUI"
+    echo "  bash gitty.sh commit ...      Commit local file to any repo"
+    echo "  bash gitty.sh edit ...        Download → nano → commit"
+    echo ""
+    echo "Commit:"
+    echo "  bash gitty.sh commit <owner/repo> <path/in/repo> <local/file> [-m \"msg\"]"
+    echo ""
+    echo "Edit:"
+    echo "  bash gitty.sh edit <owner/repo> <path/in/repo>"
+    exit 0
+fi
+
 GITHUB_USER=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | jq -r '.login')
 
 while true; do
@@ -821,10 +1270,11 @@ while true; do
     echo "  1) Browse repository"
     echo "  2) Browse issues (open/closed)"
     echo "  3) Create new repository"
-    echo "  4) Upload files to existing repository"
+    echo "  4) Bulk upload (folder / many files)"
     echo "  5) Actions (Workflows)"
     echo "  6) Update Gitty to latest"
-    echo "  7) Exit"
+    echo "  7) Commit one local file"
+    echo "  8) Exit"
     echo ""
     echo -ne "${YELLOW}> ${NC}"
     read -r main_choice
@@ -835,7 +1285,8 @@ while true; do
         4) action_upload_files ;;
         5) action_workflows ;;
         6) action_update_gitty ;;
-        7) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
+        7) action_quick_commit ;;
+        8) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
 done
