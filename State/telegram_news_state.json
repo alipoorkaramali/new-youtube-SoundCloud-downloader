@@ -5,13 +5,8 @@
   ],
   "channels": {
     "IranintlTv": {
-<<<<<<< Updated upstream
-      "last_post_id": "360393",
-      "last_updated": "2026-10-03T01:32:51Z",
-=======
-      "last_post_id": "360394",
-      "last_updated": "2026-10-03T01:34:58Z",
->>>>>>> Stashed changes
+      "last_post_id": "360397",
+      "last_updated": "2026-10-03T02:32:41Z",
       "source": "seeded_from_posts_json_max"
     },
     "bbcpersian": {
