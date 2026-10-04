@@ -665,15 +665,233 @@ _status_icon() {
     esac
 }
 
+# Fetch last N lines of a job's log (best-effort)
+# Download full job log to a temp file; prints path on stdout
+_download_job_log() {
+    local repo=$1 job_id=$2
+    local tmp
+    tmp=$(mktemp "$HOME/gitty-joblog-XXXXXX" 2>/dev/null || mktemp)
+    set +e
+    curl -sL --connect-timeout 15 --max-time 90 \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$repo/actions/jobs/$job_id/logs" \
+        -o "$tmp" 2>/dev/null
+    local rc=$?
+    set -e
+    if [[ $rc -ne 0 || ! -s "$tmp" ]]; then
+        rm -f "$tmp"
+        return 1
+    fi
+    sed -i 's/\x1b\[[0-9;]*m//g' "$tmp" 2>/dev/null || true
+    echo "$tmp"
+    return 0
+}
+
+_fetch_job_log_tail() {
+    local repo=$1 job_id=$2 lines=${3:-25}
+    local f
+    f=$(_download_job_log "$repo" "$job_id") || return 1
+    tail -n "$lines" "$f" 2>/dev/null | sed 's/^/    │ /'
+    rm -f "$f"
+    return 0
+}
+
+_view_full_job_log() {
+    local repo=$1 job_id=$2
+    local f
+    echo -e "${CYAN}Downloading full job log...${NC}"
+    f=$(_download_job_log "$repo" "$job_id")
+    if [[ -z "$f" || ! -s "$f" ]]; then
+        echo -e "${RED}Could not download logs (job may still be queued).${NC}"
+        read -p "Press Enter to continue."
+        return 1
+    fi
+    local lines
+    lines=$(wc -l < "$f" | tr -d ' ')
+    echo -e "${GREEN}Log ready (${lines} lines).${NC}"
+    if command -v less &>/dev/null; then
+        less -R "$f"
+    else
+        echo -e "${YELLOW}--- full log ---${NC}"
+        cat "$f"
+        echo ""
+        read -p "Press Enter to continue."
+    fi
+    rm -f "$f"
+}
+
+_view_step_log_picker() {
+    local repo=$1 jobs_json=$2
+    if ! echo "$jobs_json" | jq -e '.jobs[0]' &>/dev/null; then
+        echo -e "${RED}No jobs available yet.${NC}"
+        read -p "Press Enter."; return 1
+    fi
+
+    echo ""
+    echo -e "${CYAN}Select job:${NC}"
+    mapfile -t j_ids < <(echo "$jobs_json" | jq -r '.jobs[].id')
+    mapfile -t j_names < <(echo "$jobs_json" | jq -r '.jobs[].name')
+    mapfile -t j_st < <(echo "$jobs_json" | jq -r '.jobs[].status')
+    local i
+    for i in "${!j_ids[@]}"; do
+        printf "  %2d) %s  [%s]  id=%s\n" "$((i+1))" "${j_names[$i]}" "${j_st[$i]}" "${j_ids[$i]}"
+    done
+    echo -ne "${YELLOW}Job number (q=cancel): ${NC}"
+    read jsel
+    [[ "$jsel" == "q" || "$jsel" == "Q" || -z "$jsel" ]] && return 0
+    if [[ ! "$jsel" =~ ^[0-9]+$ ]] || [[ "$jsel" -lt 1 || "$jsel" -gt ${#j_ids[@]} ]]; then
+        echo -e "${RED}Invalid.${NC}"; sleep 1; return 1
+    fi
+    local job_id="${j_ids[$((jsel-1))]}"
+    local job_name="${j_names[$((jsel-1))]}"
+
+    echo ""
+    echo -e "${CYAN}Steps in job: ${BOLD}$job_name${NC}"
+    mapfile -t s_nums < <(echo "$jobs_json" | jq -r --argjson id "$job_id" '.jobs[] | select(.id==$id) | .steps[].number')
+    mapfile -t s_names < <(echo "$jobs_json" | jq -r --argjson id "$job_id" '.jobs[] | select(.id==$id) | .steps[].name')
+    mapfile -t s_st < <(echo "$jobs_json" | jq -r --argjson id "$job_id" '.jobs[] | select(.id==$id) | .steps[].status')
+    mapfile -t s_conc < <(echo "$jobs_json" | jq -r --argjson id "$job_id" '.jobs[] | select(.id==$id) | .steps[].conclusion // "-"')
+
+    if [[ ${#s_names[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}No steps listed. Opening full job log instead.${NC}"
+        _view_full_job_log "$repo" "$job_id"
+        return 0
+    fi
+
+    for i in "${!s_names[@]}"; do
+        printf "  %2d) [%s/%s] %s\n" "$((i+1))" "${s_st[$i]}" "${s_conc[$i]}" "${s_names[$i]}"
+    done
+    echo "   0) Full job log (all steps)"
+    echo -ne "${YELLOW}Step number (q=cancel): ${NC}"
+    read ssel
+    [[ "$ssel" == "q" || "$ssel" == "Q" || -z "$ssel" ]] && return 0
+
+    if [[ "$ssel" == "0" ]]; then
+        _view_full_job_log "$repo" "$job_id"
+        return 0
+    fi
+    if [[ ! "$ssel" =~ ^[0-9]+$ ]] || [[ "$ssel" -lt 1 || "$ssel" -gt ${#s_names[@]} ]]; then
+        echo -e "${RED}Invalid.${NC}"; sleep 1; return 1
+    fi
+    local step_name="${s_names[$((ssel-1))]}"
+    local step_num="${s_nums[$((ssel-1))]}"
+
+    echo -e "${CYAN}Downloading log for step: ${BOLD}$step_name${NC} ...${NC}"
+    local f out
+    f=$(_download_job_log "$repo" "$job_id")
+    if [[ -z "$f" || ! -s "$f" ]]; then
+        echo -e "${RED}Could not download logs.${NC}"
+        read -p "Press Enter."; return 1
+    fi
+
+    out=$(mktemp "$HOME/gitty-steplog-XXXXXX" 2>/dev/null || mktemp)
+    python3 - "$f" "$out" "$step_name" "$step_num" <<'PY'
+import re, sys
+log_path, out_path, step_name, step_num = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
+    lines = fh.read().splitlines()
+
+name = step_name.strip()
+patterns_start = [
+    re.compile(r"##\[group\](.*)$"),
+    re.compile(r"##\[section\]Starting:\s*(.*)$"),
+    re.compile(r"##\[section\]\s*(.*)$"),
+]
+
+def body_of(line):
+    if " " in line and line[0].isdigit():
+        parts = line.split(" ", 1)
+        if len(parts) == 2:
+            return parts[1]
+    return line
+
+def matches_name(label):
+    label = (label or "").strip()
+    if not label:
+        return False
+    if label == name or name in label or label in name:
+        return True
+    if label.startswith("Run ") and (label[4:] == name or name in label[4:]):
+        return True
+    return False
+
+start_idx = None
+for i, line in enumerate(lines):
+    body = body_of(line)
+    for pat in patterns_start:
+        m = pat.search(body)
+        if m:
+            label = m.group(1) if m.lastindex else body
+            if matches_name(label):
+                start_idx = i
+                break
+    if start_idx is not None:
+        break
+
+if start_idx is None:
+    for i, line in enumerate(lines):
+        if name and name in line:
+            start_idx = i
+            break
+
+if start_idx is None:
+    with open(out_path, "w", encoding="utf-8") as out:
+        out.write("(Could not isolate step %r. Showing last 80 lines of job log.)\n\n" % name)
+        out.write("\n".join(lines[-80:]))
+        out.write("\n")
+    sys.exit(0)
+
+end_idx = len(lines)
+for j in range(start_idx + 1, len(lines)):
+    body = body_of(lines[j])
+    if "##[endgroup]" in body:
+        end_idx = j + 1
+        break
+    m = re.search(r"##\[section\]Finishing:\s*(.*)$", body)
+    if m and matches_name(m.group(1)):
+        end_idx = j + 1
+        break
+    m = re.search(r"##\[section\]Starting:\s*(.*)$", body)
+    if m and j > start_idx:
+        end_idx = j
+        break
+    m = re.search(r"##\[group\](.*)$", body)
+    if m and j > start_idx and m.group(1).strip() and not matches_name(m.group(1)):
+        end_idx = j
+        break
+
+chunk = lines[start_idx:end_idx]
+with open(out_path, "w", encoding="utf-8") as out:
+    out.write("=== Step %s: %s ===\n" % (step_num, name))
+    out.write("=== lines %d-%d of job log ===\n\n" % (start_idx + 1, end_idx))
+    out.write("\n".join(chunk))
+    out.write("\n")
+PY
+
+    echo -e "${GREEN}Step log ready.${NC}"
+    if command -v less &>/dev/null; then
+        less -R "$out"
+    else
+        echo -e "${CYAN}──────── step log ────────${NC}"
+        cat "$out"
+        echo ""
+        read -p "Press Enter to continue."
+    fi
+    rm -f "$f" "$out"
+}
+
+
 watch_workflow_run() {
     local repo=$1 run_id=$2
-    local interval=5
+    local interval=6
+    local show_logs=1
     if [[ -z "$repo" || -z "$run_id" ]]; then
         echo -e "${RED}Repo and run id required.${NC}"
         return 1
     fi
 
-    echo -e "${CYAN}Watching run #${run_id} (refresh every ${interval}s, q=stop)${NC}"
+    echo -e "${CYAN}Watching #${run_id} | q=stop  L=tail  s=step log  f=full log${NC}"
     sleep 1
 
     while true; do
@@ -690,7 +908,7 @@ watch_workflow_run() {
         set -e
 
         clear
-        local name status conclusion html_url branch event created updated
+        local name status conclusion html_url branch event created updated attempt
         name=$(echo "$run_json" | jq -r '.name // .display_title // "run"' 2>/dev/null)
         status=$(echo "$run_json" | jq -r '.status // "?"' 2>/dev/null)
         conclusion=$(echo "$run_json" | jq -r '.conclusion // empty' 2>/dev/null)
@@ -699,45 +917,102 @@ watch_workflow_run() {
         event=$(echo "$run_json" | jq -r '.event // empty' 2>/dev/null)
         created=$(echo "$run_json" | jq -r '.created_at // empty' 2>/dev/null)
         updated=$(echo "$run_json" | jq -r '.updated_at // empty' 2>/dev/null)
+        attempt=$(echo "$run_json" | jq -r '.run_attempt // 1' 2>/dev/null)
 
         local icon
         icon=$(_status_icon "$status" "$conclusion")
 
         echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║  Workflow run (live)                 ║${NC}"
+        echo -e "${CYAN}║  Workflow run (live + details)       ║${NC}"
         echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
-        echo -e "  Run:    ${BOLD}#$run_id${NC}  $icon"
-        echo -e "  Name:   ${BOLD}$name${NC}"
-        echo -e "  Status: ${YELLOW}$status${NC}${conclusion:+ / $conclusion}"
-        echo -e "  Branch: $branch    Event: $event"
+        echo -e "  Run:     ${BOLD}#$run_id${NC}  $icon  (attempt $attempt)"
+        echo -e "  Name:    ${BOLD}$name${NC}"
+        echo -e "  Status:  ${YELLOW}$status${NC}${conclusion:+ / $conclusion}"
+        echo -e "  Branch:  $branch    Event: $event"
         echo -e "  Created: $created"
         echo -e "  Updated: $updated"
-        [[ -n "$html_url" ]] && echo -e "  URL:    $html_url"
+        [[ -n "$html_url" ]] && echo -e "  URL:     $html_url"
         echo ""
-        echo -e "${CYAN}── Jobs & steps ──────────────────────${NC}"
+        echo -e "${CYAN}── Jobs & steps (detail) ─────────────${NC}"
 
         local job_count
         job_count=$(echo "$jobs_json" | jq -r '.jobs | length // 0' 2>/dev/null)
         if [[ -z "$job_count" || "$job_count" == "0" || "$job_count" == "null" ]]; then
             echo -e "  ${YELLOW}(waiting for jobs to appear...)${NC}"
         else
-            # print each job + steps
-            echo "$jobs_json" | jq -r '
-              .jobs[] |
-              "JOB\t\(.name)\t\(.status)\t\(.conclusion // "")",
-              (.steps[]? | "STEP\t\(.number)\t\(.name)\t\(.status)\t\(.conclusion // "")")
-            ' 2>/dev/null | while IFS=$'\t' read -r kind a b c d; do
+            echo "$jobs_json" | python3 -c '
+import json, sys
+from datetime import datetime
+
+def parse(ts):
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def dur(a, b):
+    if not a:
+        return ""
+    end = b or datetime.now(a.tzinfo)
+    secs = max(0, int((end - a).total_seconds()))
+    m, s = divmod(secs, 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+def icon(st, conc):
+    if st == "completed":
+        return {"success": "✓", "failure": "✗", "cancelled": "⊘", "skipped": "–"}.get(conc or "", "?")
+    if st == "in_progress":
+        return "●"
+    if st in ("queued", "waiting", "requested", "pending"):
+        return "○"
+    return "·"
+
+data = json.load(sys.stdin)
+for job in data.get("jobs") or []:
+    js, jc = job.get("status") or "?", job.get("conclusion") or ""
+    jd = dur(parse(job.get("started_at")), parse(job.get("completed_at")))
+    runner = job.get("runner_name") or "-"
+    jid = job.get("id")
+    print("JOB\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (jid, icon(js, jc), job.get("name") or "job", js, jc, jd or "-", runner))
+    for step in job.get("steps") or []:
+        ss, sc = step.get("status") or "?", step.get("conclusion") or ""
+        sd = dur(parse(step.get("started_at")), parse(step.get("completed_at")))
+        st_at = (step.get("started_at") or "")[11:19]
+        print("STEP\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (
+            step.get("number") or "", icon(ss, sc), step.get("name") or "step",
+            ss, sc, sd or "-", st_at or "-"))
+' 2>/dev/null | while IFS=$'\t' read -r kind a b c d e f g; do
                 if [[ "$kind" == "JOB" ]]; then
-                    local jicon
-                    jicon=$(_status_icon "$b" "$c")
                     echo ""
-                    echo -e "  $jicon ${BOLD}$a${NC}  [$b${c:+/$c}]"
+                    echo -e "  $b ${BOLD}$c${NC}"
+                    echo -e "     status: ${YELLOW}$d${NC}${e:+ / $e}   time: ${f}   runner: ${g}"
                 elif [[ "$kind" == "STEP" ]]; then
-                    local sicon
-                    sicon=$(_status_icon "$c" "$d")
-                    printf "      %s %2s. %s  [%s%s]\n" "$(echo -e "$sicon")" "$a" "$b" "$c" "${d:+/$d}"
+                    printf "      %s %2s. %-42s [%s%s]  %s  @%s\n" \
+                        "$b" "$a" "${c:0:42}" "$d" "${e:+/$e}" "$f" "$g"
                 fi
             done
+
+            local log_job_id=""
+            log_job_id=$(echo "$jobs_json" | jq -r '
+              ([.jobs[] | select(.status=="in_progress") | .id][0]) //
+              ([.jobs[] | select(.conclusion=="failure") | .id][0]) //
+              (.jobs[-1].id // empty)
+            ' 2>/dev/null)
+
+            if [[ "$show_logs" -eq 1 && -n "$log_job_id" && "$log_job_id" != "null" ]]; then
+                echo ""
+                echo -e "${CYAN}── Log tail (job ${log_job_id}) ──────────${NC}"
+                if ! _fetch_job_log_tail "$repo" "$log_job_id" 18; then
+                    echo -e "    ${YELLOW}(logs not ready yet)${NC}"
+                fi
+            fi
         fi
 
         echo ""
@@ -747,16 +1022,29 @@ watch_workflow_run() {
                 echo -e "${GREEN}✅ Finished: success${NC}"
             elif [[ "$conclusion" == "failure" ]]; then
                 echo -e "${RED}❌ Finished: failure${NC}"
+                local fj
+                fj=$(echo "$jobs_json" | jq -r '[.jobs[] | select(.conclusion=="failure") | .id][0] // empty' 2>/dev/null)
+                if [[ -n "$fj" ]]; then
+                    echo -e "${CYAN}── Failure log tail ──────────────────${NC}"
+                    _fetch_job_log_tail "$repo" "$fj" 40 || true
+                fi
             else
                 echo -e "${YELLOW}Finished: $conclusion${NC}"
             fi
             echo ""
-            read -p "Press Enter to go back."
+            echo -e "  ${YELLOW}s${NC} = view a step log   ${YELLOW}f${NC} = full job log   Enter = back"
+            read -r done_key
+            if [[ "$done_key" == "s" || "$done_key" == "S" ]]; then
+                _view_step_log_picker "$repo" "$jobs_json"
+            elif [[ "$done_key" == "f" || "$done_key" == "F" ]]; then
+                local fj2
+                fj2=$(echo "$jobs_json" | jq -r '.jobs[0].id // empty' 2>/dev/null)
+                [[ -n "$fj2" ]] && _view_full_job_log "$repo" "$fj2"
+            fi
             return 0
         fi
 
-        echo -e "  Refreshing in ${interval}s…  ${YELLOW}q${NC}+Enter = stop watching"
-        # non-blocking-ish wait: user can type q
+        echo -e "  ${interval}s… ${YELLOW}q${NC}=stop ${YELLOW}L${NC}=tail ${YELLOW}s${NC}=step log ${YELLOW}f${NC}=full log"
         local key=""
         read -t "$interval" -n 1 key 2>/dev/null || true
         if [[ "$key" == "q" || "$key" == "Q" ]]; then
@@ -765,8 +1053,27 @@ watch_workflow_run() {
             sleep 1
             return 0
         fi
+        if [[ "$key" == "l" || "$key" == "L" ]]; then
+            if [[ "$show_logs" -eq 1 ]]; then show_logs=0; else show_logs=1; fi
+        fi
+        if [[ "$key" == "s" || "$key" == "S" ]]; then
+            _view_step_log_picker "$repo" "$jobs_json"
+        fi
+        if [[ "$key" == "f" || "$key" == "F" ]]; then
+            local fid
+            fid=$(echo "$jobs_json" | jq -r '
+              ([.jobs[] | select(.status=="in_progress") | .id][0]) //
+              (.jobs[0].id // empty)
+            ' 2>/dev/null)
+            if [[ -n "$fid" && "$fid" != "null" ]]; then
+                _view_full_job_log "$repo" "$fid"
+            else
+                echo -e "${RED}No job id yet.${NC}"; sleep 1
+            fi
+        fi
     done
 }
+
 
 # Pick a recent run interactively then watch it
 pick_and_watch_run() {
