@@ -52,35 +52,62 @@ rtl() {
     else printf '%s' "$text"; fi
 }
 
-# Logs: keep LTR line order (top→bottom, numbers/timestamps on the left),
-# only reshape Persian letters (--ltr base direction).
+# Logs: keep top→bottom / first-word-first order, but join Persian letters.
+# Trick: fribidi (shapes + visual RTL) then Unicode-reverse → shaped glyphs in logical order.
+_shape_persian_line() {
+    # stdin/arg: one log line → stdout shaped Persian, logical order, prefix intact
+    local line="${1-}"
+    printf '%s' "$line" | python3 -c '
+import re, sys, shutil, subprocess
+line = sys.stdin.read()
+if not line:
+    raise SystemExit(0)
+# any Arabic/Persian letter?
+if not re.search(r"[\u0600-\u06FF]", line):
+    sys.stdout.write(line)
+    raise SystemExit(0)
+
+# Keep GitHub Actions timestamp prefix untouched
+m = re.match(r"^(\d{4}-\d{2}-\d{2}T[0-9.:]+Z\s*)(.*)$", line, re.S)
+if m:
+    prefix, rest = m.group(1), m.group(2)
+else:
+    prefix, rest = "", line
+
+if not rest or not re.search(r"[\u0600-\u06FF]", rest):
+    sys.stdout.write(line)
+    raise SystemExit(0)
+
+shaped = rest
+if shutil.which("fribidi"):
+    try:
+        p = subprocess.run(
+            ["fribidi", "--nopad", "--nobreak"],
+            input=rest.encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if p.returncode == 0 and p.stdout:
+            # visual RTL with joined glyphs → reverse to logical order for LTR terminal
+            shaped = p.stdout.decode("utf-8", errors="replace")[::-1]
+    except Exception:
+        pass
+sys.stdout.write(prefix + shaped)
+'
+}
+
 rtl_stream() {
-    if ! command -v fribidi &>/dev/null; then
-        cat
-        return
-    fi
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *[![:ascii:]]* ]]; then
-            printf '%s\n' "$(printf '%s' "$line" | fribidi --ltr --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
-        else
-            printf '%s\n' "$line"
-        fi
+        printf '%s\n' "$(_shape_persian_line "$line")"
     done
 }
 
 rtl_file() {
     local src=$1 dest=$2
-    if ! command -v fribidi &>/dev/null; then
-        cp "$src" "$dest" 2>/dev/null || cat "$src" > "$dest"
-        return
-    fi
     : > "$dest"
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *[![:ascii:]]* ]]; then
-            printf '%s\n' "$(printf '%s' "$line" | fribidi --ltr --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
-        else
-            printf '%s\n' "$line" >> "$dest"
-        fi
+        printf '%s\n' "$(_shape_persian_line "$line")" >> "$dest"
     done < "$src"
 }
 
