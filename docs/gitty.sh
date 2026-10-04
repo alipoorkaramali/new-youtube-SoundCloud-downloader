@@ -52,41 +52,57 @@ rtl() {
     else printf '%s' "$text"; fi
 }
 
-# Apply fribidi line-by-line (for logs with Persian text)
 rtl_stream() {
-    if ! command -v fribidi &>/dev/null; then
-        cat
-        return
-    fi
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *[![:ascii:]]* ]]; then
-            printf '%s
-' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
-        else
-            printf '%s
-' "$line"
-        fi
-    done
+    python3 -c '
+import sys, shutil, subprocess
+has_fb = shutil.which("fribidi") is not None
+for line in sys.stdin:
+    raw = line.rstrip("\n")
+    if not raw:
+        print()
+        continue
+    if all(ord(c) < 128 for c in raw):
+        print(raw)
+        continue
+    shaped = raw
+    if has_fb:
+        try:
+            p = subprocess.run(["fribidi", "--nopad", "--nobreak"], input=raw.encode(),
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+            if p.returncode == 0:
+                shaped = p.stdout.decode(errors="replace")
+        except Exception:
+            pass
+    print(shaped[::-1])
+'
 }
 
-# Rewrite a file in-place with RTL-fixed lines (for less/pager)
 rtl_file() {
     local src=$1 dest=$2
-    if ! command -v fribidi &>/dev/null; then
-        cp "$src" "$dest" 2>/dev/null || cat "$src" > "$dest"
-        return
-    fi
-    : > "$dest"
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *[![:ascii:]]* ]]; then
-            printf '%s
-' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
-        else
-            printf '%s
-' "$line" >> "$dest"
-        fi
-    done < "$src"
+    python3 - "$src" "$dest" <<'PY'
+import sys, shutil, subprocess
+src, dest = sys.argv[1], sys.argv[2]
+has_fb = shutil.which("fribidi") is not None
+with open(src, "r", encoding="utf-8", errors="replace") as fin, \
+     open(dest, "w", encoding="utf-8") as fout:
+    for line in fin:
+        raw = line.rstrip("\n")
+        if not raw or all(ord(c) < 128 for c in raw):
+            fout.write(raw + "\n")
+            continue
+        shaped = raw
+        if has_fb:
+            try:
+                p = subprocess.run(["fribidi", "--nopad", "--nobreak"], input=raw.encode(),
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+                if p.returncode == 0:
+                    shaped = p.stdout.decode(errors="replace")
+            except Exception:
+                pass
+        fout.write(shaped[::-1] + "\n")
+PY
 }
+
 
 print_item() {
     local num=$1 type=$2 name=$3 display_name
@@ -965,7 +981,6 @@ _view_step_log_picker() {
 watch_workflow_run() {
     local repo=$1 run_id=$2
     local interval=6
-    local show_logs=1
     if [[ -z "$repo" || -z "$run_id" ]]; then
         echo -e "${RED}Repo and run id required.${NC}"
         return 1
@@ -1090,19 +1105,7 @@ for job in data.get("jobs") or []:
                 fi
             done
 
-            if [[ "$show_logs" -eq 1 ]]; then
-                local log_job_id
-                log_job_id=$(echo "$jobs_json" | jq -r '
-                  ([.jobs[] | select(.status=="in_progress") | .id][0]) //
-                  ([.jobs[] | select(.conclusion=="failure") | .id][0]) //
-                  (.jobs[-1].id // empty)
-                ' 2>/dev/null)
-                if [[ -n "$log_job_id" && "$log_job_id" != "null" ]]; then
-                    echo ""
-                    echo -e "${CYAN}── Log tail ──────────────────────────${NC}"
-                    _fetch_job_log_tail "$repo" "$log_job_id" 12 || true
-                fi
-            fi
+            
         fi
 
         echo ""
@@ -1112,12 +1115,7 @@ for job in data.get("jobs") or []:
                 echo -e "${GREEN}✅ Finished: success${NC}"
             elif [[ "$conclusion" == "failure" ]]; then
                 echo -e "${RED}❌ Finished: failure${NC}"
-                local fj
-                fj=$(echo "$jobs_json" | jq -r '[.jobs[] | select(.conclusion=="failure") | .id][0] // empty' 2>/dev/null)
-                if [[ -n "$fj" ]]; then
-                    echo -e "${CYAN}── Failure log tail ──────────────────${NC}"
-                    _fetch_job_log_tail "$repo" "$fj" 40 || true
-                fi
+                
             else
                 echo -e "${YELLOW}Finished: $conclusion${NC}"
             fi
@@ -1157,8 +1155,6 @@ for job in data.get("jobs") or []:
               (.jobs[0].id // empty)
             ' 2>/dev/null)
             [[ -n "$fid" && "$fid" != "null" ]] && _view_full_job_log "$repo" "$fid"
-        elif [[ "$key" == "l" || "$key" == "L" ]]; then
-            if [[ "$show_logs" -eq 1 ]]; then show_logs=0; else show_logs=1; fi
         fi
     done
 }
