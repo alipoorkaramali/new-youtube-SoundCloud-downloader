@@ -52,55 +52,35 @@ rtl() {
     else printf '%s' "$text"; fi
 }
 
+# Line-by-line fribidi for logs (same as commits/issues — correct letter shapes)
 rtl_stream() {
-    python3 -c '
-import sys, shutil, subprocess
-has_fb = shutil.which("fribidi") is not None
-for line in sys.stdin:
-    raw = line.rstrip("\n")
-    if not raw:
-        print()
-        continue
-    if all(ord(c) < 128 for c in raw):
-        print(raw)
-        continue
-    shaped = raw
-    if has_fb:
-        try:
-            p = subprocess.run(["fribidi", "--nopad", "--nobreak"], input=raw.encode(),
-                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
-            if p.returncode == 0:
-                shaped = p.stdout.decode(errors="replace")
-        except Exception:
-            pass
-    print(shaped[::-1])
-'
+    if ! command -v fribidi &>/dev/null; then
+        cat
+        return
+    fi
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == *[![:ascii:]]* ]]; then
+            printf '%s\n' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
+        else
+            printf '%s\n' "$line"
+        fi
+    done
 }
 
 rtl_file() {
     local src=$1 dest=$2
-    python3 - "$src" "$dest" <<'PY'
-import sys, shutil, subprocess
-src, dest = sys.argv[1], sys.argv[2]
-has_fb = shutil.which("fribidi") is not None
-with open(src, "r", encoding="utf-8", errors="replace") as fin, \
-     open(dest, "w", encoding="utf-8") as fout:
-    for line in fin:
-        raw = line.rstrip("\n")
-        if not raw or all(ord(c) < 128 for c in raw):
-            fout.write(raw + "\n")
-            continue
-        shaped = raw
-        if has_fb:
-            try:
-                p = subprocess.run(["fribidi", "--nopad", "--nobreak"], input=raw.encode(),
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
-                if p.returncode == 0:
-                    shaped = p.stdout.decode(errors="replace")
-            except Exception:
-                pass
-        fout.write(shaped[::-1] + "\n")
-PY
+    if ! command -v fribidi &>/dev/null; then
+        cp "$src" "$dest" 2>/dev/null || cat "$src" > "$dest"
+        return
+    fi
+    : > "$dest"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == *[![:ascii:]]* ]]; then
+            printf '%s\n' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
+        else
+            printf '%s\n' "$line" >> "$dest"
+        fi
+    done < "$src"
 }
 
 
