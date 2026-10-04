@@ -884,7 +884,10 @@ def matches_name(label):
         return False
     if label == name or name in label or label in name:
         return True
-    if label.startswith("Run ") and (label[4:] == name or name in label[4:]):
+    if label.startswith("Run ") and (label[4:].strip() == name or name in label[4:]):
+        return True
+    # GitHub sometimes prefixes with "Run "
+    if name.startswith("Run ") and (label == name[4:] or name[4:] in label):
         return True
     return False
 
@@ -907,35 +910,52 @@ if start_idx is None:
         if name and name in line:
             start_idx = i
             break
+
+# Fallback: entire job log (not truncated)
 if start_idx is None:
     with open(out_path, "w", encoding="utf-8") as out:
-        out.write("Could not isolate this step; last 80 lines of job log:\n\n")
-        out.write("\n".join(lines[-80:]))
+        out.write("=== full job log (step marker not found for: %s) ===\n\n" % name)
+        out.write("\n".join(lines))
         out.write("\n")
     raise SystemExit(0)
 
+# Find end: respect nested ##[group]/##[endgroup], else next top-level step
 end_idx = len(lines)
+depth = 0
+start_body = body_of(lines[start_idx])
+if "##[group]" in start_body:
+    depth = 1
+
 for j in range(start_idx + 1, len(lines)):
     body = body_of(lines[j])
+    if "##[group]" in body:
+        depth += 1
     if "##[endgroup]" in body:
-        end_idx = j + 1
-        break
+        depth -= 1
+        if depth <= 0:
+            end_idx = j + 1
+            break
+    # next section at same level
     m = re.search(r"##\[section\]Finishing:\s*(.*)$", body)
     if m and matches_name(m.group(1)):
         end_idx = j + 1
         break
-    m = re.search(r"##\[section\]Starting:\s*", body)
-    if m and j > start_idx:
+    m = re.search(r"##\[section\]Starting:\s*(.*)$", body)
+    if m and j > start_idx and depth <= 0:
         end_idx = j
         break
+    # next sibling group when not inside nested group
     m = re.search(r"##\[group\](.*)$", body)
-    if m and j > start_idx and m.group(1).strip() and not matches_name(m.group(1)):
+    if m and j > start_idx and depth <= 0 and m.group(1).strip() and not matches_name(m.group(1)):
         end_idx = j
         break
 
+chunk = lines[start_idx:end_idx]
 with open(out_path, "w", encoding="utf-8") as out:
-    out.write("=== #%s %s ===\n\n" % (step_num, name))
-    out.write("\n".join(lines[start_idx:end_idx]))
+    out.write("=== step #%s: %s ===\n" % (step_num, name))
+    out.write("=== lines %d-%d of %d (full step, not truncated) ===\n\n" % (
+        start_idx + 1, end_idx, len(lines)))
+    out.write("\n".join(chunk))
     out.write("\n")
 PY
 
