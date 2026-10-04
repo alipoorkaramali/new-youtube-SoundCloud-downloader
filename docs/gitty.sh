@@ -52,7 +52,8 @@ rtl() {
     else printf '%s' "$text"; fi
 }
 
-# Line-by-line fribidi for logs (same as commits/issues — correct letter shapes)
+# Logs: keep LTR line order (top→bottom, numbers/timestamps on the left),
+# only reshape Persian letters (--ltr base direction).
 rtl_stream() {
     if ! command -v fribidi &>/dev/null; then
         cat
@@ -60,7 +61,7 @@ rtl_stream() {
     fi
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == *[![:ascii:]]* ]]; then
-            printf '%s\n' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
+            printf '%s\n' "$(printf '%s' "$line" | fribidi --ltr --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
         else
             printf '%s\n' "$line"
         fi
@@ -76,13 +77,12 @@ rtl_file() {
     : > "$dest"
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == *[![:ascii:]]* ]]; then
-            printf '%s\n' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
+            printf '%s\n' "$(printf '%s' "$line" | fribidi --ltr --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
         else
             printf '%s\n' "$line" >> "$dest"
         fi
     done < "$src"
 }
-
 
 print_item() {
     local num=$1 type=$2 name=$3 display_name
