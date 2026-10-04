@@ -728,7 +728,7 @@ _view_step_by_number() {
         return 0
     fi
     if ! echo "$jobs_json" | jq -e '.jobs[0]' &>/dev/null; then
-        echo -e "${YELLOW}هنوز job/step آماده نیست.${NC}"
+        echo -e "${YELLOW}Jobs/steps not ready yet.${NC}"
         sleep 1
         return 1
     fi
@@ -762,7 +762,7 @@ for job in data.get("jobs") or []:
 ' 2>/dev/null)
 
     if [[ -z "$table" ]]; then
-        echo -e "${YELLOW}لیست مراحل خالی است.${NC}"
+        echo -e "${YELLOW}No steps in list.${NC}"
         sleep 1
         return 1
     fi
@@ -770,7 +770,7 @@ for job in data.get("jobs") or []:
     # If no selection passed, show menu and ask
     if [[ -z "$sel" || "$sel" == "s" || "$sel" == "S" ]]; then
         echo ""
-        echo -e "${CYAN}── مراحل (شماره را بزن) ──${NC}"
+        echo -e "${CYAN}── Steps (enter a number) ──${NC}"
         echo "$table" | while IFS=$'\t' read -r num jid jname snum sname st conc sa ca; do
             local mark="·"
             [[ "$conc" == "success" ]] && mark="✓"
@@ -780,13 +780,13 @@ for job in data.get("jobs") or []:
             printf "  %2s) %s %s\n" "$num" "$mark" "$sname"
             printf "       job: %s  [%s%s]\n" "$jname" "$st" "${conc:+/$conc}"
         done
-        echo -ne "${YELLOW}شماره مرحله (q=برگشت): ${NC}"
+        echo -ne "${YELLOW}Step number (q=back): ${NC}"
         read sel
         [[ "$sel" == "q" || "$sel" == "Q" || -z "$sel" ]] && return 0
     fi
 
     if [[ ! "$sel" =~ ^[0-9]+$ ]]; then
-        echo -e "${YELLOW}شماره نامعتبر.${NC}"
+        echo -e "${YELLOW}Invalid number.${NC}"
         sleep 1
         return 1
     fi
@@ -794,7 +794,7 @@ for job in data.get("jobs") or []:
     local line job_id job_name step_num step_name st conc started completed
     line=$(echo "$table" | awk -F'\t' -v n="$sel" '$1==n {print; exit}')
     if [[ -z "$line" ]]; then
-        echo -e "${YELLOW}مرحله $sel پیدا نشد.${NC}"
+        echo -e "${YELLOW}Step $sel not found.${NC}"
         sleep 1
         return 1
     fi
@@ -802,19 +802,19 @@ for job in data.get("jobs") or []:
 
     clear
     echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║  جزئیات مرحله #$sel                 ║${NC}"
+    echo -e "${CYAN}║  Step details #$sel                  ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
-    echo -e "  نام:     ${BOLD}$step_name${NC}"
+    echo -e "  Name:    ${BOLD}$step_name${NC}"
     echo -e "  Job:     $job_name"
-    echo -e "  وضعیت:   $st${conc:+ / $conc}"
-    echo -e "  شروع:    ${started:-–}"
-    echo -e "  پایان:   ${completed:-–}"
+    echo -e "  Status:  $st${conc:+ / $conc}"
+    echo -e "  Started: ${started:-–}"
+    echo -e "  Ended:   ${completed:-–}"
     echo -e "  Job ID:  $job_id   Step #: ${step_num:-–}"
     echo ""
-    echo -e "${CYAN}── لاگ این مرحله ─────────────────────${NC}"
+    echo -e "${CYAN}── Step log ──────────────────────────${NC}"
 
     if [[ -z "$job_id" || "$step_name" == "(no steps yet)" ]]; then
-        echo -e "${YELLOW}لاگ هنوز آماده نیست.${NC}"
+        echo -e "${YELLOW}Log not ready yet.${NC}"
         read -p "Enter..."
         return 0
     fi
@@ -822,7 +822,7 @@ for job in data.get("jobs") or []:
     local f out
     f=$(_download_job_log "$repo" "$job_id")
     if [[ -z "$f" || ! -s "$f" ]]; then
-        echo -e "${YELLOW}لاگ job هنوز در دسترس نیست (صبر کن یا بعداً دوباره بیا).${NC}"
+        echo -e "${YELLOW}Job log not available yet. Try again shortly.${NC}"
         read -p "Enter..."
         return 0
     fi
@@ -871,7 +871,7 @@ if start_idx is None:
             break
 if start_idx is None:
     with open(out_path, "w", encoding="utf-8") as out:
-        out.write("لاگ جدا برای این مرحله پیدا نشد؛ ۸۰ خط آخر job:\n\n")
+        out.write("Could not isolate this step; last 80 lines of job log:\n\n")
         out.write("\n".join(lines[-80:]))
         out.write("\n")
     raise SystemExit(0)
@@ -926,7 +926,7 @@ watch_workflow_run() {
         return 1
     fi
 
-    echo -e "${CYAN}Watching #${run_id} | شماره=جزئیات مرحله  q=خروج  f=لاگ کامل${NC}"
+    echo -e "${CYAN}Watching #${run_id} | number=step details  q=quit  f=full log${NC}"
     sleep 1
 
     while true; do
@@ -968,12 +968,12 @@ watch_workflow_run() {
         echo -e "  Updated: $updated"
         [[ -n "$html_url" ]] && echo -e "  URL:     $html_url"
         echo ""
-        echo -e "${CYAN}── مراحل (شماره بزن تا جزئیات را ببینی) ──${NC}"
+        echo -e "${CYAN}── Steps (type number for details) ──${NC}"
 
         local job_count
         job_count=$(echo "$jobs_json" | jq -r '.jobs | length // 0' 2>/dev/null)
         if [[ -z "$job_count" || "$job_count" == "0" || "$job_count" == "null" ]]; then
-            echo -e "  ${YELLOW}(منتظر job...) ${NC}"
+            echo -e "  ${YELLOW}(waiting for jobs...) ${NC}"
         else
             # Numbered flat list of every step (success or failure)
             echo "$jobs_json" | python3 -c '
@@ -1052,7 +1052,7 @@ for job in data.get("jobs") or []:
                 ' 2>/dev/null)
                 if [[ -n "$log_job_id" && "$log_job_id" != "null" ]]; then
                     echo ""
-                    echo -e "${CYAN}── آخرین خطوط لاگ ────────────────────${NC}"
+                    echo -e "${CYAN}── Log tail ──────────────────────────${NC}"
                     _fetch_job_log_tail "$repo" "$log_job_id" 12 || true
                 fi
             fi
@@ -1075,7 +1075,7 @@ for job in data.get("jobs") or []:
                 echo -e "${YELLOW}Finished: $conclusion${NC}"
             fi
             echo ""
-            echo -e "  ${YELLOW}شماره مرحله${NC} = جزئیات/لاگ   ${YELLOW}f${NC} = لاگ کامل job   Enter = برگشت"
+            echo -e "  ${YELLOW}step #${NC} = details/log   ${YELLOW}f${NC} = full job log   Enter = back"
             read -r done_key
             if [[ "$done_key" =~ ^[0-9]+$ ]]; then
                 _view_step_by_number "$repo" "$jobs_json" "$done_key"
@@ -1089,7 +1089,7 @@ for job in data.get("jobs") or []:
             return 0
         fi
 
-        echo -e "  ${interval}s…  ${YELLOW}1..N${NC}=مرحله  ${YELLOW}s${NC}=لیست  ${YELLOW}f${NC}=لاگ کامل  ${YELLOW}q${NC}=خروج"
+        echo -e "  ${interval}s…  ${YELLOW}1..N${NC}=step  ${YELLOW}s${NC}=list  ${YELLOW}f${NC}=full log  ${YELLOW}q${NC}=quit"
         local key=""
         read -t "$interval" key 2>/dev/null || true
         key=$(echo "$key" | tr -d '[:space:]')
