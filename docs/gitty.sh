@@ -646,9 +646,180 @@ browse_issues() {
     done
 }
 
+# Live view of a workflow run (status + jobs + steps), like GitHub Actions UI
+_status_icon() {
+    local st=$1 conc=$2
+    case "$st" in
+        completed)
+            case "$conc" in
+                success) echo -e "${GREEN}✓${NC}" ;;
+                failure) echo -e "${RED}✗${NC}" ;;
+                cancelled) echo -e "${YELLOW}⊘${NC}" ;;
+                skipped) echo -e "${YELLOW}–${NC}" ;;
+                *) echo -e "${YELLOW}?${NC}" ;;
+            esac
+            ;;
+        in_progress) echo -e "${CYAN}●${NC}" ;;
+        queued|waiting|requested|pending) echo -e "${YELLOW}○${NC}" ;;
+        *) echo -e "·" ;;
+    esac
+}
+
+watch_workflow_run() {
+    local repo=$1 run_id=$2
+    local interval=5
+    if [[ -z "$repo" || -z "$run_id" ]]; then
+        echo -e "${RED}Repo and run id required.${NC}"
+        return 1
+    fi
+
+    echo -e "${CYAN}Watching run #${run_id} (refresh every ${interval}s, q=stop)${NC}"
+    sleep 1
+
+    while true; do
+        set +e
+        local run_json jobs_json
+        run_json=$(curl -s --connect-timeout 15 --max-time 30 \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$repo/actions/runs/$run_id" 2>/dev/null)
+        jobs_json=$(curl -s --connect-timeout 15 --max-time 30 \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$repo/actions/runs/$run_id/jobs" 2>/dev/null)
+        set -e
+
+        clear
+        local name status conclusion html_url branch event created updated
+        name=$(echo "$run_json" | jq -r '.name // .display_title // "run"' 2>/dev/null)
+        status=$(echo "$run_json" | jq -r '.status // "?"' 2>/dev/null)
+        conclusion=$(echo "$run_json" | jq -r '.conclusion // empty' 2>/dev/null)
+        html_url=$(echo "$run_json" | jq -r '.html_url // empty' 2>/dev/null)
+        branch=$(echo "$run_json" | jq -r '.head_branch // empty' 2>/dev/null)
+        event=$(echo "$run_json" | jq -r '.event // empty' 2>/dev/null)
+        created=$(echo "$run_json" | jq -r '.created_at // empty' 2>/dev/null)
+        updated=$(echo "$run_json" | jq -r '.updated_at // empty' 2>/dev/null)
+
+        local icon
+        icon=$(_status_icon "$status" "$conclusion")
+
+        echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║  Workflow run (live)                 ║${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
+        echo -e "  Run:    ${BOLD}#$run_id${NC}  $icon"
+        echo -e "  Name:   ${BOLD}$name${NC}"
+        echo -e "  Status: ${YELLOW}$status${NC}${conclusion:+ / $conclusion}"
+        echo -e "  Branch: $branch    Event: $event"
+        echo -e "  Created: $created"
+        echo -e "  Updated: $updated"
+        [[ -n "$html_url" ]] && echo -e "  URL:    $html_url"
+        echo ""
+        echo -e "${CYAN}── Jobs & steps ──────────────────────${NC}"
+
+        local job_count
+        job_count=$(echo "$jobs_json" | jq -r '.jobs | length // 0' 2>/dev/null)
+        if [[ -z "$job_count" || "$job_count" == "0" || "$job_count" == "null" ]]; then
+            echo -e "  ${YELLOW}(waiting for jobs to appear...)${NC}"
+        else
+            # print each job + steps
+            echo "$jobs_json" | jq -r '
+              .jobs[] |
+              "JOB\t\(.name)\t\(.status)\t\(.conclusion // "")",
+              (.steps[]? | "STEP\t\(.number)\t\(.name)\t\(.status)\t\(.conclusion // "")")
+            ' 2>/dev/null | while IFS=$'\t' read -r kind a b c d; do
+                if [[ "$kind" == "JOB" ]]; then
+                    local jicon
+                    jicon=$(_status_icon "$b" "$c")
+                    echo ""
+                    echo -e "  $jicon ${BOLD}$a${NC}  [$b${c:+/$c}]"
+                elif [[ "$kind" == "STEP" ]]; then
+                    local sicon
+                    sicon=$(_status_icon "$c" "$d")
+                    printf "      %s %2s. %s  [%s%s]\n" "$(echo -e "$sicon")" "$a" "$b" "$c" "${d:+/$d}"
+                fi
+            done
+        fi
+
+        echo ""
+        echo -e "${CYAN}──────────────────────────────────────${NC}"
+        if [[ "$status" == "completed" ]]; then
+            if [[ "$conclusion" == "success" ]]; then
+                echo -e "${GREEN}✅ Finished: success${NC}"
+            elif [[ "$conclusion" == "failure" ]]; then
+                echo -e "${RED}❌ Finished: failure${NC}"
+            else
+                echo -e "${YELLOW}Finished: $conclusion${NC}"
+            fi
+            echo ""
+            read -p "Press Enter to go back."
+            return 0
+        fi
+
+        echo -e "  Refreshing in ${interval}s…  ${YELLOW}q${NC}+Enter = stop watching"
+        # non-blocking-ish wait: user can type q
+        local key=""
+        read -t "$interval" -n 1 key 2>/dev/null || true
+        if [[ "$key" == "q" || "$key" == "Q" ]]; then
+            echo ""
+            echo -e "${YELLOW}Stopped watching.${NC}"
+            sleep 1
+            return 0
+        fi
+    done
+}
+
+# Pick a recent run interactively then watch it
+pick_and_watch_run() {
+    local repo=$1
+    echo -e "${CYAN}Recent runs:${NC}"
+    local runs_json
+    set +e
+    runs_json=$(curl -s --connect-timeout 15 --max-time 30 \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$repo/actions/runs?per_page=12" 2>/dev/null)
+    set -e
+
+    if ! echo "$runs_json" | jq -e '.workflow_runs[0]' &>/dev/null; then
+        echo -e "${RED}No runs found (or API error).${NC}"
+        echo "$runs_json" | jq -r '.message // empty' 2>/dev/null
+        read -p "Press Enter to continue."
+        return 1
+    fi
+
+    mapfile -t run_ids < <(echo "$runs_json" | jq -r '.workflow_runs[].id')
+    mapfile -t run_names < <(echo "$runs_json" | jq -r '.workflow_runs[].name')
+    mapfile -t run_status < <(echo "$runs_json" | jq -r '.workflow_runs[].status')
+    mapfile -t run_conc < <(echo "$runs_json" | jq -r '.workflow_runs[].conclusion // "-"')
+    mapfile -t run_time < <(echo "$runs_json" | jq -r '.workflow_runs[].created_at')
+
+    local i icon
+    for i in "${!run_ids[@]}"; do
+        icon=$(_status_icon "${run_status[$i]}" "${run_conc[$i]}")
+        printf "  %2d) %s  #%s  %-12s %-10s  %s\n" \
+            "$((i+1))" "$(echo -e "$icon")" "${run_ids[$i]}" \
+            "${run_status[$i]}" "${run_conc[$i]}" "${run_names[$i]}"
+        echo -e "       ${run_time[$i]}"
+    done
+    echo ""
+    echo -ne "${YELLOW}Select run number (or paste run id, q=cancel): ${NC}"
+    read sel
+    [[ "$sel" == "q" || "$sel" == "Q" || -z "$sel" ]] && return 0
+
+    local run_id=""
+    if [[ "$sel" =~ ^[0-9]+$ ]] && [[ "$sel" -ge 1 && "$sel" -le ${#run_ids[@]} ]]; then
+        run_id="${run_ids[$((sel-1))]}"
+    else
+        run_id="$sel"
+    fi
+    watch_workflow_run "$repo" "$run_id"
+}
+
 action_workflows() {
     local repo=$(get_repo_selection "Repository for workflows (user/repo):")
-    if [[ -z "$repo" ]]; then echo -e "${RED}Repo required.${NC}"; return; fi
+    if [[ -z "$repo" || "$repo" == "q" || "$repo" == "Q" ]]; then
+        echo -e "${YELLOW}Cancelled.${NC}"; return
+    fi
     while true; do
         clear
         echo -e "${CYAN}==============================${NC}"
@@ -663,7 +834,8 @@ action_workflows() {
         echo "  6) Cancel a run"
         echo "  7) Rerun a run"
         echo "  8) Enable/disable workflow"
-        echo "  9) Back"
+        echo "  9) Watch run live (jobs + steps)"
+        echo "  0) Back"
         echo ""
         echo -ne "${YELLOW}> ${NC}"; read act_choice
         case "$act_choice" in
@@ -749,11 +921,67 @@ action_workflows() {
                 local payload=$(jq -n --arg ref "$branch" --argjson inputs "$input_json" '{ref: $ref, inputs: $inputs}')
                 echo -e "${CYAN}Sending dispatch...${NC}"
                 local response=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$repo/actions/workflows/$wf_id/dispatches" -d "$payload")
-                if [[ -z "$response" ]]; then echo -e "${GREEN}✅ Dispatch triggered.${NC}"; else echo -e "${RED}Error: $response${NC}"; fi
-                read -p "Press Enter to continue."
+                if [[ -z "$response" ]]; then
+                    echo -e "${GREEN}✅ Dispatch triggered.${NC}"
+                    echo -ne "${YELLOW}Watch this run live? (y/n): ${NC}"
+                    read watch_now
+                    if [[ "$watch_now" == "y" || "$watch_now" == "yes" ]]; then
+                        echo -e "${CYAN}Waiting for run to appear...${NC}"
+                        local found_id="" tries=0
+                        while [[ $tries -lt 12 && -z "$found_id" ]]; do
+                            sleep 2
+                            found_id=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                                "https://api.github.com/repos/$repo/actions/workflows/$wf_id/runs?per_page=1&event=workflow_dispatch" \
+                                | jq -r '.workflow_runs[0].id // empty' 2>/dev/null)
+                            tries=$((tries + 1))
+                        done
+                        if [[ -n "$found_id" ]]; then
+                            watch_workflow_run "$repo" "$found_id"
+                        else
+                            echo -e "${YELLOW}Run not visible yet. Use menu 9 to watch later.${NC}"
+                            read -p "Press Enter to continue."
+                        fi
+                    else
+                        read -p "Press Enter to continue."
+                    fi
+                else
+                    echo -e "${RED}Error: $response${NC}"
+                    read -p "Press Enter to continue."
+                fi
                 ;;
-            3) echo -ne "${YELLOW}Workflow ID: ${NC}"; read wf_id; echo -e "${CYAN}Recent runs:${NC}"; curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$repo/actions/workflows/$wf_id/runs" | jq -r '.workflow_runs[] | "  \(.id)\t\(.status)\t\(.conclusion)\t\(.created_at)"'; read -p "Press Enter to continue." ;;
-            4) echo -ne "${YELLOW}Run ID: ${NC}"; read run_id; echo -e "${CYAN}Run details:${NC}"; curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$repo/actions/runs/$run_id" | jq '{status: .status, conclusion: .conclusion, created_at: .created_at, html_url: .html_url, head_branch: .head_branch}'; read -p "Press Enter to continue." ;;
+            3)
+                echo -ne "${YELLOW}Workflow ID (or Enter to list all recent runs): ${NC}"; read wf_id
+                echo -e "${CYAN}Recent runs:${NC}"
+                if [[ -n "$wf_id" ]]; then
+                    curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                        "https://api.github.com/repos/$repo/actions/workflows/$wf_id/runs?per_page=15" \
+                        | jq -r '.workflow_runs[] | "  \(.id)\t\(.status)\t\(.conclusion // "-")\t\(.name)\t\(.created_at)"'
+                else
+                    curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                        "https://api.github.com/repos/$repo/actions/runs?per_page=15" \
+                        | jq -r '.workflow_runs[] | "  \(.id)\t\(.status)\t\(.conclusion // "-")\t\(.name)\t\(.created_at)"'
+                fi
+                echo ""
+                echo -ne "${YELLOW}Watch one live? Enter run id (or empty to skip): ${NC}"
+                read maybe_id
+                if [[ -n "$maybe_id" && "$maybe_id" != "q" ]]; then
+                    watch_workflow_run "$repo" "$maybe_id"
+                else
+                    read -p "Press Enter to continue."
+                fi
+                ;;
+            4)
+                echo -ne "${YELLOW}Run ID: ${NC}"; read run_id
+                echo -e "${CYAN}Run details:${NC}"
+                curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$repo/actions/runs/$run_id" \
+                    | jq '{status: .status, conclusion: .conclusion, created_at: .created_at, html_url: .html_url, head_branch: .head_branch, name: .name}'
+                echo -ne "${YELLOW}Watch live? (y/n): ${NC}"; read w
+                if [[ "$w" == "y" || "$w" == "yes" ]]; then
+                    watch_workflow_run "$repo" "$run_id"
+                else
+                    read -p "Press Enter to continue."
+                fi
+                ;;
             5) echo -ne "${YELLOW}Run ID: ${NC}"; read run_id; echo -ne "${YELLOW}Save logs as (default: logs-${run_id}.zip): ${NC}"; read logfile; logfile=${logfile:-"logs-${run_id}.zip"}; echo -e "${CYAN}Downloading logs...${NC}"; curl -L -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$repo/actions/runs/$run_id/logs" --output "$logfile"; echo -e "${GREEN}✅ Logs saved to $logfile${NC}"; sleep 1 ;;
             6) echo -ne "${YELLOW}Run ID to cancel: ${NC}"; read run_id; curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$repo/actions/runs/$run_id/cancel" | jq -r '.message'; read -p "Press Enter to continue." ;;
             7) echo -ne "${YELLOW}Run ID to rerun: ${NC}"; read run_id; curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$repo/actions/runs/$run_id/rerun" | jq -r '.message'; read -p "Press Enter to continue." ;;
@@ -791,7 +1019,8 @@ action_workflows() {
                 fi
                 read -p "Press Enter to continue."
                 ;;
-            9) break ;;
+            9) pick_and_watch_run "$repo" ;;
+            0|b|B|q|Q) break ;;
             *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
         esac
     done
