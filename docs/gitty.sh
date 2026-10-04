@@ -52,6 +52,42 @@ rtl() {
     else printf '%s' "$text"; fi
 }
 
+# Apply fribidi line-by-line (for logs with Persian text)
+rtl_stream() {
+    if ! command -v fribidi &>/dev/null; then
+        cat
+        return
+    fi
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == *[![:ascii:]]* ]]; then
+            printf '%s
+' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
+        else
+            printf '%s
+' "$line"
+        fi
+    done
+}
+
+# Rewrite a file in-place with RTL-fixed lines (for less/pager)
+rtl_file() {
+    local src=$1 dest=$2
+    if ! command -v fribidi &>/dev/null; then
+        cp "$src" "$dest" 2>/dev/null || cat "$src" > "$dest"
+        return
+    fi
+    : > "$dest"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == *[![:ascii:]]* ]]; then
+            printf '%s
+' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
+        else
+            printf '%s
+' "$line" >> "$dest"
+        fi
+    done < "$src"
+}
+
 print_item() {
     local num=$1 type=$2 name=$3 display_name
     display_name=$(rtl "$name")
@@ -692,7 +728,7 @@ _fetch_job_log_tail() {
     local repo=$1 job_id=$2 lines=${3:-25}
     local f
     f=$(_download_job_log "$repo" "$job_id") || return 1
-    tail -n "$lines" "$f" 2>/dev/null | sed 's/^/    │ /'
+    tail -n "$lines" "$f" 2>/dev/null | rtl_stream | sed 's/^/    │ /'
     rm -f "$f"
     return 0
 }
@@ -710,15 +746,18 @@ _view_full_job_log() {
     local lines
     lines=$(wc -l < "$f" | tr -d ' ')
     echo -e "${GREEN}Log ready (${lines} lines).${NC}"
+    local fr
+    fr=$(mktemp "$HOME/gitty-rtl-XXXXXX" 2>/dev/null || mktemp)
+    rtl_file "$f" "$fr"
     if command -v less &>/dev/null; then
-        less -R "$f"
+        less -R "$fr"
     else
         echo -e "${YELLOW}--- full log ---${NC}"
-        cat "$f"
+        cat "$fr"
         echo ""
         read -p "Press Enter to continue."
     fi
-    rm -f "$f"
+    rm -f "$f" "$fr"
 }
 
 # Flat list of all steps across jobs; open by number
@@ -777,8 +816,11 @@ for job in data.get("jobs") or []:
             [[ "$conc" == "failure" ]] && mark="✗"
             [[ "$st" == "in_progress" ]] && mark="●"
             [[ "$st" == "queued" || "$st" == "pending" ]] && mark="○"
-            printf "  %2s) %s %s\n" "$num" "$mark" "$sname"
-            printf "       job: %s  [%s%s]\n" "$jname" "$st" "${conc:+/$conc}"
+            local sname_d jname_d
+            sname_d=$(rtl "$sname")
+            jname_d=$(rtl "$jname")
+            printf "  %2s) %s %s\n" "$num" "$mark" "$sname_d"
+            printf "       job: %s  [%s%s]\n" "$jname_d" "$st" "${conc:+/$conc}"
         done
         echo -ne "${YELLOW}Step number (q=back): ${NC}"
         read sel
@@ -804,7 +846,7 @@ for job in data.get("jobs") or []:
     echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║  Step details #$sel                  ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
-    echo -e "  Name:    ${BOLD}$step_name${NC}"
+    echo -e "  Name:    ${BOLD}$(rtl "$step_name")${NC}"
     echo -e "  Job:     $job_name"
     echo -e "  Status:  $st${conc:+ / $conc}"
     echo -e "  Started: ${started:-–}"
@@ -901,14 +943,17 @@ with open(out_path, "w", encoding="utf-8") as out:
     out.write("\n")
 PY
 
+    local out_rtl
+    out_rtl=$(mktemp "$HOME/gitty-rtl-XXXXXX" 2>/dev/null || mktemp)
+    rtl_file "$out" "$out_rtl"
     if command -v less &>/dev/null; then
-        less -R "$out"
+        less -R "$out_rtl"
     else
-        cat "$out"
+        cat "$out_rtl"
         echo ""
-        read -p "Enter..."
+        read -p "Press Enter..."
     fi
-    rm -f "$f" "$out"
+    rm -f "$f" "$out" "$out_rtl"
 }
 
 # Keep old name as alias for callers
@@ -1038,8 +1083,10 @@ for job in data.get("jobs") or []:
                     echo -e "  ${BOLD}$a${NC}"
                 elif [[ "$kind" == "STEP" ]]; then
                     # a=num b=mark c=name d=status e=conc f=dur
+                    local c_rtl
+                    c_rtl=$(rtl "$c")
                     printf "   %2s) %s %-40s  [%s%s]  %s\n" \
-                        "$a" "$b" "${c:0:40}" "$d" "${e:+/$e}" "$f"
+                        "$a" "$b" "${c_rtl:0:40}" "$d" "${e:+/$e}" "$f"
                 fi
             done
 
