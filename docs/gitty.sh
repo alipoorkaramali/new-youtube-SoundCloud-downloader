@@ -1,6 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p10-ig-dispatch-aligned
+# gitty-patch-id: p18-stable-phone-emulator
+# BUILD: 2026-10-05-p18
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -46,20 +47,31 @@ urlencode() { python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys
 
 rtl() {
     local text="$1"
+    # Guard: fribidi can stack-corrupt on very long strings (some Android emulators)
+    if (( ${#text} > 400 )); then printf '%s' "$text"; return; fi
     if [[ "$text" != *[![:ascii:]]* ]]; then printf '%s' "$text"; return; fi
     if command -v fribidi &>/dev/null; then
         printf '%s' "$text" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$text"
     else printf '%s' "$text"; fi
 }
 
-# Line-by-line fribidi for logs (same as commits/issues — correct letter shapes)
+# Line-by-line fribidi for logs — safe on phone + emulator
+# (skip long lines / ANSI; only reshape real Persian/Arabic)
+_rtl_safe_line() {
+    local line=$1
+    if (( ${#line} > 800 )); then return 1; fi
+    if [[ "$line" != *[![:ascii:]]* ]]; then return 1; fi
+    if [[ "$line" == *$'\x1b'* ]]; then return 1; fi
+    return 0
+}
+
 rtl_stream() {
     if ! command -v fribidi &>/dev/null; then
         cat
         return
     fi
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *[![:ascii:]]* ]]; then
+        if _rtl_safe_line "$line"; then
             printf '%s\n' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")"
         else
             printf '%s\n' "$line"
@@ -75,7 +87,7 @@ rtl_file() {
     fi
     : > "$dest"
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *[![:ascii:]]* ]]; then
+        if _rtl_safe_line "$line"; then
             printf '%s\n' "$(printf '%s' "$line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$line")" >> "$dest"
         else
             printf '%s\n' "$line" >> "$dest"
@@ -83,6 +95,29 @@ rtl_file() {
     done < "$src"
 }
 
+# Safe pager: bare `less` can hard-abort (stack-protector) on some emulators.
+# Default: cat. Set GITTY_USE_LESS=1 to try less.
+_safe_pager() {
+    local file=$1
+    if [[ ! -f "$file" ]]; then
+        echo -e "${RED}(no content)${NC}"
+        read -p "Press Enter..."
+        return 0
+    fi
+    if [[ "${GITTY_USE_LESS:-0}" == "1" ]] && command -v less &>/dev/null; then
+        set +e
+        less -R "$file"
+        local rc=$?
+        set -e
+        if [[ $rc -eq 0 ]]; then return 0; fi
+        echo -e "${YELLOW}(less failed, falling back to cat)${NC}"
+    fi
+    echo -e "${YELLOW}--- log (scroll / Enter to back) ---${NC}"
+    cat "$file"
+    echo ""
+    read -p "Press Enter..."
+    return 0
+}
 
 print_item() {
     local num=$1 type=$2 name=$3 display_name
@@ -745,14 +780,7 @@ _view_full_job_log() {
     local fr
     fr=$(mktemp "$HOME/gitty-rtl-XXXXXX" 2>/dev/null || mktemp)
     rtl_file "$f" "$fr"
-    if command -v less &>/dev/null; then
-        less -R "$fr"
-    else
-        echo -e "${YELLOW}--- full log ---${NC}"
-        cat "$fr"
-        echo ""
-        read -p "Press Enter to continue."
-    fi
+    _safe_pager "$fr"
     rm -f "$f" "$fr"
 }
 
@@ -830,7 +858,15 @@ for job in data.get("jobs") or []:
     fi
 
     local line job_id job_name step_num step_name st conc started completed
-    line=$(echo "$table" | awk -F'\t' -v n="$sel" '$1==n {print; exit}')
+    # awk crashes with stack-protector on some Android emulators — pure bash lookup
+    line=""
+    while IFS= read -r row || [[ -n "$row" ]]; do
+        num="${row%%$'\t'*}"
+        if [[ "$num" == "$sel" ]]; then
+            line="$row"
+            break
+        fi
+    done <<< "$table"
     if [[ -z "$line" ]]; then
         echo -e "${YELLOW}Step $sel not found.${NC}"
         sleep 1
@@ -962,13 +998,7 @@ PY
     local out_rtl
     out_rtl=$(mktemp "$HOME/gitty-rtl-XXXXXX" 2>/dev/null || mktemp)
     rtl_file "$out" "$out_rtl"
-    if command -v less &>/dev/null; then
-        less -R "$out_rtl"
-    else
-        cat "$out_rtl"
-        echo ""
-        read -p "Press Enter..."
-    fi
+    _safe_pager "$out_rtl"
     rm -f "$f" "$out" "$out_rtl"
 }
 
@@ -2327,6 +2357,7 @@ while true; do
     clear
     echo -e "${CYAN}==============================${NC}"
     echo -e "${CYAN}  Gitty - GitHub Manager v2.2${NC}"
+    echo -e "${YELLOW}  BUILD: 2026-10-05-p18${NC}"
     echo -e "${CYAN}==============================${NC}"
     echo -e "${GREEN}Logged in as: ${BOLD}$GITHUB_USER${NC}\n"
     echo "  1) Browse repository"
