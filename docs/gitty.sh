@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p18-stable-phone-emulator
-# BUILD: 2026-10-05-p18
+# gitty-patch-id: p19-diagnostic-save-to-list
+# BUILD: 2026-10-05-p19
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -1301,9 +1301,16 @@ action_workflows() {
                         ;;
                     *"Check RSS Log"*| *"check_log"*) input_json="{}" ;;
                     *"Full Diagnostic"*| *"debug_scan"*)
-                        echo -ne "YouTube channel ID [UCHZk9MrT3DGWmVqdsj5y0EA]: "; read yt_id; yt_id=${yt_id:-UCHZk9MrT3DGWmVqdsj5y0EA}
-                        echo -ne "SoundCloud URL [https://soundcloud.com/iranintl]: "; read sc_url; sc_url=${sc_url:-https://soundcloud.com/iranintl}
-                        input_json=$(jq -n --arg youtube_channel_id "$yt_id" --arg soundcloud_url "$sc_url" '{youtube_channel_id: $youtube_channel_id, soundcloud_url: $soundcloud_url}')
+                        # Aligned with .github/workflows/debug_scan.yml
+                        # Empty inputs → use saved_channels.txt only
+                        echo -e "${CYAN}🩺 Full Diagnostic${NC}"
+                        echo -e "${YELLOW}Leave channels empty → only saved_channels.txt (+ watchlist)${NC}"
+                        echo -ne "New YouTube channel ID (optional): "; read yt_id
+                        echo -ne "New SoundCloud URL (optional): "; read sc_url
+                        echo -ne "Save new channel(s) to saved_channels.txt? (y/n) [n]: "; read save_to_list
+                        if [[ "$save_to_list" =~ ^[Yy]$ ]]; then save_to_list="true"; else save_to_list="false"; fi
+                        input_json=$(jq -n                             --arg youtube_channel_id "${yt_id}"                             --arg soundcloud_url "${sc_url}"                             --argjson save_to_list "$save_to_list"                             '{youtube_channel_id: $youtube_channel_id, soundcloud_url: $soundcloud_url, save_to_list: $save_to_list}')
+                        echo -e "${GREEN}Dispatch inputs:${NC} $input_json"
                         ;;
                     *"YouTube Multi-Watcher"*| *"scan1"*) input_json="{}" ;;
                     *"instagram-fetcher"*|*"Instagram-fetcher"*|*"Instagram"*)
@@ -2357,7 +2364,7 @@ while true; do
     clear
     echo -e "${CYAN}==============================${NC}"
     echo -e "${CYAN}  Gitty - GitHub Manager v2.2${NC}"
-    echo -e "${YELLOW}  BUILD: 2026-10-05-p18${NC}"
+    echo -e "${YELLOW}  BUILD: 2026-10-05-p19${NC}"
     echo -e "${CYAN}==============================${NC}"
     echo -e "${GREEN}Logged in as: ${BOLD}$GITHUB_USER${NC}\n"
     echo "  1) Browse repository"
