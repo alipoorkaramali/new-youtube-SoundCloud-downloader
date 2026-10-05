@@ -2,10 +2,11 @@
   "channels": {
     "bbcpersian": {
       "last_shortcode": "DadB5jOCFPr",
-      "last_fetched_at": "2026-10-05T04:49:53.675418",
-      "last_file": "instagram_data/bbcpersian_20261005_044953.json",
+      "last_fetched_at": "2026-10-05T08:30:53.341038",
+      "last_file": "instagram_data/bbcpersian_20261005_083053.json",
       "recent_shortcodes": [
         "DadB5jOCFPr",
+        "DeGrLlplxlT",
         "DeGVlcUCNkU",
         "DeGRNuliKe3",
         "DeGFhHajHZ4",
@@ -13,13 +14,12 @@
         "DeF4ZLjCLYp",
         "DeF0qxdiNQT",
         "DeFmpr8jc7b",
-        "DeFi9bHiHrH",
-        "DeFe5mNlZ2C"
+        "DeFi9bHiHrH"
       ]
     },
     "mohammadjavadhosseinii": {
       "last_shortcode": "DESr3W1t8o0",
-      "last_fetched_at": "2026-10-05T04:50:20.936956",
+      "last_fetched_at": "2026-10-05T08:31:24.702226",
       "last_file": "instagram_data/mohammadjavadhosseinii_20260928_023133.json",
       "recent_shortcodes": [
         "DESr3W1t8o0",
@@ -36,7 +36,7 @@
     },
     "alireza.mehrabii": {
       "last_shortcode": "DZk3DEeINqN",
-      "last_fetched_at": "2026-10-05T04:50:44.828642",
+      "last_fetched_at": "2026-10-05T08:31:57.314357",
       "last_file": "instagram_data/alireza.mehrabii_20261002_045112.json",
       "recent_shortcodes": [
         "DZk3DEeINqN",
@@ -53,19 +53,19 @@
     },
     "iranintltv": {
       "last_shortcode": "Dd_Za-1DPj2",
-      "last_fetched_at": "2026-10-05T04:50:58.750476",
-      "last_file": "instagram_data/iranintltv_20261005_045058.json",
+      "last_fetched_at": "2026-10-05T08:32:14.735171",
+      "last_file": "instagram_data/iranintltv_20261005_083214.json",
       "recent_shortcodes": [
         "Dd_Za-1DPj2",
         "Dd9ooTuAc8d",
         "Dd58WH7DDfV",
-        "DeGYLyZgcco",
-        "DeGUpuSkcSI",
-        "DeGTUF8kW0K",
-        "DeGQ5gfkYPb",
-        "DeGPBLqlhcF",
-        "DeGAc-TjazO",
-        "DeF-Oh1G9Iw"
+        "DeGyM8QD9S8",
+        "DeGwvEVFex9",
+        "DeGvKK7FZ7U",
+        "DeGu5LWjw3c",
+        "DeGtlFQm3nh",
+        "DeGr7tJFcox",
+        "DeGrXu8D7gB"
       ]
     }
   }
