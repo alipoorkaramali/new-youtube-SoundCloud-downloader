@@ -194,63 +194,90 @@ jobs:
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
 
-          CANDIDATES=()
-          [ -d "$BASE/$PID" ] && CANDIDATES+=("$BASE/$PID")
-          [ -d "$BASE/media/$PID" ] && CANDIDATES+=("$BASE/media/$PID")
-          [ -d "$BASE/media" ] && CANDIDATES+=("$BASE/media")
-          [ -d "$BASE" ] && CANDIDATES+=("$BASE")
+          echo "📂 tree under $BASE (depth 3):"
+          find "$BASE" -maxdepth 3 -type f 2>/dev/null | head -40 || true
 
-          MEDIA_EXT='mp4|mkv|webm|mov|avi|mp3|m4a|ogg|opus|wav|flac|aac|jpg|jpeg|png|gif|webp|pdf|doc|docx|zip|rar|7z'
+          # Python collector: PID match, PID±1, or files modified in this job (~15 min)
+          export BASE PID STAGING
+          python3 << 'PY'
+          import os, re, shutil, time
+          from pathlib import Path
 
-          copied=0
-          for DIR in "${CANDIDATES[@]}"; do
-            [ -d "$DIR" ] || continue
-            case "$DIR" in
-              *post_screenshots*|*/screenshots*|*/debug*) continue ;;
-            esac
-            while IFS= read -r -d '' f; do
-              rel="${f#$DIR/}"
-              case "$rel" in
-                post_screenshots/*|screenshots/*|debug/*|*_screenshot*|*/debug_*.png|*/initial.png|*/final.png|*/before_click*|*/search_*) continue ;;
-              esac
-              base=$(basename "$f")
-              case "$base" in
-                *screenshot*|debug_*.png|initial.png|final.png|before_click*|search_*.png|*_final.png) continue ;;
-              esac
-              if [ "$DIR" = "$BASE" ] || [ "$DIR" = "$BASE/media" ]; then
-                case "$base" in
-                  *"$PID"*) ;;
-                  *) continue ;;
-                esac
-              fi
-              cp -n "$f" "$STAGING/" 2>/dev/null || cp "$f" "$STAGING/"
-              copied=$((copied+1))
-              echo "+ $base"
-            done < <(find "$DIR" -maxdepth 4 -type f -regextype posix-extended \
-              -iregex ".*\.($MEDIA_EXT)$" -print0 2>/dev/null)
-          done
+          base = Path(os.environ["BASE"])
+          pid = os.environ["PID"]
+          staging = Path(os.environ["STAGING"])
+          staging.mkdir(parents=True, exist_ok=True)
 
-          if [ "$copied" -eq 0 ] && [ -d "$BASE" ]; then
-            echo "⚠️ post-specific media not found — fallback (still no screenshots)"
-            while IFS= read -r -d '' f; do
-              rel="${f#$BASE/}"
-              case "$rel" in
-                post_screenshots/*|screenshots/*|debug/*) continue ;;
-              esac
-              base=$(basename "$f")
-              case "$base" in
-                *screenshot*|debug_*.png|initial.png|final.png|before_click*|search_*.png) continue ;;
-              esac
-              case "$base" in
-                *"$PID"*) cp "$f" "$STAGING/"; copied=$((copied+1)); echo "+ $base" ;;
-              esac
-            done < <(find "$BASE" -maxdepth 5 -type f -regextype posix-extended \
-              -iregex ".*\.($MEDIA_EXT)$" -print0 2>/dev/null)
-          fi
+          media_re = re.compile(
+              r"\.(mp4|mkv|webm|mov|avi|mp3|m4a|ogg|opus|wav|flac|aac|jpg|jpeg|png|gif|webp|pdf|zip|rar|7z)$",
+              re.I,
+          )
+          skip_name = re.compile(
+              r"(screenshot|debug_|initial\.png|final\.png|before_click|search_)", re.I
+          )
+          skip_dir = re.compile(r"(post_screenshots|/screenshots/|/debug/)", re.I)
 
-          echo "folder=$STAGING" >> "$GITHUB_OUTPUT"
-          echo "count=$copied" >> "$GITHUB_OUTPUT"
-          echo "📦 staged $copied media file(s) for post $PID (screenshots excluded)"
+          try:
+              pid_n = int(pid)
+              near_ids = {str(pid_n), str(pid_n - 1), str(pid_n + 1)}
+          except ValueError:
+              near_ids = {pid}
+
+          now = time.time()
+          cutoff = now - 15 * 60  # this workflow run
+
+          candidates = []
+          if base.exists():
+              for f in base.rglob("*"):
+                  if not f.is_file():
+                      continue
+                  rel = str(f.relative_to(base)).replace("\\", "/")
+                  if skip_dir.search(rel):
+                      continue
+                  if not media_re.search(f.name):
+                      continue
+                  if skip_name.search(f.name):
+                      continue
+                  score = 0
+                  if pid in f.name or pid in rel:
+                      score = 100
+                  elif any(n in f.name for n in near_ids):
+                      score = 50  # off-by-one from Telegram UI
+                  try:
+                      mtime = f.stat().st_mtime
+                  except OSError:
+                      continue
+                  if mtime >= cutoff:
+                      score = max(score, 40)  # freshly downloaded this run
+                  if score == 0:
+                      continue
+                  candidates.append((score, mtime, f))
+
+          candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+
+          # Keep top-scoring group only
+          copied = 0
+          if candidates:
+              best = candidates[0][0]
+              for score, mtime, f in candidates:
+                  if score < best and best >= 50:
+                      break
+                  if score < 40:
+                      break
+                  dest = staging / f.name
+                  if dest.exists():
+                      dest = staging / f"{f.stem}_{copied}{f.suffix}"
+                  shutil.copy2(f, dest)
+                  copied += 1
+                  print(f"+ [{score}] {f.relative_to(base)}")
+
+          print(f"📦 staged {copied} media file(s) for post {pid}")
+          if copied == 0:
+              print("⚠️ no media matched PID / near-PID / recent mtime")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"folder={staging}\n")
+              out.write(f"count={copied}\n")
+          PY
           ls -la "$STAGING" || true
 
       - name: Extract audio if mode=audio
