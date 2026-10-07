@@ -1,5 +1,5 @@
 auto_extend_timeout: true
-channel: IranintlTv
+channel: bbcpersian
 channel_name: ''
 debug_mode: true
 delay_between_posts: 1.5
@@ -11,5 +11,5 @@ profile_dir: config/browser_profile
 resume: false
 save_screenshots: false
 scroll_direction: up
-stop_before_id: '360391'
+stop_before_id: '292881'
 timeout_seconds: 0
