@@ -1,0 +1,103 @@
+name: restore-gitty
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore and patch gitty
+        run: |
+          set -e
+          git show 2a37bfb2857fad6244d514b6e3ec5f1a8894b4a3:docs/gitty.sh > docs/gitty.sh
+          python3 << 'PY'
+          from pathlib import Path
+          text = Path("docs/gitty.sh").read_text(encoding="utf-8")
+          start = text.find('echo -e "  ${YELLOW}1${NC}) Post /download comment"')
+          i = text.find('                    1)', start)
+          j = text.find('                    2)', i)
+          assert i > 0 and j > i, (i, j)
+          new = r'''                    1)
+                        local target=""
+                        local issue_title_now="${issue_titles[$idx]}"
+                        if echo "$issue_title_now" | grep -qi "Telegram"; then
+                            echo -e "${CYAN}Telegram: enter catalog number OR t.me URL${NC}"
+                            echo -e "${YELLOW}Example: 5   or   https://t.me/bbcpersian/12345${NC}"
+                            echo -ne "${YELLOW}> ${NC}"; read -r target
+                        elif [[ ${#shortcodes[@]} -gt 0 ]]; then
+                            echo -e "${CYAN}Select shortcode number (1-${#shortcodes[@]}) or enter custom:${NC}"
+                            for k in "${!shortcodes[@]}"; do echo "  $((k+1))) ${shortcodes[$k]}"; done
+                            read -r sc_choice
+                            if [[ "$sc_choice" =~ ^[0-9]+$ ]] && [[ $sc_choice -ge 1 ]] && [[ $sc_choice -le ${#shortcodes[@]} ]]; then
+                                target="${shortcodes[$((sc_choice-1))]}"
+                            else
+                                target="$sc_choice"
+                            fi
+                        else
+                            echo -ne "${YELLOW}Enter shortcode / number / URL: ${NC}"; read -r target
+                        fi
+                        if [[ -z "$target" ]]; then
+                            echo -e "${RED}No target provided.${NC}"
+                            read -p "Press Enter to continue."
+                        else
+                        local tl=$(echo "$target" | tr '[:upper:]' '[:lower:]')
+                        if [[ "$tl" == "mega" || "$tl" == "repo" || "$tl" == "audio" || "$tl" == "video" ]]; then
+                            echo -e "${RED}❌ '$target' is not an item id. Enter a number, shortcode, or t.me URL first.${NC}"
+                            read -p "Press Enter to continue."
+                        else
+                        local mode="video"
+                        echo -e "${CYAN}Mode:${NC}"
+                        echo "  1) video (default)"
+                        echo "  2) audio"
+                        echo -ne "${YELLOW}> ${NC}"; read -r mode_choice
+                        case "$mode_choice" in
+                            2|audio|a|A) mode="audio" ;;
+                            *) mode="video" ;;
+                        esac
+                        local dest="repo"
+                        echo -e "${CYAN}Destination:${NC}"
+                        echo "  1) repo (save in GitHub repo, default)"
+                        echo "  2) mega (upload to Mega.nz)"
+                        echo -ne "${YELLOW}> ${NC}"; read -r dest_choice
+                        case "$dest_choice" in
+                            2|mega|m|M) dest="mega" ;;
+                            *) dest="repo" ;;
+                        esac
+                        local comment_body="/download $target $mode $dest"
+                        echo -e "${CYAN}Posting comment: ${BOLD}$comment_body${NC}"
+                        local payload
+                        payload=$(jq -n --arg b "$comment_body" '{body:$b}')
+                        local response
+                        response=$(api_call "POST" "https://api.github.com/repos/$repo/issues/${issue_numbers[$idx]}/comments" "$payload")
+                        if echo "$response" | jq -e '.id' &>/dev/null; then
+                            echo -e "${GREEN}✅ Comment posted. Workflow triggered.${NC}"
+                            echo -e "${YELLOW}   mode=$mode  dest=$dest${NC}"
+                        else
+                            echo -e "${RED}❌ Failed: $(echo "$response" | jq -r '.message // .')${NC}"
+                        fi
+                        read -p "Press Enter to continue."
+                        fi
+                        fi
+                        ;;
+'''
+          text2 = text[:i] + new + text[j:]
+          text2 = text2.replace("gitty-patch-id: p19-diagnostic-save-to-list", "gitty-patch-id: p20-download-mode-dest")
+          text2 = text2.replace("BUILD: 2026-10-05-p19", "BUILD: 2026-10-07-p20")
+          Path("docs/gitty.sh").write_text(text2, encoding="utf-8")
+          print("ok", len(text2))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/restore-gitty.yml
+          git add docs/gitty.sh
+          git add -A .github/workflows/restore-gitty.yml
+          git status
+          git commit -m "fix(gitty): restore full script + mode/dest for /download"
+          git pull --rebase origin main || true
+          git push origin main
