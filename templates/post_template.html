@@ -17,6 +17,7 @@
             --shadow-hover: 0 8px 30px rgba(0,0,0,0.12); --glass: rgba(255,255,255,0.75);
             --tag-bg: #e7f0ff; --tag-text: #1e4fcf; --footer-bg: #ffffff;
             --lightbox-bg: rgba(0,0,0,0.9); --highlight-bg: #ffeb3b; --highlight-text: #000;
+            --success: #10b981; --danger: #ef4444;
         }
         .dark {
             --bg: #18191a; --card-bg: #242526; --text: #e4e6eb;
@@ -50,7 +51,6 @@
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg); }
         ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
         .header {
             position: sticky; top: 20px; z-index: 100; backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px); background: var(--glass);
@@ -89,6 +89,21 @@
         .search-box i {
             position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
             color: var(--text-secondary); font-size: 16px;
+        }
+        .dl-defaults {
+            margin: 14px auto 0; max-width: 420px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+            font-size: 13px; color: var(--text-secondary);
+        }
+        .dl-defaults select {
+            font-family: 'Vazirmatn'; font-size: 13px; padding: 6px 10px;
+            border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+        }
+        .token-bar {
+            margin: 10px auto 0; max-width: 420px; font-size: 12px; color: var(--text-secondary);
+        }
+        .token-bar button {
+            font-family: 'Vazirmatn'; font-size: 12px; padding: 4px 10px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--card-bg); color: var(--text); cursor: pointer;
         }
         .container { max-width: 880px; margin: 0 auto; padding: 0 15px; }
         .post {
@@ -139,60 +154,52 @@
         }
         .copy-btn:hover { background: var(--primary-dark); }
         .media-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 14px;
-            justify-content: center;
-            margin: 18px 0;
+            display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 18px 0;
         }
         .media-item {
-            background: var(--bg);
-            border-radius: 12px;
-            padding: 10px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            max-width: 100%;
-            text-align: center;
-            transition: all 0.3s;
-            border: 1px solid var(--border);
+            background: var(--bg); border-radius: 12px; padding: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); max-width: 100%;
+            text-align: center; transition: all 0.3s; border: 1px solid var(--border);
         }
         .media-item:hover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
         .media-item img, .media-item video {
-            max-width: 100%; max-height: 400px; border-radius: 8px;
-            display: block; transition: transform 0.3s;
+            max-width: 100%; max-height: 400px; border-radius: 8px; display: block;
         }
-        .media-item:hover img { transform: scale(1.02); }
         .media-item audio {
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 12px 0;
-            display: block !important;
-            border-radius: 8px;
-            background: var(--card-bg);
-            padding: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            border: 1px solid var(--border);
+            width: 100% !important; max-width: 100% !important; margin: 12px 0;
+            display: block !important; border-radius: 8px; background: var(--card-bg);
+            padding: 10px; border: 1px solid var(--border);
         }
         .media-item .file-link {
             display: inline-flex; align-items: center; gap: 8px;
             background: var(--primary); color: white !important;
-            padding: 10px 18px; border-radius: 10px; text-decoration: none;
-            font-size: 14px; transition: background 0.3s, transform 0.3s;
+            padding: 10px 18px; border-radius: 10px; text-decoration: none; font-size: 14px;
         }
-        .media-item .file-link:hover { background: var(--primary-dark); transform: translateY(-2px); }
         .no-media {
             color: var(--text-secondary); font-size: 14px; padding: 14px;
             background: var(--bg); border-radius: 10px; text-align: center; width: 100%;
         }
+        .post-actions {
+            display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: center;
+        }
+        .btn-download {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--success); color: white !important; padding: 8px 16px;
+            border-radius: 10px; font-size: 13px; border: none; cursor: pointer;
+            font-family: 'Vazirmatn'; font-weight: 600; transition: all 0.3s;
+        }
+        .btn-download:hover { filter: brightness(1.08); transform: translateY(-2px); }
+        .btn-download:disabled { opacity: 0.6; cursor: wait; }
+        .btn-download.busy { background: #6b7280; }
+        .btn-download.ok { background: var(--success); }
+        .btn-download.err { background: var(--danger); }
         .post-url {
-            display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
-            background: var(--primary); color: white !important; padding: 8px 16px;
+            display: inline-flex; align-items: center; gap: 6px;
+            background: transparent; color: var(--primary) !important; padding: 8px 12px;
             border-radius: 10px; font-size: 13px; text-decoration: none;
-            transition: all 0.3s; font-weight: 500;
+            border: 1px solid var(--border); font-weight: 500;
         }
-        .post-url:hover {
-            background: var(--primary-dark); transform: translateX(-4px);
-            box-shadow: 0 4px 15px rgba(42,109,244,0.3);
-        }
+        .post-url:hover { border-color: var(--primary); }
         .extra-meta { display: flex; gap: 15px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
         .lightbox {
             display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -202,17 +209,12 @@
         .lightbox.active { display: flex; }
         .lightbox img {
             max-width: 90vw; max-height: 80vh; border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5); animation: zoomIn 0.3s ease;
-        }
-        @keyframes zoomIn {
-            from { transform: scale(0.8); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
         }
         .lightbox-close {
             position: absolute; top: 20px; left: 30px; color: white;
-            font-size: 36px; cursor: pointer; transition: transform 0.3s; z-index: 10000;
+            font-size: 36px; cursor: pointer; z-index: 10000;
         }
-        .lightbox-close:hover { transform: rotate(90deg); }
         .back-to-top {
             position: fixed; bottom: 25px; left: 25px; background: var(--primary);
             color: white; width: 45px; height: 45px; border-radius: 50%;
@@ -221,7 +223,6 @@
             transition: all 0.3s; opacity: 0; visibility: hidden; z-index: 999; border: none;
         }
         .back-to-top.visible { opacity: 1; visibility: visible; }
-        .back-to-top:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(42,109,244,0.5); }
         .footer {
             text-align: center; margin-top: 40px; padding: 20px;
             color: var(--text-secondary); font-size: 13px;
@@ -231,12 +232,17 @@
             background-color: var(--highlight-bg); color: var(--highlight-text);
             font-weight: bold; border-radius: 3px; padding: 0 2px;
         }
+        #toast {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: #111; color: #fff; padding: 10px 18px; border-radius: 10px;
+            font-size: 13px; z-index: 10001; display: none; max-width: 90vw;
+        }
+        #toast.show { display: block; }
         @media (max-width: 768px) {
             .header { margin: 10px; padding: 18px 15px; border-radius: 14px; }
             .header h1 { font-size: 22px; }
             .post { padding: 16px; margin-bottom: 16px; border-radius: 12px; }
             .media-item img, .media-item video { max-height: 280px; }
-            .theme-toggle { left: 15px; top: 20px; font-size: 18px; }
         }
     </style>
 </head>
@@ -257,11 +263,30 @@
         <i class="fas fa-search"></i>
         <input type="text" id="searchInput" placeholder="جستجو در پست‌ها..." oninput="filterPosts()">
     </div>
+    <div class="dl-defaults">
+        <label>حالت
+            <select id="dlMode">
+                <option value="video" selected>video</option>
+                <option value="audio">audio</option>
+            </select>
+        </label>
+        <label>مقصد
+            <select id="dlDest">
+                <option value="repo" selected>repo</option>
+                <option value="mega">mega</option>
+            </select>
+        </label>
+    </div>
+    <div class="token-bar">
+        <button type="button" onclick="setGithubToken()"><i class="fas fa-key"></i> تنظیم GitHub Token</button>
+        <span id="tokenStatus"></span>
+    </div>
 </div>
 
 <div class="container" id="postsContainer">
     {% for post in posts %}
     {% set post_id = (post.id or post.message_id or loop.index0)|string %}
+    {% set post_url = post.url or ('https://t.me/' ~ channel ~ '/' ~ post_id) %}
     <div class="post" data-text="{{ post.text|default('') }}" style="animation-delay: {{ loop.index0 * 0.05 }}s;">
         <div class="post-header">
             <span class="post-number">#{{ loop.index }}</span>
@@ -288,17 +313,10 @@
                         {% elif ext in ['mp4','webm','mov','mkv'] %}
                             <video controls preload="metadata">
                                 <source src="{{ m }}">
-                                مرورگر شما از ویدئو پشتیبانی نمی‌کند.
                             </video>
-                        {% elif ext in ['mp3','ogg','wav','m4a','opus','aac','flac','weba','oga','wma','mka','aiff','pcm','ra','rm','3gp'] or 'voice' in m.lower() or 'audio' in m.lower() %}
+                        {% elif ext in ['mp3','ogg','wav','m4a','opus','aac','flac','weba','oga'] or 'voice' in m.lower() or 'audio' in m.lower() %}
                             <audio controls preload="metadata" style="width: 100% !important;">
                                 <source src="{{ m }}">
-                                <div style="padding: 12px; background: #f8f9fa; border-radius: 8px; text-align: center; color: #666; font-size: 14px;">
-                                    <i class="fas fa-download"></i><br>
-                                    <a href="{{ m }}" download style="color: var(--primary); text-decoration: none;">
-                                        دانلود فایل صوتی
-                                    </a>
-                                </div>
                             </audio>
                         {% else %}
                             <a href="{{ m }}" download class="file-link">
@@ -310,17 +328,24 @@
                 {% endfor %}
             {% else %}
                 <div class="no-media">
-                    <i class="far fa-image"></i> بدون رسانه
+                    <i class="far fa-image"></i> بدون رسانه در آرشیو (دانلود از تلگرام با دکمه زیر)
                 </div>
             {% endif %}
         </div>
 
-        {% if post.url %}
-        <a href="{{ post.url }}" target="_blank" rel="noopener" class="post-url">
-            <i class="fas fa-external-link-alt"></i>
-            مشاهده در تلگرام
-        </a>
-        {% endif %}
+        <div class="post-actions">
+            <button type="button" class="btn-download"
+                data-url="{{ post_url }}"
+                data-id="{{ post_id }}"
+                onclick="requestDownload(this)">
+                <i class="fas fa-cloud-download-alt"></i>
+                دانلود در گیت‌هاب
+            </button>
+            <a href="{{ post_url }}" target="_blank" rel="noopener" class="post-url">
+                <i class="fab fa-telegram-plane"></i>
+                تلگرام
+            </a>
+        </div>
 
         {% if post.views or post.forwards or post.replies %}
         <div class="extra-meta">
@@ -333,7 +358,6 @@
     {% endfor %}
 </div>
 
-<!-- Lightbox -->
 <div id="lightbox" class="lightbox" onclick="closeLightbox()">
     <span class="lightbox-close">&times;</span>
     <img id="lightbox-img" src="" alt="پیش‌نمایش">
@@ -343,11 +367,126 @@
     <i class="fas fa-chevron-up"></i>
 </button>
 
+<div id="toast"></div>
+
 <div class="footer">
     تولید شده توسط <strong>Telegram Channel Scraper</strong> &copy; {{ current_time }}
+    · دانلود از طریق Issue کاتالوگ گیت‌هاب
 </div>
 
 <script>
+    // Injected by generator (safe defaults)
+    const GH_REPO = {{ (github_repo or 'alipoorkaramali/new-youtube-SoundCloud-downloader')|tojson }};
+    const GH_ISSUE = {{ (issue_number or 0)|int }};
+    const GH_ISSUE_URL = {{ (issue_url or '')|tojson }};
+    const TOKEN_KEY = 'gh_pat_telegram_dl';
+
+    function toast(msg) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 4000);
+    }
+
+    function updateTokenStatus() {
+        const has = !!localStorage.getItem(TOKEN_KEY);
+        const el = document.getElementById('tokenStatus');
+        if (el) el.textContent = has ? ' · Token ذخیره شده' : ' · Token لازم است (یک‌بار)';
+    }
+
+    function setGithubToken() {
+        const cur = localStorage.getItem(TOKEN_KEY) || '';
+        const t = prompt('GitHub Personal Access Token (permission: issues write روی همین مخزن):', cur);
+        if (t === null) return;
+        if (!t.trim()) {
+            localStorage.removeItem(TOKEN_KEY);
+            toast('Token پاک شد');
+        } else {
+            localStorage.setItem(TOKEN_KEY, t.trim());
+            toast('Token ذخیره شد (فقط در این مرورگر)');
+        }
+        updateTokenStatus();
+    }
+
+    function getToken() {
+        let t = localStorage.getItem(TOKEN_KEY);
+        if (!t) {
+            t = prompt('برای ارسال دستور دانلود، GitHub PAT لازم است (issues:write):');
+            if (t && t.trim()) {
+                localStorage.setItem(TOKEN_KEY, t.trim());
+                updateTokenStatus();
+                return t.trim();
+            }
+            return null;
+        }
+        return t;
+    }
+
+    async function requestDownload(btn) {
+        const postUrl = btn.getAttribute('data-url');
+        if (!postUrl) {
+            toast('لینک پست موجود نیست');
+            return;
+        }
+        if (!GH_ISSUE || GH_ISSUE < 1) {
+            toast('شماره Issue کاتالوگ در HTML نیست. یک‌بار Catalog Update را اجرا کنید و HTML را دوباره بسازید.');
+            if (GH_ISSUE_URL) window.open(GH_ISSUE_URL, '_blank');
+            return;
+        }
+        const mode = (document.getElementById('dlMode') || {}).value || 'video';
+        const dest = (document.getElementById('dlDest') || {}).value || 'repo';
+        const body = `/download ${postUrl} ${mode} ${dest}`;
+
+        const token = getToken();
+        if (!token) {
+            toast('بدون Token نمی‌توان به GitHub API زد');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.classList.add('busy');
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ارسال…';
+
+        try {
+            const resp = await fetch(`https://api.github.com/repos/${GH_REPO}/issues/${GH_ISSUE}/comments`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/vnd.github+json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-GitHub-Api-Version': '2022-11-28',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ body })
+            });
+            if (resp.status === 201) {
+                btn.classList.remove('busy');
+                btn.classList.add('ok');
+                btn.innerHTML = '<i class="fas fa-check"></i> درخواست ثبت شد';
+                toast('کامنت ارسال شد — ورک‌فلو دانلود شروع می‌شود');
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.classList.remove('ok');
+                    btn.innerHTML = oldHtml;
+                }, 5000);
+            } else {
+                const errText = await resp.text();
+                throw new Error(resp.status + ' ' + errText.slice(0, 200));
+            }
+        } catch (e) {
+            console.error(e);
+            btn.classList.remove('busy');
+            btn.classList.add('err');
+            btn.innerHTML = '<i class="fas fa-times"></i> خطا';
+            toast('خطا: ' + (e.message || e));
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.classList.remove('err');
+                btn.innerHTML = oldHtml;
+            }, 4000);
+        }
+    }
+
     function openLightbox(src) {
         document.getElementById('lightbox-img').src = src;
         document.getElementById('lightbox').classList.add('active');
@@ -374,6 +513,7 @@
             document.body.classList.add('dark');
             document.getElementById('theme-icon').className = 'fas fa-sun';
         }
+        updateTokenStatus();
     })();
 
     const backBtn = document.getElementById('backToTop');
@@ -381,7 +521,7 @@
         backBtn.classList.toggle('visible', window.scrollY > 400);
         const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
         const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
-        const scrolled = (winScroll / height) * 100;
+        const scrolled = height ? (winScroll / height) * 100 : 0;
         document.getElementById('progress-bar').style.width = scrolled + '%';
     });
     function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -390,29 +530,15 @@
         const text = btn.getAttribute('data-fulltext');
         navigator.clipboard.writeText(text).then(() => {
             btn.innerHTML = '<i class="fas fa-check"></i> کپی شد';
-            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> کپی'; }, 2000);
-        }).catch(() => alert('خطا در کپی متن'));
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> کپی'; }, 1500);
+        });
     }
 
     function filterPosts() {
-        const query = document.getElementById('searchInput').value.trim().toLowerCase();
-        const posts = document.querySelectorAll('.post');
-        
-        posts.forEach(post => {
-            const text = post.getAttribute('data-text').toLowerCase();
-            const shouldShow = !query || text.includes(query);
-            post.style.display = shouldShow ? '' : 'none';
-            
-            if (shouldShow && query) {
-                const bodyDiv = post.querySelector('.post-body');
-                if (bodyDiv) {
-                    let html = bodyDiv.innerHTML;
-                    // حذف کامل تگ‌های highlight قبلی
-                    html = html.replace(/<span class="highlight">|<\/span>/g, '');
-                    const regex = new RegExp(`(${query})`, 'gi');
-                    bodyDiv.innerHTML = html.replace(regex, '<span class="highlight">$1</span>');
-                }
-            }
+        const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+        document.querySelectorAll('.post').forEach(p => {
+            const t = (p.getAttribute('data-text') || '').toLowerCase();
+            p.style.display = (!q || t.includes(q)) ? '' : 'none';
         });
     }
 </script>
