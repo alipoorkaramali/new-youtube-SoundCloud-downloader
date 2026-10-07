@@ -1,0 +1,163 @@
+name: 📥 Telegram download on comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  download:
+    if: >
+      contains(github.event.comment.body, '/download') &&
+      github.event.issue.title == '📱 Telegram Catalog – Download'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Parse /download number
+        id: parse
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          NUM=$(echo "$COMMENT" | grep -oE '/download[[:space:]]+[0-9]+' | awk '{print $2}' | head -1)
+          if [ -z "$NUM" ]; then
+            echo "❌ فرمت: /download <شماره>"
+            exit 1
+          fi
+          echo "number=$NUM" >> "$GITHUB_OUTPUT"
+          echo "📌 number=$NUM"
+
+      - name: Resolve catalog item
+        id: item
+        run: |
+          NUM="${{ steps.parse.outputs.number }}"
+          if [ ! -f State/telegram_catalog_index.json ]; then
+            echo "❌ State/telegram_catalog_index.json نیست. اول scrape + catalog update را اجرا کنید."
+            exit 1
+          fi
+          python3 << 'PY'
+          import json, os, sys
+          num = os.environ["NUM"]
+          with open("State/telegram_catalog_index.json", encoding="utf-8") as f:
+              idx = json.load(f)
+          item = idx.get(num)
+          if not item:
+              print(f"❌ شماره {num} در کاتالوگ نیست (1..{max(map(int, idx.keys())) if idx else 0})")
+              sys.exit(1)
+          channel = item["channel"]
+          pid = item["id"]
+          url = item.get("url") or f"https://t.me/{channel}/{pid}"
+          text = (item.get("text") or "")[:120]
+          print(f"channel={channel}")
+          print(f"id={pid}")
+          print(f"url={url}")
+          print(f"text={text}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"channel={channel}\n")
+              out.write(f"post_id={pid}\n")
+              out.write(f"url={url}\n")
+              out.write(f"text={text}\n")
+          PY
+        env:
+          NUM: ${{ steps.parse.outputs.number }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install playwright
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+
+      - name: Decrypt browser profile
+        run: |
+          gpg --batch --yes --passphrase "${{ secrets.COOKIE_DECRYPT_KEY }}" \
+            --decrypt config/browser_profile.tar.gz.gpg > config/browser_profile.tar.gz
+          tar -xzf config/browser_profile.tar.gz -C config/
+
+      - name: Patch scraper helpers
+        run: |
+          python3 .github/scripts/patch_scraper_scroll.py .github/scripts/scraper.py || true
+          python3 .github/scripts/patch_stop_before.py .github/scripts/scraper.py || true
+
+      - name: Write config for single-post media download
+        run: |
+          python3 << 'PY'
+          import yaml
+          from pathlib import Path
+          cfg_path = Path("config/config.yaml")
+          c = {}
+          if cfg_path.exists():
+              c = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+          c["channel"] = "${{ steps.item.outputs.channel }}"
+          c["start_link"] = "${{ steps.item.outputs.url }}"
+          c["limit"] = 1
+          c["debug_mode"] = False
+          c["resume"] = False
+          c["scroll_direction"] = "up"
+          c["save_screenshots"] = False
+          c["max_media_mb"] = 80
+          c["max_scroll_attempts"] = 8
+          c["timeout_seconds"] = 0
+          c["auto_extend_timeout"] = True
+          c.pop("stop_before_id", None)
+          cfg_path.write_text(yaml.dump(c, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+          print(c)
+          PY
+
+      - name: Run scraper (media for one post)
+        run: xvfb-run python .github/scripts/main.py --config config/config.yaml
+
+      - name: Commit downloaded media
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CH="${{ steps.item.outputs.channel }}"
+          git add "Download/telegram_downloads/${CH}/" || true
+          if git diff --staged --quiet; then
+            echo "No new files to commit (maybe already present)"
+          else
+            git commit -m "Add Telegram media @${CH} post ${{ steps.item.outputs.post_id }}"
+            git pull --rebase origin main || true
+            git push origin main
+          fi
+
+      - name: Comment success
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NUM="${{ steps.parse.outputs.number }}"
+          CH="${{ steps.item.outputs.channel }}"
+          PID="${{ steps.item.outputs.post_id }}"
+          URL="${{ steps.item.outputs.url }}"
+          TEXT="${{ steps.item.outputs.text }}"
+          PATH_DIR="Download/telegram_downloads/${CH}/"
+          BODY=$(cat <<EOF
+          ✅ دانلود تلگرام برای آیتم **#${NUM}** انجام شد.
+
+          - **کانال:** @${CH}
+          - **post id:** `${PID}`
+          - **لینک:** ${URL}
+          - **متن:** ${TEXT}
+          - **مسیر:** `${PATH_DIR}`
+          EOF
+          )
+          gh issue comment "${{ github.event.issue.number }}" --body "$BODY"
+
+      - name: Comment failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "❌ خطا در `/download ${{ steps.parse.outputs.number }}`. لاگ Actions را ببینید."
