@@ -6,7 +6,13 @@ on:
 
 jobs:
   download:
-    if: contains(github.event.comment.body, '/download')
+    # فقط Issueهای اینستاگرام — نه کاتالوگ تلگرام / یوتیوب
+    if: >
+      contains(github.event.comment.body, '/download') &&
+      (
+        startsWith(github.event.issue.title, '📸 Instagram') ||
+        contains(github.event.issue.title, 'Instagram posts')
+      )
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -22,6 +28,11 @@ jobs:
           SHORTCODE=$(echo "$COMMENT" | grep -oE '/download[[:space:]]+([A-Za-z0-9_-]+)' | awk '{print $2}' | head -1)
           if [ -z "$SHORTCODE" ]; then
             echo "❌ فرمت صحیح نیست. از /download <shortcode> استفاده کنید."
+            exit 1
+          fi
+          # شماره خالص (مثل 22) shortcode اینستا نیست — رد کن
+          if echo "$SHORTCODE" | grep -qE '^[0-9]+$'; then
+            echo "❌ این shortcode اینستاگرام نیست (فقط عدد). احتمالاً کامنت برای کاتالوگ تلگرام بوده."
             exit 1
           fi
           echo "shortcode=$SHORTCODE" >> $GITHUB_OUTPUT
@@ -104,7 +115,6 @@ jobs:
           echo "محتویات قبل از فشرده‌سازی:"
           ls -lh
 
-          # فشرده‌سازی تمام فایل‌های ویدیویی
           find . -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mov" -o -iname "*.m4v" -o -iname "*.webm" -o -iname "*.mkv" \) | while read -r file; do
             filename=$(basename "$file")
             name="${filename%.*}"
@@ -114,12 +124,6 @@ jobs:
             echo ""
             echo "🔄 فشرده‌سازی: $filename ($ORIG_SIZE)"
 
-            # تنظیمات تجاوبی برای کم کردن حجم:
-            # - حداکثر 720p (عمودی و افقی)
-            # - CRF 28 (فشرده‌سازی قوی)
-            # - preset medium
-            # - صدای AAC 64k
-            # - yuv420p + faststart
             if ffmpeg -y -i "$file" \
               -c:v libx264 \
               -preset medium \
@@ -137,10 +141,8 @@ jobs:
               ORIG_BYTES=$(stat -c%s "$file")
               NEW_BYTES=$(stat -c%s "$tmpfile")
 
-              # فقط اگر فایل جدید کوچک‌تر شد جایگزین کن
               if [ "$NEW_BYTES" -lt "$ORIG_BYTES" ]; then
                 mv -f "$tmpfile" "${name}.mp4"
-                # اگر اسم قبلی متفاوت بود، فایل قدیمی را حذف کن
                 if [ "$filename" != "${name}.mp4" ]; then
                   rm -f "$file"
                 fi
@@ -170,17 +172,13 @@ jobs:
 
           cd "$FULLPATH"
 
-          # پیدا کردن فایل‌های بزرگ‌تر از ۳۰ مگابایت
           find . -maxdepth 1 -type f -size +30M | while read -r file; do
             filename=$(basename "$file")
             name="${filename%.*}"
 
             echo "📦 فایل بزرگ پیدا شد: $filename ($(du -h "$file" | cut -f1))"
 
-            # ساخت زیپ چندقسمتی (هر قسمت حداکثر ۳۰ مگابایت)
             zip -s 30m -9 "${name}.zip" "$filename"
-
-            # حذف فایل اصلی
             rm -f "$filename"
 
             echo "✅ تبدیل شد به:"
@@ -213,7 +211,6 @@ jobs:
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
 
-          # لیست فایل‌ها برای نمایش در کامنت
           FILE_LIST=$(ls -1 "$FULLPATH" 2>/dev/null | head -20)
           FIRST_FILE=$(echo "$FILE_LIST" | head -1)
 
@@ -229,7 +226,6 @@ jobs:
           echo "📁 مسیر: \`${FULLPATH}/\`" >> "$BODY"
           echo "🔗 مشاهده: ${FILE_URL}" >> "$BODY"
 
-          # اگر فایل زیپ شده باشد توضیح بده
           if ls "$FULLPATH"/*.z* 1>/dev/null 2>&1 || ls "$FULLPATH"/*.zip 1>/dev/null 2>&1; then
             echo "" >> "$BODY"
             echo "📦 **فایل بزرگ به چند قسمت زیپ تبدیل شد** (برای جلوگیری از محدودیت 100MB گیت‌هاب)" >> "$BODY"
