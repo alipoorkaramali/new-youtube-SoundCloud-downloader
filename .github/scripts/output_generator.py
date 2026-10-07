@@ -5,10 +5,6 @@
 ماژول تولید خروجی‌های چندگانه برای اسکرپر تلگرام
 ---------------------------------------------
 JSON / CSV / HTML / ZIP
-
-- همیشه با آرشیو قبلی ادغام می‌شود
-- مرتب‌سازی از جدید به قدیم (id نزولی)
-- پنجره: هدف ۵۰ پست؛ اگر در یک run بیش از ۵۰ پست جدید آمد، همان تعداد بیشتر نگه داشته می‌شود
 """
 
 from __future__ import annotations
@@ -27,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
 DEFAULT_KEEP_LATEST = 50
+META_PATH = Path("State/telegram_catalog_meta.json")
 
 
 class OutputGenerator:
@@ -59,6 +56,23 @@ class OutputGenerator:
 
     def _validate_post_structure(self, post: Dict) -> bool:
         return isinstance(post, dict) and bool(post.get("id"))
+
+    def _load_catalog_meta(self) -> Dict[str, Any]:
+        meta = {
+            "github_repo": "alipoorkaramali/new-youtube-SoundCloud-downloader",
+            "issue_number": 0,
+            "issue_url": "",
+        }
+        for path in (META_PATH, Path.cwd() / META_PATH):
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    if isinstance(data, dict):
+                        meta.update({k: data[k] for k in meta if k in data})
+                    break
+                except Exception as e:
+                    self.logger.warning(f"⚠️ meta read: {e}")
+        return meta
 
     def _extract_posts_from_html(self, html_path: Path) -> List[Dict]:
         try:
@@ -142,7 +156,6 @@ class OutputGenerator:
             self.posts.sort(key=lambda x: str(x.get("id", "0")), reverse=True)
 
     def _apply_rolling_window(self) -> None:
-        """هدف ۵۰؛ اگر این run بیش از ۵۰ پست جدید آورد، همان تعداد بیشتر بماند."""
         self._sort_posts_newest_first()
         before = len(self.posts)
         run_n = int(self._initial_post_count or 0)
@@ -158,11 +171,6 @@ class OutputGenerator:
             self.logger.info(
                 f"🪟 پنجره هدف={self.keep_latest} (effective={effective}): "
                 f"{before} پست؛ run_new={run_n}"
-            )
-        if self.posts:
-            self.logger.info(
-                f"🔃 ترتیب: جدید→قدیم (اول={self.posts[0].get('id')}, "
-                f"آخر={self.posts[-1].get('id')})"
             )
 
     def generate_json(self) -> None:
@@ -202,6 +210,7 @@ class OutputGenerator:
             Path.cwd() / "templates",
             Path.cwd() / ".github" / "templates",
         ]
+        meta = self._load_catalog_meta()
         for template_dir in template_dirs:
             template_file = template_dir / "post_template.html"
             if template_file.exists():
@@ -222,6 +231,10 @@ class OutputGenerator:
                     posts=self.posts,
                     media_map=self.media_map,
                     current_time=current_iran,
+                    github_repo=meta.get("github_repo")
+                    or "alipoorkaramali/new-youtube-SoundCloud-downloader",
+                    issue_number=int(meta.get("issue_number") or 0),
+                    issue_url=meta.get("issue_url") or "",
                 )
         raise FileNotFoundError("قالب post_template.html پیدا نشد")
 

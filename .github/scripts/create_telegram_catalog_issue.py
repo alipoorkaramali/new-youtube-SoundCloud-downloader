@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build Telegram catalog index + create/update GitHub Issue."""
+"""Build Telegram catalog index + create/update GitHub Issue + meta for HTML."""
 from __future__ import annotations
 
 import json
@@ -14,6 +14,7 @@ import requests
 
 ISSUE_TITLE = "📱 Telegram Catalog – Download"
 INDEX_PATH = Path("State/telegram_catalog_index.json")
+META_PATH = Path("State/telegram_catalog_meta.json")
 DOWNLOADS_ROOT = Path("Download/telegram_downloads")
 KEEP_PER_CHANNEL = 50
 
@@ -99,26 +100,25 @@ def build_issue_body(index: Dict[str, Dict[str, Any]], groups: List[Tuple[str, L
     lines.append("")
     lines.append("### 📥 How to download")
     lines.append("")
-    lines.append("Comment on this issue:")
+    lines.append("On this issue, comment:")
     lines.append("")
     lines.append("```")
-    lines.append("/download <number> [audio|video] [mega|repo]")
+    lines.append("/download <number|t.me-url> [audio|video] [mega|repo]")
     lines.append("```")
+    lines.append("")
+    lines.append("Or open the channel HTML archive and click **دانلود در گیت‌هاب**")
+    lines.append("(needs a GitHub PAT once in the browser).")
     lines.append("")
     lines.append("| Option | Meaning |")
     lines.append("|--------|---------|")
-    lines.append("| *(empty)* or `video` | Full media (default) |")
-    lines.append("| `audio` | Extract audio (mp3) from videos |")
-    lines.append("| *(empty)* or `repo` | Save in this GitHub repo |")
-    lines.append("| `mega` | Upload to **Mega.nz** (`TelegramNews/...`) |")
+    lines.append("| `video` (default) | Full media |")
+    lines.append("| `audio` | Extract mp3 from videos |")
+    lines.append("| `repo` (default) | Save in this repo |")
+    lines.append("| `mega` | Upload to Mega.nz |")
     lines.append("")
     lines.append("**Examples**")
-    lines.append("- `/download 5` → video + repo")
-    lines.append("- `/download 5 audio` → audio + repo")
-    lines.append("- `/download 5 video mega` → video + Mega")
-    lines.append("- `/download 12 audio mega` → audio + Mega")
-    lines.append("")
-    lines.append("Media is fetched with the Telegram scraper (Playwright).")
+    lines.append("- `/download 5`")
+    lines.append("- `/download https://t.me/bbcpersian/12345 audio mega`")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -173,7 +173,7 @@ def find_issue(repo: str, token: str) -> Any:
     return None
 
 
-def create_or_update_issue(repo: str, token: str, body: str) -> str:
+def create_or_update_issue(repo: str, token: str, body: str) -> Dict[str, Any]:
     headers = api_headers(token)
     existing = find_issue(repo, token)
     if existing:
@@ -185,8 +185,9 @@ def create_or_update_issue(repo: str, token: str, body: str) -> str:
             timeout=60,
         )
         if r.status_code == 200:
+            data = r.json()
             print(f"✅ Issue updated #{num}")
-            return r.json().get("html_url", "")
+            return data
         raise RuntimeError(f"update #{num} {r.status_code} {r.text[:300]}")
     r = requests.post(
         f"https://api.github.com/repos/{repo}/issues",
@@ -195,9 +196,23 @@ def create_or_update_issue(repo: str, token: str, body: str) -> str:
         timeout=60,
     )
     if r.status_code == 201:
-        print(f"✅ Issue created #{r.json().get('number')}")
-        return r.json().get("html_url", "")
+        data = r.json()
+        print(f"✅ Issue created #{data.get('number')}")
+        return data
     raise RuntimeError(f"create {r.status_code} {r.text[:300]}")
+
+
+def write_meta(repo: str, issue: Dict[str, Any]) -> None:
+    META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "github_repo": repo,
+        "issue_number": int(issue.get("number") or 0),
+        "issue_url": issue.get("html_url") or "",
+        "issue_title": ISSUE_TITLE,
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    META_PATH.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"📝 meta → {META_PATH}: {meta}")
 
 
 def main() -> None:
@@ -219,8 +234,9 @@ def main() -> None:
     print(f"📇 index entries: {len(index)} → {INDEX_PATH}")
 
     body = build_issue_body(index, groups)
-    url = create_or_update_issue(repo, token, body)
-    print(f"🔗 {url}")
+    issue = create_or_update_issue(repo, token, body)
+    write_meta(repo, issue)
+    print(f"🔗 {issue.get('html_url')}")
 
 
 if __name__ == "__main__":
