@@ -1,11 +1,6 @@
 name: fix-scrape-yml
-
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/fix-scrape-yml.yml'
-
 jobs:
   fix:
     runs-on: ubuntu-latest
@@ -15,66 +10,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Restore scrape and merge catalog job
+      - name: Assemble
         run: |
           set -e
           curl -sL "https://raw.githubusercontent.com/alipoorkaramali/new-youtube-SoundCloud-downloader/d5c1217d6298c8a856b3cc455b4b75be00c97df2/.github/workflows/Scrape%20Telegram.yml" -o /tmp/base.yml
           test $(wc -c < /tmp/base.yml) -gt 10000
-          cat /tmp/base.yml > ".github/workflows/Scrape Telegram.yml"
-          cat >> ".github/workflows/Scrape Telegram.yml" << 'EOF'
-
-  update-catalog:
-    needs: [prepare, scrape]
-    if: >-
-      always() &&
-      needs.prepare.result == 'success' &&
-      (needs.scrape.result == 'success' || needs.scrape.result == 'skipped')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install requests
-        run: pip install requests
-
-      - name: Build catalog + update Issue
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python .github/scripts/create_telegram_catalog_issue.py
-
-      - name: Commit index + meta
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase --autostash origin ${{ github.ref_name }} || true
-          git add State/telegram_catalog_index.json State/telegram_catalog_meta.json || true
-          if git diff --staged --quiet; then
-            echo "No catalog file changes"
-          else
-            git commit -m "chore(telegram): update catalog index + meta [skip ci]"
-            git push origin HEAD:${{ github.ref_name }} || true
-          fi
-EOF
-          grep -n "update-catalog:" ".github/workflows/Scrape Telegram.yml"
-          head -3 ".github/workflows/Scrape Telegram.yml"
+          echo "CiAgdXBkYXRlLWNhdGFsb2c6CiAgICBuZWVkczogW3ByZXBhcmUsIHNjcmFwZV0KICAgIGlmOiA+LQogICAgICBhbHdheXMoKSAmJgogICAgICBuZWVkcy5wcmVwYXJlLnJlc3VsdCA9PSAnc3VjY2VzcycgJiYKICAgICAgKG5lZWRzLnNjcmFwZS5yZXN1bHQgPT0gJ3N1Y2Nlc3MnIHx8IG5lZWRzLnNjcmFwZS5yZXN1bHQgPT0gJ3NraXBwZWQnKQogICAgcnVucy1vbjogdWJ1bnR1LWxhdGVzdAogICAgcGVybWlzc2lvbnM6CiAgICAgIGNvbnRlbnRzOiB3cml0ZQogICAgICBpc3N1ZXM6IHdyaXRlCiAgICBzdGVwczoKICAgICAgLSB1c2VzOiBhY3Rpb25zL2NoZWNrb3V0QHY0CiAgICAgICAgd2l0aDoKICAgICAgICAgIGZldGNoLWRlcHRoOiAxCgogICAgICAtIHVzZXM6IGFjdGlvbnMvc2V0dXAtcHl0aG9uQHY1CiAgICAgICAgd2l0aDoKICAgICAgICAgIHB5dGhvbi12ZXJzaW9uOiAiMy4xMSIKCiAgICAgIC0gbmFtZTogSW5zdGFsbCByZXF1ZXN0cwogICAgICAgIHJ1bjogcGlwIGluc3RhbGwgcmVxdWVzdHMKCiAgICAgIC0gbmFtZTogQnVpbGQgY2F0YWxvZyArIHVwZGF0ZSBJc3N1ZQogICAgICAgIGVudjoKICAgICAgICAgIEdJVEhVQl9SRVBPU0lUT1JZOiAke3sgZ2l0aHViLnJlcG9zaXRvcnkgfX0KICAgICAgICAgIEdJVEhVQl9UT0tFTjogJHt7IGdpdGh1Yi50b2tlbiB9fQogICAgICAgIHJ1bjogcHl0aG9uIC5naXRodWIvc2NyaXB0cy9jcmVhdGVfdGVsZWdyYW1fY2F0YWxvZ19pc3N1ZS5weQoKICAgICAgLSBuYW1lOiBDb21taXQgaW5kZXggKyBtZXRhCiAgICAgICAgcnVuOiB8CiAgICAgICAgICBnaXQgY29uZmlnIHVzZXIubmFtZSAiZ2l0aHViLWFjdGlvbnNbYm90XSIKICAgICAgICAgIGdpdCBjb25maWcgdXNlci5lbWFpbCAiZ2l0aHViLWFjdGlvbnNbYm90XUB1c2Vycy5ub3JlcGx5LmdpdGh1Yi5jb20iCiAgICAgICAgICBnaXQgcHVsbCAtLXJlYmFzZSAtLWF1dG9zdGFzaCBvcmlnaW4gJHt7IGdpdGh1Yi5yZWZfbmFtZSB9fSB8fCB0cnVlCiAgICAgICAgICBnaXQgYWRkIFN0YXRlL3RlbGVncmFtX2NhdGFsb2dfaW5kZXguanNvbiBTdGF0ZS90ZWxlZ3JhbV9jYXRhbG9nX21ldGEuanNvbiB8fCB0cnVlCiAgICAgICAgICBpZiBnaXQgZGlmZiAtLXN0YWdlZCAtLXF1aWV0OyB0aGVuCiAgICAgICAgICAgIGVjaG8gIk5vIGNhdGFsb2cgZmlsZSBjaGFuZ2VzIgogICAgICAgICAgZWxzZQogICAgICAgICAgICBnaXQgY29tbWl0IC1tICJjaG9yZSh0ZWxlZ3JhbSk6IHVwZGF0ZSBjYXRhbG9nIGluZGV4ICsgbWV0YSBbc2tpcCBjaV0iCiAgICAgICAgICAgIGdpdCBwdXNoIG9yaWdpbiBIRUFEOiR7eyBnaXRodWIucmVmX25hbWUgfX0gfHwgdHJ1ZQogICAgICAgICAgZmkK" | base64 -d > /tmp/job.yml
+          cat /tmp/base.yml /tmp/job.yml > ".github/workflows/Scrape Telegram.yml"
+          wc -c ".github/workflows/Scrape Telegram.yml"
+          grep -n update-catalog ".github/workflows/Scrape Telegram.yml"
           rm -f .github/workflows/telegram-catalog-update.yml
           rm -f .github/workflows/fix-scrape-yml.yml
+          rm -rf .github/_merge
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ".github/workflows/Scrape Telegram.yml"
-          git add -A .github/workflows/telegram-catalog-update.yml .github/workflows/fix-scrape-yml.yml || true
-          git status
+          git add -A
           git commit -m "feat(telegram): catalog Issue update inside Scrape workflow"
           git pull --rebase origin main || true
           git push origin main
