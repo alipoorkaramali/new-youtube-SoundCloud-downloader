@@ -11,32 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Restore gitty from good commit
+      - name: Download good gitty + apply patch
         run: |
           set -e
-          git show 2a37bfb2857fad6244d514b6e3ec5f1a8894b4a3:docs/gitty.sh > /tmp/g.sh
+          curl -sL "https://raw.githubusercontent.com/alipoorkaramali/new-youtube-SoundCloud-downloader/2a37bfb2857fad6244d514b6e3ec5f1a8894b4a3/docs/gitty.sh" -o /tmp/g.sh
           wc -c /tmp/g.sh
-          # patch download comment block with a small external python from stdin
-          python3 -c "
-          from pathlib import Path
-          text = Path('/tmp/g.sh').read_text(encoding='utf-8')
-          start = text.find('Post /download comment')
-          i = text.find('                    1)', start)
-          j = text.find('                    2)', i)
-          print('i,j', i, j)
-          assert i>0 and j>i
-          new = Path('/tmp/new_block.txt').read_text(encoding='utf-8')
-          text2 = text[:i] + new + text[j:]
-          text2 = text2.replace('gitty-patch-id: p19-diagnostic-save-to-list', 'gitty-patch-id: p20-download-mode-dest')
-          text2 = text2.replace('BUILD: 2026-10-05-p19', 'BUILD: 2026-10-07-p20')
-          Path('docs/gitty.sh').write_text(text2, encoding='utf-8')
-          print('written', len(text2))
-          "
+          test $(wc -c < /tmp/g.sh) -gt 50000
 
-      - name: Write patch block
-        run: |
           cat > /tmp/new_block.txt << 'ENDBLOCK'
                               1)
                                   local target=""
@@ -102,10 +85,6 @@ jobs:
                                   ;;
           ENDBLOCK
 
-      - name: Apply patch then commit
-        run: |
-          set -e
-          git show 2a37bfb2857fad6244d514b6e3ec5f1a8894b4a3:docs/gitty.sh > /tmp/g.sh
           python3 -c "
           from pathlib import Path
           text = Path('/tmp/g.sh').read_text(encoding='utf-8')
@@ -121,6 +100,7 @@ jobs:
           Path('docs/gitty.sh').write_text(text2, encoding='utf-8')
           print('written', len(text2))
           "
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           rm -f .github/workflows/restore-gitty.yml
