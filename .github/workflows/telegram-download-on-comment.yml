@@ -30,7 +30,6 @@ jobs:
           COMMENT="${{ github.event.comment.body }}"
           LINE=$(echo "$COMMENT" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
 
-          # Prefer t.me URL form (from HTML button)
           TME=$(echo "$LINE" | grep -oiE 'https?://t\.me/[A-Za-z0-9_]+/[0-9]+' | head -1)
           NUM=""
           if [ -n "$TME" ]; then
@@ -61,7 +60,6 @@ jobs:
               repo) DEST="repo" ;;
             esac
           done
-          # also scan whole line for mode/dest
           echo "$LINE" | grep -qiE '[[:space:]]audio([[:space:]]|$)' && MODE="audio"
           echo "$LINE" | grep -qiE '[[:space:]]video([[:space:]]|$)' && MODE="video"
           echo "$LINE" | grep -qiE '[[:space:]]mega([[:space:]]|$)' && DEST="mega"
@@ -96,7 +94,6 @@ jobs:
                   sys.exit(1)
               channel, pid = m.group(1), m.group(2)
               url = f"https://t.me/{channel}/{pid}"
-              # optional text from index
               idx_path = Path("State/telegram_catalog_index.json")
               if idx_path.exists():
                   try:
@@ -186,19 +183,75 @@ jobs:
       - name: Run scraper (media for one post)
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
 
-      - name: Locate post media folder
+      - name: Collect only this post media (no screenshots)
         id: media
         run: |
+          set -e
           CH="${{ steps.item.outputs.channel }}"
           PID="${{ steps.item.outputs.post_id }}"
           BASE="Download/telegram_downloads/${CH}"
-          FOUND=""
-          if [ -d "$BASE/$PID" ]; then FOUND="$BASE/$PID"
-          elif [ -d "$BASE/media/$PID" ]; then FOUND="$BASE/media/$PID"
-          else FOUND="$BASE"
+          STAGING="/tmp/telegram_dl_${CH}_${PID}"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+
+          CANDIDATES=()
+          [ -d "$BASE/$PID" ] && CANDIDATES+=("$BASE/$PID")
+          [ -d "$BASE/media/$PID" ] && CANDIDATES+=("$BASE/media/$PID")
+          [ -d "$BASE/media" ] && CANDIDATES+=("$BASE/media")
+          [ -d "$BASE" ] && CANDIDATES+=("$BASE")
+
+          MEDIA_EXT='mp4|mkv|webm|mov|avi|mp3|m4a|ogg|opus|wav|flac|aac|jpg|jpeg|png|gif|webp|pdf|doc|docx|zip|rar|7z'
+
+          copied=0
+          for DIR in "${CANDIDATES[@]}"; do
+            [ -d "$DIR" ] || continue
+            case "$DIR" in
+              *post_screenshots*|*/screenshots*|*/debug*) continue ;;
+            esac
+            while IFS= read -r -d '' f; do
+              rel="${f#$DIR/}"
+              case "$rel" in
+                post_screenshots/*|screenshots/*|debug/*|*_screenshot*|*/debug_*.png|*/initial.png|*/final.png|*/before_click*|*/search_*) continue ;;
+              esac
+              base=$(basename "$f")
+              case "$base" in
+                *screenshot*|debug_*.png|initial.png|final.png|before_click*|search_*.png|*_final.png) continue ;;
+              esac
+              if [ "$DIR" = "$BASE" ] || [ "$DIR" = "$BASE/media" ]; then
+                case "$base" in
+                  *"$PID"*) ;;
+                  *) continue ;;
+                esac
+              fi
+              cp -n "$f" "$STAGING/" 2>/dev/null || cp "$f" "$STAGING/"
+              copied=$((copied+1))
+              echo "+ $base"
+            done < <(find "$DIR" -maxdepth 4 -type f -regextype posix-extended \
+              -iregex ".*\.($MEDIA_EXT)$" -print0 2>/dev/null)
+          done
+
+          if [ "$copied" -eq 0 ] && [ -d "$BASE" ]; then
+            echo "⚠️ post-specific media not found — fallback (still no screenshots)"
+            while IFS= read -r -d '' f; do
+              rel="${f#$BASE/}"
+              case "$rel" in
+                post_screenshots/*|screenshots/*|debug/*) continue ;;
+              esac
+              base=$(basename "$f")
+              case "$base" in
+                *screenshot*|debug_*.png|initial.png|final.png|before_click*|search_*.png) continue ;;
+              esac
+              case "$base" in
+                *"$PID"*) cp "$f" "$STAGING/"; copied=$((copied+1)); echo "+ $base" ;;
+              esac
+            done < <(find "$BASE" -maxdepth 5 -type f -regextype posix-extended \
+              -iregex ".*\.($MEDIA_EXT)$" -print0 2>/dev/null)
           fi
-          echo "folder=$FOUND" >> "$GITHUB_OUTPUT"
-          ls -la "$FOUND" 2>/dev/null | head -30 || true
+
+          echo "folder=$STAGING" >> "$GITHUB_OUTPUT"
+          echo "count=$copied" >> "$GITHUB_OUTPUT"
+          echo "📦 staged $copied media file(s) for post $PID (screenshots excluded)"
+          ls -la "$STAGING" || true
 
       - name: Extract audio if mode=audio
         if: steps.parse.outputs.mode == 'audio'
@@ -206,7 +259,7 @@ jobs:
           FOLDER="${{ steps.media.outputs.folder }}"
           mkdir -p "$FOLDER"
           cd "$FOLDER"
-          find . -maxdepth 3 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' -o -iname '*.mov' \) | while read -r f; do
+          find . -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' -o -iname '*.mov' \) | while read -r f; do
             name="${f%.*}"
             out="${name}.mp3"
             if ffmpeg -y -i "$f" -vn -acodec libmp3lame -q:a 4 "$out" 2>/dev/null; then
@@ -223,11 +276,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           CH="${{ steps.item.outputs.channel }}"
-          git add "Download/telegram_downloads/${CH}/" || true
+          PID="${{ steps.item.outputs.post_id }}"
+          STAGING="${{ steps.media.outputs.folder }}"
+          DEST_DIR="Download/telegram_downloads/${CH}/media/${PID}"
+          mkdir -p "$DEST_DIR"
+          if [ -d "$STAGING" ] && [ "$(ls -A "$STAGING" 2>/dev/null)" ]; then
+            cp -n "$STAGING"/* "$DEST_DIR/" 2>/dev/null || cp "$STAGING"/* "$DEST_DIR/"
+          fi
+          git add "$DEST_DIR" || true
+          git reset HEAD -- "Download/telegram_downloads/${CH}/post_screenshots" 2>/dev/null || true
           if git diff --staged --quiet; then
-            echo "No new files"
+            echo "No new media files to commit"
           else
-            git commit -m "Add Telegram media @${CH} post ${{ steps.item.outputs.post_id }} (${{ steps.parse.outputs.mode }})"
+            git commit -m "Add Telegram media @${CH} post ${PID} (${{ steps.parse.outputs.mode }})"
             git pull --rebase origin main || true
             git push origin main
           fi
@@ -244,6 +305,18 @@ jobs:
           CH="${{ steps.item.outputs.channel }}"
           PID="${{ steps.item.outputs.post_id }}"
           MEGA_PATH="mega:TelegramNews/${CH}/${PID}"
+
+          if [ ! -d "$FOLDER" ] || [ -z "$(ls -A "$FOLDER" 2>/dev/null)" ]; then
+            echo "❌ پوشه مدیا خالی — چیزی به Mega آپلود نمی‌شود"
+            echo "mega_path=" >> "$GITHUB_OUTPUT"
+            echo "links=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          find "$FOLDER" -type f \( \
+            -iname '*screenshot*' -o -iname 'debug_*.png' -o -iname 'initial.png' \
+            -o -iname 'final.png' -o -iname 'before_click*' -o -iname 'search_*.png' \
+          \) -delete 2>/dev/null || true
 
           if [ ! -f config/rclone_mega.conf.gpg ]; then
             API="https://api.github.com/repos/alipoorkaramali/youtube-SoundCloud-downloader/contents/config/rclone_mega.conf.gpg"
@@ -268,7 +341,8 @@ jobs:
             --output ~/.config/rclone/rclone.conf --decrypt config/rclone_mega.conf.gpg
           chmod 600 ~/.config/rclone/rclone.conf
           $RCLONE --config ~/.config/rclone/rclone.conf mkdir "$MEGA_PATH" 2>/dev/null || true
-          $RCLONE --config ~/.config/rclone/rclone.conf copy "$FOLDER" "$MEGA_PATH" --progress
+          $RCLONE --config ~/.config/rclone/rclone.conf copy "$FOLDER" "$MEGA_PATH" --progress \
+            --exclude "*screenshot*" --exclude "debug_*" --exclude "post_screenshots/**"
           LINKS=""
           while IFS= read -r f; do
             [ -z "$f" ] && continue
@@ -292,7 +366,7 @@ jobs:
           CH="${{ steps.item.outputs.channel }}"
           PID="${{ steps.item.outputs.post_id }}"
           URL="${{ steps.item.outputs.url }}"
-          PATH_DIR="${{ steps.media.outputs.folder }}"
+          COUNT="${{ steps.media.outputs.count }}"
           MEGA_PATH="${{ steps.mega.outputs.mega_path }}"
           MEGA_LINKS="${{ steps.mega.outputs.links }}"
           BODY=$(mktemp)
@@ -302,12 +376,13 @@ jobs:
             echo "- **کانال:** @${CH}"
             echo "- **post id:** \`${PID}\`"
             echo "- **حالت:** ${MODE} · **مقصد:** ${DEST}"
+            echo "- **فایل‌های مدیا:** ${COUNT}"
             echo "- **لینک:** ${URL}"
             if [ "$DEST" = "mega" ]; then
               echo "- **Mega:** \`${MEGA_PATH}\`"
               echo -e "${MEGA_LINKS}"
             else
-              echo "- **مسیر:** \`${PATH_DIR}\`"
+              echo "- **مسیر:** \`Download/telegram_downloads/${CH}/media/${PID}\`"
             fi
           } > "$BODY"
           gh issue comment "${{ github.event.issue.number }}" --body-file "$BODY"
