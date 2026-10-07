@@ -35,15 +35,15 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: python .github/scripts/create_telegram_catalog_issue.py
 
-      - name: Commit index
+      - name: Commit index + meta
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add State/telegram_catalog_index.json
+          git add State/telegram_catalog_index.json State/telegram_catalog_meta.json
           if git diff --staged --quiet; then
-            echo "No index changes"
+            echo "No catalog file changes"
           else
-            git commit -m "chore(telegram): update catalog index [skip ci]"
+            git commit -m "chore(telegram): update catalog index + meta [skip ci]"
             git pull --rebase origin main || true
             git push origin main
           fi
