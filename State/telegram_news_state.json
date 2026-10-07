@@ -1,35 +1,8 @@
 {
   "channel_list": [
-    "IranintlTv",
     "bbcpersian"
   ],
   "channels": {
-    "IranintlTv": {
-      "last_post_id": "361146",
-      "last_updated": "2026-10-07T10:34:28Z",
-      "source": "seeded_from_posts_json_max",
-<<<<<<< Updated upstream
-      "updated_at": "2026-10-07T15:32:57Z"
-=======
-      "updated_at": "2026-10-07T15:36:25Z"
->>>>>>> Stashed changes
-    },
-    "bbcpersian": {
-      "last_post_id": "292895",
-      "last_updated": "2026-10-07T09:33:01Z",
-      "source": "seeded_from_posts_json_max",
-      "updated_at": "2026-10-07T14:35:32Z"
-    }
-  },
-  "schedule": {
-    "cron": "0 * * * *",
-    "note": "every hour UTC",
-    "defaults": {
-      "debug_mode": true,
-      "save_to": "repository",
-      "limit": 50,
-      "scroll_direction": "down",
-      "save_screenshots": false
-    }
+    "bbcpersian": {}
   }
 }
