@@ -1,0 +1,49 @@
+name: 📱 Telegram Catalog Issue Update
+
+on:
+  workflow_run:
+    workflows: ["🌀 Scrape Telegram & Save Archive"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update-catalog:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Build catalog + update Issue
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        run: python .github/scripts/create_telegram_catalog_issue.py
+
+      - name: Commit index + meta
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add State/telegram_catalog_index.json State/telegram_catalog_meta.json
+          if git diff --staged --quiet; then
+            echo "No catalog file changes"
+          else
+            git commit -m "chore(telegram): update catalog index + meta [skip ci]"
+            git pull --rebase origin main || true
+            git push origin main
+          fi
