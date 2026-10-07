@@ -190,15 +190,25 @@ jobs:
 
       - name: Commit and push downloaded files
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Download/instagram_downloads/
           if git diff --staged --quiet; then
             echo "Nothing to commit"
-          else
-            git commit -m "Add downloaded Instagram post ${{ steps.sc.outputs.shortcode }} (@${{ steps.info.outputs.username }})"
-            git push
+            exit 0
           fi
+          git commit -m "Add downloaded Instagram post ${{ steps.sc.outputs.shortcode }} (@${{ steps.info.outputs.username }})"
+          # concurrent workflows (telegram scrape/catalog) often push first
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin main && exit 0
+            echo "⚠️ push attempt $i failed — retry…"
+            sleep $((i * 3))
+            git rebase --abort 2>/dev/null || true
+            git fetch origin main
+          done
+          echo "❌ push failed after retries"
+          exit 1
 
       - name: Comment success
         if: success()
