@@ -1,2 +1,0 @@
-requests
-soundcloud-lib
