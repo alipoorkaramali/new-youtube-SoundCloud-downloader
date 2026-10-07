@@ -2,24 +2,24 @@
   "channels": {
     "bbcpersian": {
       "last_shortcode": "DadB5jOCFPr",
-      "last_fetched_at": "2026-10-07T02:31:02.380303",
-      "last_file": "instagram_data/bbcpersian_20261007_023102.json",
+      "last_fetched_at": "2026-10-07T05:07:19.538263",
+      "last_file": "instagram_data/bbcpersian_20261007_050719.json",
       "recent_shortcodes": [
         "DadB5jOCFPr",
+        "DeLjNm0CBFd",
+        "DeLanjRCAcz",
         "DeLPJlSDAXh",
         "DeLNNR8CGBZ",
         "DeLISFHkqfx",
         "DeLBdImFfvs",
         "DeK9UW_m7H0",
         "DeKx-Q4iC5W",
-        "DeKq_iVjQBf",
-        "DeKo1CzjL3l",
-        "DeKnp3SDwi-"
+        "DeKq_iVjQBf"
       ]
     },
     "mohammadjavadhosseinii": {
       "last_shortcode": "DESr3W1t8o0",
-      "last_fetched_at": "2026-10-07T02:31:26.570520",
+      "last_fetched_at": "2026-10-07T05:07:49.715906",
       "last_file": "instagram_data/mohammadjavadhosseinii_20261005_202418.json",
       "recent_shortcodes": [
         "DESr3W1t8o0",
@@ -36,7 +36,7 @@
     },
     "alireza.mehrabii": {
       "last_shortcode": "DZk3DEeINqN",
-      "last_fetched_at": "2026-10-07T02:31:55.013332",
+      "last_fetched_at": "2026-10-07T05:08:22.795245",
       "last_file": "instagram_data/alireza.mehrabii_20261002_045112.json",
       "recent_shortcodes": [
         "DZk3DEeINqN",
@@ -52,20 +52,20 @@
       ]
     },
     "iranintltv": {
-      "last_shortcode": "DeLSe8PEYg3",
-      "last_fetched_at": "2026-10-07T02:32:09.077562",
-      "last_file": "instagram_data/iranintltv_20261007_023209.json",
+      "last_shortcode": "DeLjmC2lTxi",
+      "last_fetched_at": "2026-10-07T05:08:34.855754",
+      "last_file": "instagram_data/iranintltv_20261007_050834.json",
       "recent_shortcodes": [
+        "DeLjmC2lTxi",
+        "DeLfcPpDsvI",
+        "DeLVNDzEQYC",
         "DeLSe8PEYg3",
         "DeLMh_mkSdp",
         "DeLInP5jjw2",
         "DeK9Axwls2r",
         "DeK5ZBClXYt",
         "DeK4uzfgszE",
-        "DeK36num5fu",
-        "DeK34FiCqkz",
-        "DeK2LJSjfs0",
-        "DeK2LcQgAHL"
+        "DeK36num5fu"
       ]
     }
   }
