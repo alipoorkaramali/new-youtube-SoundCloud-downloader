@@ -4,11 +4,7 @@ on:
   issue_comment:
     types: [created]
 
-# Syntax on issue 📱 Telegram Catalog – Download:
-#   /download <number> [audio|video] [mega|repo]
-#
-# mode:  audio = extract/keep audio; video/empty = full media
-# dest:  mega = upload to Mega.nz; repo/empty = commit to this repo
+# /download <number|https://t.me/ch/id> [audio|video] [mega|repo]
 
 jobs:
   download:
@@ -33,53 +29,99 @@ jobs:
           set -e
           COMMENT="${{ github.event.comment.body }}"
           LINE=$(echo "$COMMENT" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
-          RAW=$(echo "$LINE" | grep -oiE '/download[[:space:]]+[0-9]+([[:space:]]+[a-zA-Z_]+)?([[:space:]]+[a-zA-Z_]+)?' | head -1)
-          if [ -z "$RAW" ]; then
-            echo "❌ فرمت: /download <شماره> [audio|video] [mega|repo]"
-            exit 1
+
+          # Prefer t.me URL form (from HTML button)
+          TME=$(echo "$LINE" | grep -oiE 'https?://t\.me/[A-Za-z0-9_]+/[0-9]+' | head -1)
+          NUM=""
+          if [ -n "$TME" ]; then
+            echo "ref_type=url" >> "$GITHUB_OUTPUT"
+            echo "ref=$TME" >> "$GITHUB_OUTPUT"
+            echo "number=" >> "$GITHUB_OUTPUT"
+            REST=$(echo "$LINE" | sed -E 's|.*/download[[:space:]]+https?://t\.me/[A-Za-z0-9_]+/[0-9]+||I')
+          else
+            RAW=$(echo "$LINE" | grep -oiE '/download[[:space:]]+[0-9]+([[:space:]]+[a-zA-Z_]+)?([[:space:]]+[a-zA-Z_]+)?' | head -1)
+            if [ -z "$RAW" ]; then
+              echo "❌ فرمت: /download <شماره|t.me-url> [audio|video] [mega|repo]"
+              exit 1
+            fi
+            NUM=$(echo "$RAW" | awk '{print $2}')
+            echo "ref_type=number" >> "$GITHUB_OUTPUT"
+            echo "ref=$NUM" >> "$GITHUB_OUTPUT"
+            echo "number=$NUM" >> "$GITHUB_OUTPUT"
+            REST=$(echo "$RAW" | awk '{print tolower($3" "$4)}')
           fi
-          NUM=$(echo "$RAW" | awk '{print $2}')
-          ARG3=$(echo "$RAW" | awk '{print tolower($3)}')
-          ARG4=$(echo "$RAW" | awk '{print tolower($4)}')
+
           MODE=""; DEST=""
-          for A in "$ARG3" "$ARG4"; do
+          for A in $REST; do
+            A=$(echo "$A" | tr '[:upper:]' '[:lower:]')
             case "$A" in
-              audio|mp3|صوتی) MODE="audio" ;;
-              video|default|manual|پیشفرض|دستی) MODE="video" ;;
-              mega|مگا) DEST="mega" ;;
-              repo|مخزن) DEST="repo" ;;
-              "") ;;
-              *) echo "⚠️ ignored: $A" ;;
+              audio|mp3) MODE="audio" ;;
+              video|default|manual) MODE="video" ;;
+              mega) DEST="mega" ;;
+              repo) DEST="repo" ;;
             esac
           done
+          # also scan whole line for mode/dest
+          echo "$LINE" | grep -qiE '[[:space:]]audio([[:space:]]|$)' && MODE="audio"
+          echo "$LINE" | grep -qiE '[[:space:]]video([[:space:]]|$)' && MODE="video"
+          echo "$LINE" | grep -qiE '[[:space:]]mega([[:space:]]|$)' && DEST="mega"
+          echo "$LINE" | grep -qiE '[[:space:]]repo([[:space:]]|$)' && DEST="repo"
+
           [ -z "$MODE" ] && MODE="video"
           [ -z "$DEST" ] && DEST="repo"
-          echo "number=$NUM" >> "$GITHUB_OUTPUT"
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "dest=$DEST" >> "$GITHUB_OUTPUT"
-          echo "📌 number=$NUM mode=$MODE dest=$DEST"
+          echo "📌 ref=${TME:-$NUM} mode=$MODE dest=$DEST"
 
-      - name: Resolve catalog item
+      - name: Resolve target post
         id: item
         run: |
+          REF_TYPE="${{ steps.parse.outputs.ref_type }}"
+          REF="${{ steps.parse.outputs.ref }}"
           NUM="${{ steps.parse.outputs.number }}"
-          if [ ! -f State/telegram_catalog_index.json ]; then
-            echo "❌ State/telegram_catalog_index.json نیست."
-            exit 1
-          fi
           python3 << 'PY'
-          import json, os, sys
-          num = os.environ["NUM"]
-          with open("State/telegram_catalog_index.json", encoding="utf-8") as f:
-              idx = json.load(f)
-          item = idx.get(num)
-          if not item:
-              print(f"❌ شماره {num} در کاتالوگ نیست (1..{max(map(int, idx.keys())) if idx else 0})")
-              sys.exit(1)
-          channel = item["channel"]
-          pid = str(item["id"])
-          url = item.get("url") or f"https://t.me/{channel}/{pid}"
-          text = (item.get("text") or "")[:120]
+          import json, os, re, sys
+          from pathlib import Path
+
+          ref_type = os.environ.get("REF_TYPE", "")
+          ref = os.environ.get("REF", "")
+          num = os.environ.get("NUM", "")
+
+          channel = pid = url = text = ""
+
+          if ref_type == "url" or (ref and "t.me" in ref):
+              m = re.search(r"t\.me/([A-Za-z0-9_]+)/([0-9]+)", ref)
+              if not m:
+                  print("❌ لینک t.me نامعتبر")
+                  sys.exit(1)
+              channel, pid = m.group(1), m.group(2)
+              url = f"https://t.me/{channel}/{pid}"
+              # optional text from index
+              idx_path = Path("State/telegram_catalog_index.json")
+              if idx_path.exists():
+                  try:
+                      idx = json.loads(idx_path.read_text(encoding="utf-8"))
+                      for v in idx.values():
+                          if str(v.get("channel")) == channel and str(v.get("id")) == pid:
+                              text = (v.get("text") or "")[:120]
+                              break
+                  except Exception:
+                      pass
+          else:
+              idx_path = Path("State/telegram_catalog_index.json")
+              if not idx_path.exists():
+                  print("❌ catalog index نیست")
+                  sys.exit(1)
+              idx = json.loads(idx_path.read_text(encoding="utf-8"))
+              item = idx.get(str(num))
+              if not item:
+                  print(f"❌ شماره {num} پیدا نشد")
+                  sys.exit(1)
+              channel = item["channel"]
+              pid = str(item["id"])
+              url = item.get("url") or f"https://t.me/{channel}/{pid}"
+              text = (item.get("text") or "")[:120]
+
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"channel={channel}\n")
               out.write(f"post_id={pid}\n")
@@ -88,6 +130,8 @@ jobs:
           print(f"channel={channel} id={pid} url={url}")
           PY
         env:
+          REF_TYPE: ${{ steps.parse.outputs.ref_type }}
+          REF: ${{ steps.parse.outputs.ref }}
           NUM: ${{ steps.parse.outputs.number }}
 
       - uses: actions/setup-python@v5
@@ -148,18 +192,12 @@ jobs:
           CH="${{ steps.item.outputs.channel }}"
           PID="${{ steps.item.outputs.post_id }}"
           BASE="Download/telegram_downloads/${CH}"
-          # common patterns: media under post id folder, or files named with id
           FOUND=""
-          if [ -d "$BASE/$PID" ]; then
-            FOUND="$BASE/$PID"
-          elif [ -d "$BASE/media/$PID" ]; then
-            FOUND="$BASE/media/$PID"
-          else
-            # fallback: whole channel dir (scraper may flat-store)
-            FOUND="$BASE"
+          if [ -d "$BASE/$PID" ]; then FOUND="$BASE/$PID"
+          elif [ -d "$BASE/media/$PID" ]; then FOUND="$BASE/media/$PID"
+          else FOUND="$BASE"
           fi
           echo "folder=$FOUND" >> "$GITHUB_OUTPUT"
-          echo "📁 media folder: $FOUND"
           ls -la "$FOUND" 2>/dev/null | head -30 || true
 
       - name: Extract audio if mode=audio
@@ -168,7 +206,6 @@ jobs:
           FOLDER="${{ steps.media.outputs.folder }}"
           mkdir -p "$FOLDER"
           cd "$FOLDER"
-          echo "🎵 extracting audio from videos..."
           find . -maxdepth 3 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' -o -iname '*.mov' \) | while read -r f; do
             name="${f%.*}"
             out="${name}.mp3"
@@ -176,10 +213,9 @@ jobs:
               echo "✅ $f → $out"
               rm -f "$f"
             else
-              echo "⚠️ audio extract failed for $f — keep original"
+              echo "⚠️ keep $f"
             fi
           done
-          ls -lah
 
       - name: Commit to repo (dest=repo)
         if: steps.parse.outputs.dest == 'repo'
@@ -189,7 +225,7 @@ jobs:
           CH="${{ steps.item.outputs.channel }}"
           git add "Download/telegram_downloads/${CH}/" || true
           if git diff --staged --quiet; then
-            echo "No new files to commit"
+            echo "No new files"
           else
             git commit -m "Add Telegram media @${CH} post ${{ steps.item.outputs.post_id }} (${{ steps.parse.outputs.mode }})"
             git pull --rebase origin main || true
@@ -209,97 +245,70 @@ jobs:
           PID="${{ steps.item.outputs.post_id }}"
           MEGA_PATH="mega:TelegramNews/${CH}/${PID}"
 
-          # fetch rclone mega config from youtube-SoundCloud-downloader if missing here
           if [ ! -f config/rclone_mega.conf.gpg ]; then
-            echo "📥 fetching rclone_mega.conf.gpg from youtube-SoundCloud-downloader..."
             API="https://api.github.com/repos/alipoorkaramali/youtube-SoundCloud-downloader/contents/config/rclone_mega.conf.gpg"
             curl -sL -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github.v3+json" \
               "$API" | python3 -c '
           import json,sys,base64
           d=json.load(sys.stdin)
           if "content" not in d:
-              print("FAIL", d.get("message", d), file=sys.stderr)
-              sys.exit(1)
+              print("FAIL", d.get("message", d), file=sys.stderr); sys.exit(1)
           open("config/rclone_mega.conf.gpg","wb").write(base64.b64decode(d["content"]))
-          print("ok", len(d["content"]))
           '
           fi
-
           if [ -z "$RCLONE_PASSPHRASE" ]; then
-            echo "❌ secret RCLONE_PASSPHRASE لازم است برای Mega"
-            exit 1
+            echo "❌ RCLONE_PASSPHRASE required"; exit 1
           fi
-
           mkdir -p ~/bin ~/.config/rclone
-          if [ ! -x ~/bin/rclone ]; then
+          if ! command -v rclone >/dev/null 2>&1; then
             curl -sL https://rclone.org/install.sh | sudo bash
-            cp /usr/bin/rclone ~/bin/rclone 2>/dev/null || true
-            chmod +x ~/bin/rclone 2>/dev/null || true
           fi
-          RCLONE=$(command -v rclone || echo ~/bin/rclone)
-
+          RCLONE=$(command -v rclone)
           gpg --batch --yes --passphrase "$RCLONE_PASSPHRASE" \
-            --output ~/.config/rclone/rclone.conf \
-            --decrypt config/rclone_mega.conf.gpg
+            --output ~/.config/rclone/rclone.conf --decrypt config/rclone_mega.conf.gpg
           chmod 600 ~/.config/rclone/rclone.conf
-
-          echo "☁️ upload $FOLDER → $MEGA_PATH"
           $RCLONE --config ~/.config/rclone/rclone.conf mkdir "$MEGA_PATH" 2>/dev/null || true
           $RCLONE --config ~/.config/rclone/rclone.conf copy "$FOLDER" "$MEGA_PATH" --progress
-
           LINKS=""
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             L=$($RCLONE --config ~/.config/rclone/rclone.conf link "$MEGA_PATH/$f" 2>/dev/null || echo "")
             LINKS="${LINKS}- ${f}: ${L}\n"
           done < <($RCLONE --config ~/.config/rclone/rclone.conf lsf "$MEGA_PATH" 2>/dev/null | head -20)
-
           {
             echo "mega_path=$MEGA_PATH"
             echo "links<<EOF"
             echo -e "$LINKS"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-          echo "✅ Mega upload done"
 
       - name: Comment success
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NUM="${{ steps.parse.outputs.number }}"
           MODE="${{ steps.parse.outputs.mode }}"
           DEST="${{ steps.parse.outputs.dest }}"
           CH="${{ steps.item.outputs.channel }}"
           PID="${{ steps.item.outputs.post_id }}"
           URL="${{ steps.item.outputs.url }}"
-          TEXT="${{ steps.item.outputs.text }}"
           PATH_DIR="${{ steps.media.outputs.folder }}"
           MEGA_PATH="${{ steps.mega.outputs.mega_path }}"
           MEGA_LINKS="${{ steps.mega.outputs.links }}"
-
           BODY=$(mktemp)
           {
-            echo "✅ دانلود تلگرام **#${NUM}** انجام شد."
+            echo "✅ دانلود تلگرام انجام شد."
             echo ""
-            echo "| | |"
-            echo "|---|---|"
-            echo "| **کانال** | @${CH} |"
-            echo "| **post id** | \`${PID}\` |"
-            echo "| **حالت** | ${MODE} |"
-            echo "| **مقصد** | ${DEST} |"
-            echo "| **لینک** | ${URL} |"
-            echo "| **متن** | ${TEXT} |"
+            echo "- **کانال:** @${CH}"
+            echo "- **post id:** \`${PID}\`"
+            echo "- **حالت:** ${MODE} · **مقصد:** ${DEST}"
+            echo "- **لینک:** ${URL}"
             if [ "$DEST" = "mega" ]; then
-              echo "| **Mega** | \`${MEGA_PATH}\` |"
-              echo ""
-              echo "**لینک‌ها:**"
+              echo "- **Mega:** \`${MEGA_PATH}\`"
               echo -e "${MEGA_LINKS}"
             else
-              echo "| **مسیر مخزن** | \`${PATH_DIR}\` |"
+              echo "- **مسیر:** \`${PATH_DIR}\`"
             fi
-            echo ""
-            echo "راهنما: \`/download <n> [audio|video] [mega|repo]\`"
           } > "$BODY"
           gh issue comment "${{ github.event.issue.number }}" --body-file "$BODY"
 
@@ -308,15 +317,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment "${{ github.event.issue.number }}" --body "$(cat <<EOF
-          ❌ خطا در دانلود تلگرام.
-
-          فرمت: \`/download <شماره> [audio|video] [mega|repo]\`
-
-          مثال:
-          - \`/download 5\` → ویدیو + مخزن
-          - \`/download 5 audio\` → صوت + مخزن
-          - \`/download 5 video mega\` → ویدیو + Mega
-          - \`/download 12 audio mega\` → صوت + Mega
-          EOF
-          )"
+          gh issue comment "${{ github.event.issue.number }}" --body "❌ خطا در دانلود. لاگ Actions را ببینید. فرمت: \`/download <n|t.me-url> [audio|video] [mega|repo]\`"
