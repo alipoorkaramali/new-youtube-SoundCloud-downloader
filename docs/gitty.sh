@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p20-download-mode-dest
-# BUILD: 2026-10-07-p20
+# gitty-patch-id: p21-caption-box-telegram
+# BUILD: 2026-10-07-p21-caption-box
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -669,6 +669,7 @@ browse_issues() {
                     2)
                         {
                             local fcols=$(tput cols 2>/dev/null || echo 40); [[ $fcols -lt 30 ]] && fcols=40
+                            local box_inner=$((fcols - 4)); [[ $box_inner -lt 16 ]] && box_inner=16
                             echo -e "${CYAN}+$(printf '%*s' $((fcols-2)) '' | tr ' ' '-')+${NC}"
                             printf "${CYAN}|${NC} ${BOLD}%-*s${NC} ${CYAN}|${NC}\n" $((fcols-4)) "Issue #${issue_numbers[$idx]} - full body"
                             echo -e "${CYAN}+$(printf '%*s' $((fcols-2)) '' | tr ' ' '-')+${NC}"
@@ -676,6 +677,46 @@ browse_issues() {
                             if [[ -z "$issue_body" || "$issue_body" == "null" ]]; then
                                 echo -e "  ${YELLOW}(empty)${NC}"
                             else
+                                # Word-wrap helper (Instagram-style caption box; stable order on any width)
+                                _gitty_wrap_caption() {
+                                    local text="$1" width="$2"
+                                    [[ $width -lt 8 ]] && width=8
+                                    text="${text//$'\r'/}"
+                                    text="${text//$'\n'/ }"
+                                    # collapse multi-spaces
+                                    while [[ "$text" == *"  "* ]]; do text="${text//  / }"; done
+                                    text="${text#"${text%%[![:space:]]*}"}"
+                                    text="${text%"${text##*[![:space:]]}"}"
+                                    [[ -z "$text" ]] && return
+                                    local -a out=()
+                                    local line="" word
+                                    # split on spaces; keep long tokens unbroken except hard-cut
+                                    for word in $text; do
+                                        if [[ -z "$line" ]]; then
+                                            line="$word"
+                                        elif [[ $((${#line} + 1 + ${#word})) -le $width ]]; then
+                                            line="$line $word"
+                                        else
+                                            out+=("$line")
+                                            line="$word"
+                                        fi
+                                        while [[ ${#line} -gt $width ]]; do
+                                            out+=("${line:0:$width}")
+                                            line="${line:$width}"
+                                        done
+                                    done
+                                    [[ -n "$line" ]] && out+=("$line")
+                                    local i s
+                                    for ((i=0; i<${#out[@]}; i++)); do
+                                        s="${out[$i]}"
+                                        if command -v fribidi &>/dev/null; then
+                                            s=$(printf '%s' "$s" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$s")
+                                        fi
+                                        # LTR override so Termux keeps line order
+                                        printf '%b\n' "${YELLOW}|${NC} "$'\u202D'"${s}"$'\u202C'
+                                    done
+                                }
+
                                 local in_table=0
                                 while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
                                     local trimmed="${raw_line#"${raw_line%%[![:space:]]*}"}"
@@ -698,36 +739,35 @@ browse_issues() {
                                             fi
                                             cidx=$((cidx+1))
                                         done
-                                        # skip markdown table header row
-                                        if [[ "$num_col" == "#" || "$sc_col" == "shortcode" || "$sc_col" == "Shortcode" || "$cap_col" == "caption" || "$cap_col" == "Caption" ]]; then
+                                        # skip header rows (Instagram + Telegram catalog)
+                                        local sc_l="${sc_col,,}" cap_l="${cap_col,,}"
+                                        if [[ "$num_col" == "#" || "$sc_l" == "shortcode" || "$sc_l" == "channel" || "$sc_l" == "کانال" \
+                                           || "$cap_l" == "caption" || "$cap_l" == "text" || "$cap_l" == "متن" || "$cap_l" == "title" ]]; then
                                             continue
                                         fi
-                                        [[ -z "$num_col" && -z "$sc_col" ]] && continue
-                                        # fribidi for correct Persian letter shapes
-                                        if command -v fribidi &>/dev/null && [[ -n "$cap_col" ]]; then
-                                            cap_col=$(printf '%s' "$cap_col" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$cap_col")
+                                        [[ -z "$num_col" && -z "$sc_col" && -z "$cap_col" ]] && continue
+
+                                        # Instagram-style card: header row + caption box (width = terminal)
+                                        local hdr_line="#${num_col}  ${sc_col}"
+                                        echo -e "${YELLOW}+$(printf '%*s' "$box_inner" '' | tr ' ' '-')+${NC}"
+                                        if command -v fribidi &>/dev/null; then
+                                            local hdr_disp
+                                            hdr_disp=$(printf '%s' "$hdr_line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$hdr_line")
+                                            printf '%b\n' "${YELLOW}|${NC} ${BOLD}${GREEN}"$'\u202D'"${hdr_disp}"$'\u202C'"${NC}"
+                                        else
+                                            echo -e "${YELLOW}|${NC} ${BOLD}${GREEN}${hdr_line}${NC}"
                                         fi
-                                        echo -e "${YELLOW}+---- # ----+${NC}"
-                                        echo -e "${YELLOW}|${NC} ${BOLD}${num_col}${NC}"
-                                        echo -e "${YELLOW}+-- shortcode --+${NC}"
-                                        echo -e "${YELLOW}|${NC} ${GREEN}${sc_col}${NC}"
-                                        echo -e "${YELLOW}+-- caption --+${NC}"
-                                        # wrap then print lines BOTTOM→TOP so sentence reads start→end on Termux
-                                        local cap="$cap_col" maxc=$((fcols-4)); [[ $maxc -lt 10 ]] && maxc=10
-                                        local -a cap_lines=()
-                                        while [[ ${#cap} -gt $maxc ]]; do
-                                            cap_lines+=("${cap:0:$maxc}")
-                                            cap="${cap:$maxc}"
-                                        done
-                                        [[ -n "$cap" ]] && cap_lines+=("$cap")
-                                        local li
-                                        for ((li=${#cap_lines[@]}-1; li>=0; li--)); do
-                                            echo -e "${YELLOW}|${NC} ${cap_lines[$li]}"
-                                        done
-                                        echo -e "${YELLOW}+------------+${NC}"
+                                        echo -e "${YELLOW}+-- caption $(printf '%*s' $((box_inner - 12)) '' | tr ' ' '-')+${NC}"
+                                        if [[ -n "$cap_col" ]]; then
+                                            _gitty_wrap_caption "$cap_col" "$box_inner"
+                                        else
+                                            echo -e "${YELLOW}|${NC} ${DIM}(no caption)${NC}"
+                                        fi
+                                        echo -e "${YELLOW}+$(printf '%*s' "$box_inner" '' | tr ' ' '-')+${NC}"
                                         echo ""
                                     else
                                         if [[ $in_table -eq 1 && -z "$raw_line" ]]; then in_table=0; fi
+                                        [[ -z "$trimmed" ]] && { echo ""; continue; }
                                         local display_line
                                         if command -v fribidi &>/dev/null; then
                                             display_line=$(printf '%s' "$raw_line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$raw_line")
@@ -2408,7 +2448,7 @@ while true; do
     clear
     echo -e "${CYAN}==============================${NC}"
     echo -e "${CYAN}  Gitty - GitHub Manager v2.2${NC}"
-    echo -e "${YELLOW}  BUILD: 2026-10-07-p20${NC}"
+    echo -e "${YELLOW}  BUILD: 2026-10-07-p21-caption-box${NC}"
     echo -e "${CYAN}==============================${NC}"
     echo -e "${GREEN}Logged in as: ${BOLD}$GITHUB_USER${NC}\n"
     echo "  1) Browse repository"
