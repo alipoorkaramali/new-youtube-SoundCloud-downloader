@@ -4,6 +4,12 @@ on:
   issue_comment:
     types: [created]
 
+# Syntax on issue 📱 Telegram Catalog – Download:
+#   /download <number> [audio|video] [mega|repo]
+#
+# mode:  audio = extract/keep audio; video/empty = full media
+# dest:  mega = upload to Mega.nz; repo/empty = commit to this repo
+
 jobs:
   download:
     if: >
@@ -21,24 +27,44 @@ jobs:
           lfs: true
           fetch-depth: 1
 
-      - name: Parse /download number
+      - name: Parse /download command
         id: parse
         run: |
+          set -e
           COMMENT="${{ github.event.comment.body }}"
-          NUM=$(echo "$COMMENT" | grep -oE '/download[[:space:]]+[0-9]+' | awk '{print $2}' | head -1)
-          if [ -z "$NUM" ]; then
-            echo "❌ فرمت: /download <شماره>"
+          LINE=$(echo "$COMMENT" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+          RAW=$(echo "$LINE" | grep -oiE '/download[[:space:]]+[0-9]+([[:space:]]+[a-zA-Z_]+)?([[:space:]]+[a-zA-Z_]+)?' | head -1)
+          if [ -z "$RAW" ]; then
+            echo "❌ فرمت: /download <شماره> [audio|video] [mega|repo]"
             exit 1
           fi
+          NUM=$(echo "$RAW" | awk '{print $2}')
+          ARG3=$(echo "$RAW" | awk '{print tolower($3)}')
+          ARG4=$(echo "$RAW" | awk '{print tolower($4)}')
+          MODE=""; DEST=""
+          for A in "$ARG3" "$ARG4"; do
+            case "$A" in
+              audio|mp3|صوتی) MODE="audio" ;;
+              video|default|manual|پیشفرض|دستی) MODE="video" ;;
+              mega|مگا) DEST="mega" ;;
+              repo|مخزن) DEST="repo" ;;
+              "") ;;
+              *) echo "⚠️ ignored: $A" ;;
+            esac
+          done
+          [ -z "$MODE" ] && MODE="video"
+          [ -z "$DEST" ] && DEST="repo"
           echo "number=$NUM" >> "$GITHUB_OUTPUT"
-          echo "📌 number=$NUM"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "dest=$DEST" >> "$GITHUB_OUTPUT"
+          echo "📌 number=$NUM mode=$MODE dest=$DEST"
 
       - name: Resolve catalog item
         id: item
         run: |
           NUM="${{ steps.parse.outputs.number }}"
           if [ ! -f State/telegram_catalog_index.json ]; then
-            echo "❌ State/telegram_catalog_index.json نیست. اول scrape + catalog update را اجرا کنید."
+            echo "❌ State/telegram_catalog_index.json نیست."
             exit 1
           fi
           python3 << 'PY'
@@ -51,18 +77,15 @@ jobs:
               print(f"❌ شماره {num} در کاتالوگ نیست (1..{max(map(int, idx.keys())) if idx else 0})")
               sys.exit(1)
           channel = item["channel"]
-          pid = item["id"]
+          pid = str(item["id"])
           url = item.get("url") or f"https://t.me/{channel}/{pid}"
           text = (item.get("text") or "")[:120]
-          print(f"channel={channel}")
-          print(f"id={pid}")
-          print(f"url={url}")
-          print(f"text={text}")
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"channel={channel}\n")
               out.write(f"post_id={pid}\n")
               out.write(f"url={url}\n")
               out.write(f"text={text}\n")
+          print(f"channel={channel} id={pid} url={url}")
           PY
         env:
           NUM: ${{ steps.parse.outputs.number }}
@@ -71,13 +94,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install deps + ffmpeg
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install playwright
           python -m playwright install chromium
           python -m playwright install-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
 
       - name: Decrypt browser profile
         run: |
@@ -96,9 +121,8 @@ jobs:
           import yaml
           from pathlib import Path
           cfg_path = Path("config/config.yaml")
-          c = {}
-          if cfg_path.exists():
-              c = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+          c = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+          c = c or {}
           c["channel"] = "${{ steps.item.outputs.channel }}"
           c["start_link"] = "${{ steps.item.outputs.url }}"
           c["limit"] = 1
@@ -118,19 +142,125 @@ jobs:
       - name: Run scraper (media for one post)
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
 
-      - name: Commit downloaded media
+      - name: Locate post media folder
+        id: media
+        run: |
+          CH="${{ steps.item.outputs.channel }}"
+          PID="${{ steps.item.outputs.post_id }}"
+          BASE="Download/telegram_downloads/${CH}"
+          # common patterns: media under post id folder, or files named with id
+          FOUND=""
+          if [ -d "$BASE/$PID" ]; then
+            FOUND="$BASE/$PID"
+          elif [ -d "$BASE/media/$PID" ]; then
+            FOUND="$BASE/media/$PID"
+          else
+            # fallback: whole channel dir (scraper may flat-store)
+            FOUND="$BASE"
+          fi
+          echo "folder=$FOUND" >> "$GITHUB_OUTPUT"
+          echo "📁 media folder: $FOUND"
+          ls -la "$FOUND" 2>/dev/null | head -30 || true
+
+      - name: Extract audio if mode=audio
+        if: steps.parse.outputs.mode == 'audio'
+        run: |
+          FOLDER="${{ steps.media.outputs.folder }}"
+          mkdir -p "$FOLDER"
+          cd "$FOLDER"
+          echo "🎵 extracting audio from videos..."
+          find . -maxdepth 3 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' -o -iname '*.mov' \) | while read -r f; do
+            name="${f%.*}"
+            out="${name}.mp3"
+            if ffmpeg -y -i "$f" -vn -acodec libmp3lame -q:a 4 "$out" 2>/dev/null; then
+              echo "✅ $f → $out"
+              rm -f "$f"
+            else
+              echo "⚠️ audio extract failed for $f — keep original"
+            fi
+          done
+          ls -lah
+
+      - name: Commit to repo (dest=repo)
+        if: steps.parse.outputs.dest == 'repo'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           CH="${{ steps.item.outputs.channel }}"
           git add "Download/telegram_downloads/${CH}/" || true
           if git diff --staged --quiet; then
-            echo "No new files to commit (maybe already present)"
+            echo "No new files to commit"
           else
-            git commit -m "Add Telegram media @${CH} post ${{ steps.item.outputs.post_id }}"
+            git commit -m "Add Telegram media @${CH} post ${{ steps.item.outputs.post_id }} (${{ steps.parse.outputs.mode }})"
             git pull --rebase origin main || true
             git push origin main
           fi
+
+      - name: Upload to Mega (dest=mega)
+        id: mega
+        if: steps.parse.outputs.dest == 'mega'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GH_PAT1 || secrets.GITHUB_TOKEN }}
+          RCLONE_PASSPHRASE: ${{ secrets.RCLONE_PASSPHRASE }}
+        run: |
+          set -e
+          FOLDER="${{ steps.media.outputs.folder }}"
+          CH="${{ steps.item.outputs.channel }}"
+          PID="${{ steps.item.outputs.post_id }}"
+          MEGA_PATH="mega:TelegramNews/${CH}/${PID}"
+
+          # fetch rclone mega config from youtube-SoundCloud-downloader if missing here
+          if [ ! -f config/rclone_mega.conf.gpg ]; then
+            echo "📥 fetching rclone_mega.conf.gpg from youtube-SoundCloud-downloader..."
+            API="https://api.github.com/repos/alipoorkaramali/youtube-SoundCloud-downloader/contents/config/rclone_mega.conf.gpg"
+            curl -sL -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github.v3+json" \
+              "$API" | python3 -c '
+          import json,sys,base64
+          d=json.load(sys.stdin)
+          if "content" not in d:
+              print("FAIL", d.get("message", d), file=sys.stderr)
+              sys.exit(1)
+          open("config/rclone_mega.conf.gpg","wb").write(base64.b64decode(d["content"]))
+          print("ok", len(d["content"]))
+          '
+          fi
+
+          if [ -z "$RCLONE_PASSPHRASE" ]; then
+            echo "❌ secret RCLONE_PASSPHRASE لازم است برای Mega"
+            exit 1
+          fi
+
+          mkdir -p ~/bin ~/.config/rclone
+          if [ ! -x ~/bin/rclone ]; then
+            curl -sL https://rclone.org/install.sh | sudo bash
+            cp /usr/bin/rclone ~/bin/rclone 2>/dev/null || true
+            chmod +x ~/bin/rclone 2>/dev/null || true
+          fi
+          RCLONE=$(command -v rclone || echo ~/bin/rclone)
+
+          gpg --batch --yes --passphrase "$RCLONE_PASSPHRASE" \
+            --output ~/.config/rclone/rclone.conf \
+            --decrypt config/rclone_mega.conf.gpg
+          chmod 600 ~/.config/rclone/rclone.conf
+
+          echo "☁️ upload $FOLDER → $MEGA_PATH"
+          $RCLONE --config ~/.config/rclone/rclone.conf mkdir "$MEGA_PATH" 2>/dev/null || true
+          $RCLONE --config ~/.config/rclone/rclone.conf copy "$FOLDER" "$MEGA_PATH" --progress
+
+          LINKS=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            L=$($RCLONE --config ~/.config/rclone/rclone.conf link "$MEGA_PATH/$f" 2>/dev/null || echo "")
+            LINKS="${LINKS}- ${f}: ${L}\n"
+          done < <($RCLONE --config ~/.config/rclone/rclone.conf lsf "$MEGA_PATH" 2>/dev/null | head -20)
+
+          {
+            echo "mega_path=$MEGA_PATH"
+            echo "links<<EOF"
+            echo -e "$LINKS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "✅ Mega upload done"
 
       - name: Comment success
         if: success()
@@ -138,26 +268,55 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NUM="${{ steps.parse.outputs.number }}"
+          MODE="${{ steps.parse.outputs.mode }}"
+          DEST="${{ steps.parse.outputs.dest }}"
           CH="${{ steps.item.outputs.channel }}"
           PID="${{ steps.item.outputs.post_id }}"
           URL="${{ steps.item.outputs.url }}"
           TEXT="${{ steps.item.outputs.text }}"
-          PATH_DIR="Download/telegram_downloads/${CH}/"
-          BODY=$(cat <<EOF
-          ✅ دانلود تلگرام برای آیتم **#${NUM}** انجام شد.
+          PATH_DIR="${{ steps.media.outputs.folder }}"
+          MEGA_PATH="${{ steps.mega.outputs.mega_path }}"
+          MEGA_LINKS="${{ steps.mega.outputs.links }}"
 
-          - **کانال:** @${CH}
-          - **post id:** `${PID}`
-          - **لینک:** ${URL}
-          - **متن:** ${TEXT}
-          - **مسیر:** `${PATH_DIR}`
-          EOF
-          )
-          gh issue comment "${{ github.event.issue.number }}" --body "$BODY"
+          BODY=$(mktemp)
+          {
+            echo "✅ دانلود تلگرام **#${NUM}** انجام شد."
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **کانال** | @${CH} |"
+            echo "| **post id** | \`${PID}\` |"
+            echo "| **حالت** | ${MODE} |"
+            echo "| **مقصد** | ${DEST} |"
+            echo "| **لینک** | ${URL} |"
+            echo "| **متن** | ${TEXT} |"
+            if [ "$DEST" = "mega" ]; then
+              echo "| **Mega** | \`${MEGA_PATH}\` |"
+              echo ""
+              echo "**لینک‌ها:**"
+              echo -e "${MEGA_LINKS}"
+            else
+              echo "| **مسیر مخزن** | \`${PATH_DIR}\` |"
+            fi
+            echo ""
+            echo "راهنما: \`/download <n> [audio|video] [mega|repo]\`"
+          } > "$BODY"
+          gh issue comment "${{ github.event.issue.number }}" --body-file "$BODY"
 
       - name: Comment failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment "${{ github.event.issue.number }}" --body "❌ خطا در `/download ${{ steps.parse.outputs.number }}`. لاگ Actions را ببینید."
+          gh issue comment "${{ github.event.issue.number }}" --body "$(cat <<EOF
+          ❌ خطا در دانلود تلگرام.
+
+          فرمت: \`/download <شماره> [audio|video] [mega|repo]\`
+
+          مثال:
+          - \`/download 5\` → ویدیو + مخزن
+          - \`/download 5 audio\` → صوت + مخزن
+          - \`/download 5 video mega\` → ویدیو + Mega
+          - \`/download 12 audio mega\` → صوت + Mega
+          EOF
+          )"

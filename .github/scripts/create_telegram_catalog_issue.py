@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build Telegram catalog index + create/update a single GitHub Issue.
-
-Similar to YouTube/SoundCloud catalog in news-watcher:
-  Title: 📱 Telegram Catalog – Download
-  Comment: /download <number>
-
-Index: State/telegram_catalog_index.json
-  { "1": {"channel": "bbcpersian", "id": "123", "url": "https://t.me/...", "text": "...", "date": "..."}, ... }
-"""
+"""Build Telegram catalog index + create/update GitHub Issue."""
 from __future__ import annotations
 
 import json
@@ -45,7 +37,7 @@ def load_channel_posts(channel: str) -> List[Dict[str, Any]]:
                         posts.append(p)
         except Exception as e:
             print(f"⚠️ read {jp}: {e}")
-    # newest first
+
     def sort_key(p: dict) -> int:
         try:
             return int(p.get("id") or p.get("message_id") or 0)
@@ -73,7 +65,6 @@ def channel_list() -> List[str]:
 
 
 def build_index() -> Tuple[Dict[str, Dict[str, Any]], List[Tuple[str, List[Dict]]]]:
-    """Return index dict and ordered (channel, posts) for body."""
     index: Dict[str, Dict[str, Any]] = {}
     groups: List[Tuple[str, List[Dict]]] = []
     n = 0
@@ -111,13 +102,23 @@ def build_issue_body(index: Dict[str, Dict[str, Any]], groups: List[Tuple[str, L
     lines.append("Comment on this issue:")
     lines.append("")
     lines.append("```")
-    lines.append("/download <number>")
+    lines.append("/download <number> [audio|video] [mega|repo]")
     lines.append("```")
     lines.append("")
-    lines.append("Example: `/download 3`")
+    lines.append("| Option | Meaning |")
+    lines.append("|--------|---------|")
+    lines.append("| *(empty)* or `video` | Full media (default) |")
+    lines.append("| `audio` | Extract audio (mp3) from videos |")
+    lines.append("| *(empty)* or `repo` | Save in this GitHub repo |")
+    lines.append("| `mega` | Upload to **Mega.nz** (`TelegramNews/...`) |")
     lines.append("")
-    lines.append("Media is fetched with the Telegram scraper (Playwright) and saved under")
-    lines.append("`Download/telegram_downloads/<channel>/`.")
+    lines.append("**Examples**")
+    lines.append("- `/download 5` → video + repo")
+    lines.append("- `/download 5 audio` → audio + repo")
+    lines.append("- `/download 5 video mega` → video + Mega")
+    lines.append("- `/download 12 audio mega` → audio + Mega")
+    lines.append("")
+    lines.append("Media is fetched with the Telegram scraper (Playwright).")
     lines.append("")
     lines.append("---")
     lines.append("")
