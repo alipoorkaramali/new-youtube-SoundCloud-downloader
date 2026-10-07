@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p21-caption-box-telegram
-# BUILD: 2026-10-07-p21-caption-box
+# gitty-patch-id: p22-telegram-caption-cards
+# BUILD: 2026-10-07-p22-telegram-cards
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -677,20 +677,18 @@ browse_issues() {
                             if [[ -z "$issue_body" || "$issue_body" == "null" ]]; then
                                 echo -e "  ${YELLOW}(empty)${NC}"
                             else
-                                # Word-wrap helper (Instagram-style caption box; stable order on any width)
+                                # ---- helpers: wrap caption like Instagram, stable on any width ----
                                 _gitty_wrap_caption() {
                                     local text="$1" width="$2"
                                     [[ $width -lt 8 ]] && width=8
                                     text="${text//$'\r'/}"
                                     text="${text//$'\n'/ }"
-                                    # collapse multi-spaces
                                     while [[ "$text" == *"  "* ]]; do text="${text//  / }"; done
                                     text="${text#"${text%%[![:space:]]*}"}"
                                     text="${text%"${text##*[![:space:]]}"}"
                                     [[ -z "$text" ]] && return
                                     local -a out=()
                                     local line="" word
-                                    # split on spaces; keep long tokens unbroken except hard-cut
                                     for word in $text; do
                                         if [[ -z "$line" ]]; then
                                             line="$word"
@@ -712,21 +710,106 @@ browse_issues() {
                                         if command -v fribidi &>/dev/null; then
                                             s=$(printf '%s' "$s" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$s")
                                         fi
-                                        # LTR override so Termux keeps line order
                                         printf '%b\n' "${YELLOW}|${NC} "$'\u202D'"${s}"$'\u202C'
                                     done
                                 }
+                                _gitty_print_hdr() {
+                                    local h="$1"
+                                    if command -v fribidi &>/dev/null; then
+                                        h=$(printf '%s' "$h" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$h")
+                                    fi
+                                    printf '%b\n' "${YELLOW}|${NC} ${BOLD}${GREEN}"$'\u202D'"${h}"$'\u202C'"${NC}"
+                                }
+                                _gitty_flush_tg_card() {
+                                    # uses: tg_num tg_title tg_cap tg_dl box_inner
+                                    [[ -z "${tg_num}${tg_title}${tg_cap}" ]] && return
+                                    echo -e "${YELLOW}+$(printf '%*s' "$box_inner" '' | tr ' ' '-')+${NC}"
+                                    local hdr="#${tg_num}  ${tg_title}"
+                                    [[ -z "$tg_num" ]] && hdr="${tg_title:-item}"
+                                    _gitty_print_hdr "$hdr"
+                                    echo -e "${YELLOW}+-- caption $(printf '%*s' $((box_inner - 12)) '' | tr ' ' '-')+${NC}"
+                                    if [[ -n "$tg_cap" ]]; then
+                                        _gitty_wrap_caption "$tg_cap" "$box_inner"
+                                    else
+                                        echo -e "${YELLOW}|${NC} (no caption)"
+                                    fi
+                                    if [[ -n "$tg_dl" ]]; then
+                                        echo -e "${YELLOW}|${NC} ${CYAN}${tg_dl}${NC}"
+                                    fi
+                                    echo -e "${YELLOW}+$(printf '%*s' "$box_inner" '' | tr ' ' '-')+${NC}"
+                                    echo ""
+                                    tg_num=""; tg_title=""; tg_cap=""; tg_dl=""
+                                }
 
                                 local in_table=0
+                                local tg_num="" tg_title="" tg_cap="" tg_dl=""
+                                local in_tg_item=0
+
                                 while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
                                     local trimmed="${raw_line#"${raw_line%%[![:space:]]*}"}"
+                                    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+
+                                    # ---- Telegram catalog cards: ### N. [@ch/id](url) ----
+                                    if [[ "$trimmed" =~ ^#{2,3}[[:space:]]+([0-9]+)\.[[:space:]]+(.*) ]]; then
+                                        _gitty_flush_tg_card
+                                        tg_num="${BASH_REMATCH[1]}"
+                                        tg_title="${BASH_REMATCH[2]}"
+                                        # strip markdown link → @ch/id
+                                        if [[ "$tg_title" =~ \[([^\]]+)\]\([^\)]+\) ]]; then
+                                            tg_title="${BASH_REMATCH[1]}"
+                                        fi
+                                        # drop trailing · `date`
+                                        tg_title="${tg_title%% · *}"
+                                        tg_title="${tg_title%% ·*}"
+                                        tg_cap=""; tg_dl=""
+                                        in_tg_item=1
+                                        continue
+                                    fi
+                                    # channel section header ### 📢 @channel
+                                    if [[ "$trimmed" =~ ^#{2,3}[[:space:]]+(📢[[:space:]]*)?@([A-Za-z0-9_]+) ]]; then
+                                        _gitty_flush_tg_card
+                                        in_tg_item=0
+                                        echo -e "${CYAN}══ @${BASH_REMATCH[2]} ══${NC}"
+                                        echo ""
+                                        continue
+                                    fi
+                                    if [[ $in_tg_item -eq 1 ]]; then
+                                        # blockquote caption lines
+                                        if [[ "$trimmed" == ">"* ]]; then
+                                            local q="${trimmed#>}"
+                                            q="${q# }"
+                                            if [[ -n "$tg_cap" ]]; then
+                                                tg_cap="$tg_cap $q"
+                                            else
+                                                tg_cap="$q"
+                                            fi
+                                            continue
+                                        fi
+                                        # /download N
+                                        if [[ "$trimmed" == '`/download'* || "$trimmed" == '/download'* ]]; then
+                                            tg_dl="${trimmed//\`/}"
+                                            _gitty_flush_tg_card
+                                            in_tg_item=0
+                                            continue
+                                        fi
+                                        # blank → ignore inside item
+                                        [[ -z "$trimmed" ]] && continue
+                                        # other text append to caption
+                                        if [[ -n "$tg_cap" ]]; then
+                                            tg_cap="$tg_cap $trimmed"
+                                        else
+                                            tg_cap="$trimmed"
+                                        fi
+                                        continue
+                                    fi
+
+                                    # ---- Instagram-style markdown tables ----
                                     if [[ "$trimmed" == "|"* ]]; then
                                         in_table=1
                                         if [[ "$raw_line" == *"---"* ]] || [[ "$raw_line" == *":--"* ]] || [[ "$raw_line" == *"--:"* ]]; then
                                             continue
                                         fi
-                                        local clean="${raw_line#"${raw_line%%[![:space:]]*}"}"
-                                        clean="${clean%"${clean##*[![:space:]]}"}"
+                                        local clean="$trimmed"
                                         clean="${clean#|}"; clean="${clean%|}"
                                         IFS='|' read -ra cols_arr <<< "$clean"
                                         local num_col="" sc_col="" cap_col="" cidx=0
@@ -739,44 +822,38 @@ browse_issues() {
                                             fi
                                             cidx=$((cidx+1))
                                         done
-                                        # skip header rows (Instagram + Telegram catalog)
                                         local sc_l="${sc_col,,}" cap_l="${cap_col,,}"
-                                        if [[ "$num_col" == "#" || "$sc_l" == "shortcode" || "$sc_l" == "channel" || "$sc_l" == "کانال" \
-                                           || "$cap_l" == "caption" || "$cap_l" == "text" || "$cap_l" == "متن" || "$cap_l" == "title" ]]; then
+                                        if [[ "$num_col" == "#" || "$sc_l" == "shortcode" || "$sc_l" == "channel" \
+                                           || "$cap_l" == "caption" || "$cap_l" == "text" || "$cap_l" == "meaning" || "$cap_l" == "title" ]]; then
                                             continue
                                         fi
                                         [[ -z "$num_col" && -z "$sc_col" && -z "$cap_col" ]] && continue
-
-                                        # Instagram-style card: header row + caption box (width = terminal)
-                                        local hdr_line="#${num_col}  ${sc_col}"
                                         echo -e "${YELLOW}+$(printf '%*s' "$box_inner" '' | tr ' ' '-')+${NC}"
-                                        if command -v fribidi &>/dev/null; then
-                                            local hdr_disp
-                                            hdr_disp=$(printf '%s' "$hdr_line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$hdr_line")
-                                            printf '%b\n' "${YELLOW}|${NC} ${BOLD}${GREEN}"$'\u202D'"${hdr_disp}"$'\u202C'"${NC}"
-                                        else
-                                            echo -e "${YELLOW}|${NC} ${BOLD}${GREEN}${hdr_line}${NC}"
-                                        fi
+                                        _gitty_print_hdr "#${num_col}  ${sc_col}"
                                         echo -e "${YELLOW}+-- caption $(printf '%*s' $((box_inner - 12)) '' | tr ' ' '-')+${NC}"
                                         if [[ -n "$cap_col" ]]; then
                                             _gitty_wrap_caption "$cap_col" "$box_inner"
                                         else
-                                            echo -e "${YELLOW}|${NC} ${DIM}(no caption)${NC}"
+                                            echo -e "${YELLOW}|${NC} (no caption)"
                                         fi
                                         echo -e "${YELLOW}+$(printf '%*s' "$box_inner" '' | tr ' ' '-')+${NC}"
                                         echo ""
-                                    else
-                                        if [[ $in_table -eq 1 && -z "$raw_line" ]]; then in_table=0; fi
-                                        [[ -z "$trimmed" ]] && { echo ""; continue; }
-                                        local display_line
-                                        if command -v fribidi &>/dev/null; then
-                                            display_line=$(printf '%s' "$raw_line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$raw_line")
-                                        else
-                                            display_line="$raw_line"
-                                        fi
-                                        echo -e "  $display_line"
+                                        continue
                                     fi
+
+                                    if [[ $in_table -eq 1 && -z "$trimmed" ]]; then in_table=0; fi
+                                    [[ -z "$trimmed" ]] && { echo ""; continue; }
+                                    # skip pure --- separators in body intro
+                                    [[ "$trimmed" == "---" ]] && continue
+                                    local display_line
+                                    if command -v fribidi &>/dev/null; then
+                                        display_line=$(printf '%s' "$raw_line" | fribidi --nopad --nobreak 2>/dev/null || printf '%s' "$raw_line")
+                                    else
+                                        display_line="$raw_line"
+                                    fi
+                                    echo -e "  $display_line"
                                 done <<< "$issue_body"
+                                _gitty_flush_tg_card
                             fi
                             echo ""
                             echo -e "${CYAN}+$(printf '%*s' $((fcols-2)) '' | tr ' ' '-')+${NC}"
@@ -2448,7 +2525,7 @@ while true; do
     clear
     echo -e "${CYAN}==============================${NC}"
     echo -e "${CYAN}  Gitty - GitHub Manager v2.2${NC}"
-    echo -e "${YELLOW}  BUILD: 2026-10-07-p21-caption-box${NC}"
+    echo -e "${YELLOW}  BUILD: 2026-10-07-p22-telegram-cards${NC}"
     echo -e "${CYAN}==============================${NC}"
     echo -e "${GREEN}Logged in as: ${BOLD}$GITHUB_USER${NC}\n"
     echo "  1) Browse repository"
