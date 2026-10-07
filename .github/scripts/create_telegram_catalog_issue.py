@@ -78,14 +78,14 @@ def build_index() -> Tuple[Dict[str, Dict[str, Any]], List[Tuple[str, List[Dict]
             n += 1
             pid = str(p.get("id") or p.get("message_id") or "")
             url = (p.get("url") or "").strip() or f"https://t.me/{ch}/{pid}"
-            text = (p.get("text") or "").replace("\r", " ").replace("\n", " ")
-            text = re.sub(r"\s+", " ", text).strip()
+            # Keep full caption for index
+            text = (p.get("text") or p.get("caption") or "").strip()
             date = str(p.get("date") or p.get("published") or "")[:19]
             index[str(n)] = {
                 "channel": ch,
                 "id": pid,
                 "url": url,
-                "text": text[:500],
+                "text": text,
                 "date": date,
             }
     return index, groups
@@ -130,23 +130,34 @@ def build_issue_body(index: Dict[str, Dict[str, Any]], groups: List[Tuple[str, L
         for p in posts:
             n += 1
             pid = str(p.get("id") or p.get("message_id") or "")
-            text = (p.get("text") or "").replace("\r", " ").replace("\n", " ")
-            text = re.sub(r"\s+", " ", text).strip()
-            if len(text) > 160:
-                text = text[:157] + "…"
+            # Full caption — preserve line breaks
+            raw = (p.get("text") or p.get("caption") or "").strip()
             date = str(p.get("date") or "")[:16]
-            lines.append(f"{n}. {text or '(no text)'}")
-            meta = f"   id=`{pid}`"
+            post_url = (p.get("url") or "").strip() or f"https://t.me/{ch}/{pid}"
+            header = f"### {n}. [@{ch}/{pid}]({post_url})"
             if date:
-                meta += f" · {date}"
-            lines.append(meta)
+                header += f" · `{date}`"
+            lines.append(header)
+            lines.append("")
+            if raw:
+                for ln in raw.splitlines() or [raw]:
+                    lines.append(f"> {ln}" if ln.strip() else ">")
+            else:
+                lines.append("> _(no caption)_")
+            lines.append("")
+            lines.append(f"`/download {n}`")
             lines.append("")
         lines.append("")
 
     lines.append("---")
     lines.append("")
     lines.append("*Updated after each Telegram scrape run.*")
-    return "\n".join(lines)
+    body = "\n".join(lines)
+    MAX = 65000
+    if len(body) > MAX:
+        body = body[: MAX - 100] + "\n\n---\n\n*…truncated for length; use HTML archive for full list.*"
+        print(f"⚠️ issue body truncated to {MAX} chars")
+    return body
 
 
 def api_headers(token: str) -> dict:
