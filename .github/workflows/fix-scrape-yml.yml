@@ -16,88 +16,58 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore scrape + add catalog job + remove old catalog workflow
+      - name: Restore scrape and merge catalog job
         run: |
           set -e
-          curl -sL "https://raw.githubusercontent.com/alipoorkaramali/new-youtube-SoundCloud-downloader/d5c1217d6298c8a856b3cc455b4b75be00c97df2/.github/workflows/Scrape%20Telegram.yml" -o "/tmp/scrape.yml"
-          test $(wc -c < /tmp/scrape.yml) -gt 10000
-          cat >> /tmp/scrape.yml << 'EOF'
+          curl -sL "https://raw.githubusercontent.com/alipoorkaramali/new-youtube-SoundCloud-downloader/d5c1217d6298c8a856b3cc455b4b75be00c97df2/.github/workflows/Scrape%20Telegram.yml" -o /tmp/base.yml
+          test $(wc -c < /tmp/base.yml) -gt 10000
+          cat /tmp/base.yml > ".github/workflows/Scrape Telegram.yml"
+          cat >> ".github/workflows/Scrape Telegram.yml" << 'EOF'
 
-            # After all channel scrapes: refresh Telegram Catalog Issue + index
-            update-catalog:
-              needs: [prepare, scrape]
-              if: >-
-                always() &&
-                needs.prepare.result == 'success' &&
-                (needs.scrape.result == 'success' || needs.scrape.result == 'skipped')
-              runs-on: ubuntu-latest
-              permissions:
-                contents: write
-                issues: write
-              steps:
-                - uses: actions/checkout@v4
-                  with:
-                    fetch-depth: 1
-                    token: ${{ secrets.GITHUB_TOKEN }}
+  update-catalog:
+    needs: [prepare, scrape]
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.scrape.result == 'success' || needs.scrape.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-                - uses: actions/setup-python@v5
-                  with:
-                    python-version: "3.11"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-                - name: Install requests
-                  run: pip install requests
+      - name: Install requests
+        run: pip install requests
 
-                - name: Build catalog + update Issue
-                  env:
-                    GITHUB_REPOSITORY: ${{ github.repository }}
-                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                    GH_PAT: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-                  run: python .github/scripts/create_telegram_catalog_issue.py
+      - name: Build catalog + update Issue
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python .github/scripts/create_telegram_catalog_issue.py
 
-                - name: Commit index + meta
-                  run: |
-                    git config user.name "github-actions[bot]"
-                    git config user.email "github-actions[bot]@users.noreply.github.com"
-                    git pull --rebase --autostash origin ${{ github.ref_name }} || true
-                    git add State/telegram_catalog_index.json State/telegram_catalog_meta.json || true
-                    if git diff --staged --quiet; then
-                      echo "No catalog file changes"
-                    else
-                      git commit -m "chore(telegram): update catalog index + meta [skip ci]"
-                      git push origin HEAD:${{ github.ref_name }} || true
-                    fi
-          EOF
-          # Fix accidental leading spaces on job key (YAML needs exact 2-space indent for job)
-          python3 -c "
-          from pathlib import Path
-          t = Path('/tmp/scrape.yml').read_text(encoding='utf-8')
-          # normalize the appended block: job at column 2
-          t = t.replace('\n            # After all', '\n  # After all')
-          t = t.replace('\n            update-catalog:', '\n  update-catalog:')
-          # remaining lines of appended block were indented with 12 spaces; reduce by 10 for body under job
-          lines = t.splitlines(True)
-          out=[]
-          in_app=False
-          for line in lines:
-              if line.startswith('  update-catalog:'):
-                  in_app=True
-                  out.append(line)
-                  continue
-              if in_app:
-                  if line.startswith('            '):
-                      out.append(line[10:])  # 12->2 spaces base: remove 10
-                  elif line.startswith('          '):
-                      out.append(line[8:])
-                  else:
-                      out.append(line)
-              else:
-                  out.append(line)
-          Path('.github/workflows/Scrape Telegram.yml').write_text(''.join(out), encoding='utf-8')
-          print('lines', len(out))
-          "
-          # verify
+      - name: Commit index + meta
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash origin ${{ github.ref_name }} || true
+          git add State/telegram_catalog_index.json State/telegram_catalog_meta.json || true
+          if git diff --staged --quiet; then
+            echo "No catalog file changes"
+          else
+            git commit -m "chore(telegram): update catalog index + meta [skip ci]"
+            git push origin HEAD:${{ github.ref_name }} || true
+          fi
+EOF
           grep -n "update-catalog:" ".github/workflows/Scrape Telegram.yml"
-          head -5 ".github/workflows/Scrape Telegram.yml"
+          head -3 ".github/workflows/Scrape Telegram.yml"
           rm -f .github/workflows/telegram-catalog-update.yml
           rm -f .github/workflows/fix-scrape-yml.yml
           git config user.name "github-actions[bot]"
@@ -105,6 +75,6 @@ jobs:
           git add ".github/workflows/Scrape Telegram.yml"
           git add -A .github/workflows/telegram-catalog-update.yml .github/workflows/fix-scrape-yml.yml || true
           git status
-          git commit -m "feat(telegram): catalog Issue update inside Scrape workflow; remove separate catalog workflow"
+          git commit -m "feat(telegram): catalog Issue update inside Scrape workflow"
           git pull --rebase origin main || true
           git push origin main
