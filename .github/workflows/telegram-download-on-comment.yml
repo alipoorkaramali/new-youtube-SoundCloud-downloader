@@ -156,6 +156,8 @@ jobs:
           python3 .github/scripts/patch_scraper_scroll.py .github/scripts/scraper.py || true
           python3 .github/scripts/patch_stop_before.py .github/scripts/scraper.py || true
           python3 .github/scripts/patch_include_start_post.py .github/scripts/scraper.py || true
+          # همان پچ مدال Service Worker که در اسکرپ ساعتی استفاده می‌شود
+          python3 .github/scripts/patch_search_modal.py .github/scripts/scraper.py || true
 
       - name: Write config for single-post media download
         run: |
