@@ -123,6 +123,25 @@ jobs:
                   p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
                   print("state repaired")
           PY
+          # Sanitize: drop empty channel names from list + channels map
+          python3 << 'PY'
+          import json
+          from pathlib import Path
+          p = Path("State/telegram_news_state.json")
+          try:
+              d = json.loads(p.read_text(encoding="utf-8"))
+          except Exception:
+              d = {"channel_list": ["IranintlTv", "bbcpersian"], "channels": {}}
+          cl = [c for c in (d.get("channel_list") or []) if isinstance(c, str) and c.strip()]
+          chs = {k: v for k, v in (d.get("channels") or {}).items() if isinstance(k, str) and k.strip()}
+          if cl != d.get("channel_list") or set(chs) != set(d.get("channels") or {}):
+              d["channel_list"] = cl or ["IranintlTv", "bbcpersian"]
+              d["channels"] = chs
+              p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+              print("🧹 sanitized empty channels →", d["channel_list"])
+          else:
+              print("channel_list clean:", cl)
+          PY
           IS_SCHEDULE="false"
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             IS_SCHEDULE="true"
@@ -166,7 +185,8 @@ jobs:
             d=json.loads(p.read_text(encoding='utf-8'))
           except Exception:
             d={'channel_list':['IranintlTv','bbcpersian'],'channels':{}}
-          print(json.dumps(d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']))
+          cl=[c for c in (d.get('channel_list') or list((d.get('channels') or {}).keys()) or ['IranintlTv']) if isinstance(c,str) and c.strip()]
+          print(json.dumps(cl or ['IranintlTv']))
           ")
           else
             CH=$(echo "${{ github.event.inputs.channel }}" | sed 's/^@//' | xargs)
@@ -238,7 +258,14 @@ jobs:
       - name: Resolve run parameters
         id: params
         run: |
-          CHANNEL=$(echo "${{ matrix.channel }}" | sed 's/^@//')
+          CHANNEL=$(echo "${{ matrix.channel }}" | sed 's/^@//' | xargs)
+          if [ -z "$CHANNEL" ]; then
+            echo "❌ empty channel in matrix — skipping this job"
+            echo "channel=" >> $GITHUB_OUTPUT
+            echo "skip_empty=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "skip_empty=false" >> $GITHUB_OUTPUT
           STATE="State/telegram_news_state.json"
           IS_SCHEDULE="${{ needs.prepare.outputs.is_schedule }}"
           if [ "$IS_SCHEDULE" = "true" ]; then
@@ -406,10 +433,10 @@ jobs:
           find "$BASE" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*screenshot*' \) -delete 2>/dev/null || true
           echo "✅ screenshot dirs ready (empty)"
       - name: Run scraper (media)
-        if: ${{ steps.params.outputs.debug_mode != 'true' }}
+        if: ${{ steps.params.outputs.debug_mode != 'true' && steps.params.outputs.channel != '' }}
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
       - name: Run debug scraper (text)
-        if: ${{ steps.params.outputs.debug_mode == 'true' }}
+        if: ${{ steps.params.outputs.debug_mode == 'true' && steps.params.outputs.channel != '' }}
         run: xvfb-run python .github/scripts/debug_scraper.py
       - name: Verify output
         if: always()
@@ -423,7 +450,7 @@ jobs:
             exit 0
           fi
       - name: Update state last_post_id
-        if: always()
+        if: always() && steps.params.outputs.channel != ''
         env:
           CHANNEL: ${{ steps.params.outputs.channel }}
         run: |
@@ -480,12 +507,15 @@ jobs:
               except Exception:
                   ch["last_post_id"] = last_id
                   print("state set", channel, last_id)
-          if channel not in state["channel_list"]:
+          if channel and channel not in state["channel_list"]:
               state["channel_list"].append(channel)
+          # never keep empty keys
+          state["channel_list"] = [c for c in state["channel_list"] if isinstance(c, str) and c.strip()]
+          state["channels"] = {k: v for k, v in state["channels"].items() if isinstance(k, str) and k.strip()}
           state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           PY
       - name: Commit results
-        if: always()
+        if: always() && steps.params.outputs.channel != ''
         run: |
           set +e
           git config user.name github-actions[bot]
@@ -503,6 +533,10 @@ jobs:
           fi
           git checkout -- config/config.yaml 2>/dev/null || true
           CHANNEL="${{ steps.params.outputs.channel }}"
+          if [ -z "$CHANNEL" ]; then
+            echo "skip commit: empty channel"
+            exit 0
+          fi
           OUT="Download/telegram_downloads/${CHANNEL}"
           # Always commit text results + state (json/csv/html/summary/resume/log)
           if [ -d "$OUT" ]; then
