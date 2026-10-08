@@ -185,7 +185,7 @@ jobs:
       - name: Run scraper (media for one post)
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
 
-      - name: Collect only this post media (no screenshots)
+      - name: Collect only this post media (exact PID only)
         id: media
         run: |
           set -e
@@ -201,7 +201,7 @@ jobs:
 
           export BASE PID STAGING
           python3 << 'PY'
-          import os, re, shutil, time
+          import os, re, shutil, sys
           from pathlib import Path
 
           base = Path(os.environ["BASE"])
@@ -210,18 +210,31 @@ jobs:
           staging.mkdir(parents=True, exist_ok=True)
 
           media_re = re.compile(
-              r"\.(mp4|mkv|webm|mov|avi|mp3|m4a|ogg|opus|wav|flac|aac|jpg|jpeg|png|gif|webp|pdf|zip|rar|7z)$",
+              r"\.(mp4|mkv|webm|mov|avi|mp3|m4a|ogg|opus|wav|flac|aac|jpg|jpeg|png|gif|webp|pdf)$",
               re.I,
           )
           skip_name = re.compile(
-              r"(screenshot|debug_|initial\.png|final\.png|before_click|search_|error_)", re.I
+              r"(screenshot|debug_|initial\.png|final\.png|before_click|search_|error_|_archive|_posts\.)",
+              re.I,
           )
-          skip_dir = re.compile(r"(post_screenshots|/screenshots/|/debug_screenshots/)", re.I)
+          skip_dir = re.compile(r"(post_screenshots|/screenshots/|/debug_screenshots/|/debug_rightclick/)", re.I)
 
-          now = time.time()
-          cutoff = now - 20 * 60
+          def is_exact_pid(f: Path, rel: str) -> bool:
+              parts = rel.split("/")
+              if "media" in parts:
+                  try:
+                      i = parts.index("media")
+                      if i + 1 < len(parts) and parts[i + 1] == pid:
+                          return True
+                  except ValueError:
+                      pass
+              if f.name.startswith(pid + "_") or f.name.startswith(pid + "."):
+                  return True
+              if re.match(r"^[0-9]+_", f.name):
+                  return f.name.split("_", 1)[0] == pid
+              return False
 
-          exact, recent = [], []
+          exact = []
           if base.exists():
               for f in base.rglob("*"):
                   if not f.is_file():
@@ -229,43 +242,42 @@ jobs:
                   rel = str(f.relative_to(base)).replace("\\", "/")
                   if skip_dir.search(rel):
                       continue
+                  if skip_name.search(f.name) or skip_name.search(rel):
+                      continue
                   if not media_re.search(f.name):
                       continue
-                  if skip_name.search(f.name):
+                  if not is_exact_pid(f, rel):
+                      print(f"skip non-exact: {rel}")
                       continue
-                  try:
-                      mtime = f.stat().st_mtime
-                  except OSError:
-                      continue
-                  if pid in rel.split("/") or re.search(rf"(^|[^0-9]){re.escape(pid)}([^0-9]|$)", f.name):
-                      exact.append((mtime, f))
-                  elif mtime >= cutoff:
-                      recent.append((mtime, f))
+                  exact.append(f)
 
-          exact.sort(reverse=True)
-          recent.sort(reverse=True)
-
-          chosen = exact if exact else recent
-          if exact:
-              print(f"✅ exact PID {pid}: {len(exact)} file(s)")
-          elif recent:
-              print(f"⚠️ no filename match for PID {pid}; using {len(recent)} recent file(s) from this run")
-          else:
-              print(f"❌ no media for PID {pid}")
+          exact.sort(key=lambda p: p.stat().st_mtime, reverse=True)
 
           copied = 0
-          for mtime, f in chosen:
+          seen_names = set()
+          for f in exact:
+              if f.name in seen_names:
+                  continue
+              seen_names.add(f.name)
               dest = staging / f.name
-              if dest.exists():
-                  dest = staging / f"{f.stem}_{copied}{f.suffix}"
               shutil.copy2(f, dest)
               copied += 1
-              print(f"+ {f.relative_to(base)}")
+              print(f"+ EXACT {f.relative_to(base)}")
 
-          print(f"📦 staged {copied} media file(s) for post {pid}")
+          print(f"📦 staged {copied} EXACT media file(s) for post {pid}")
+          if copied == 0:
+              print(f"❌ هیچ فایل مدیایی با post id دقیق {pid} پیدا نشد — آپلود نمی‌شود")
+              mdir = base / "media"
+              if mdir.exists():
+                  print("media/ contents:")
+                  for x in sorted(mdir.rglob("*"))[:40]:
+                      if x.is_file():
+                          print(" ", x.relative_to(base))
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"folder={staging}\n")
               out.write(f"count={copied}\n")
+          if copied == 0:
+              sys.exit(1)
           PY
           ls -la "$STAGING" || true
 
