@@ -194,35 +194,21 @@ jobs:
       - name: Run scraper (media for one post)
         run: xvfb-run python .github/scripts/main.py --config config/config.yaml
 
-      - name: Verify scraped post id is exact target
+      - name: Check media for exact post id (not archive posts.json)
         env:
           CH: ${{ steps.item.outputs.channel }}
           PID: ${{ steps.item.outputs.post_id }}
         run: |
-          JP="Download/telegram_downloads/${CH}/${CH}_posts.json"
-          export JP PID
-          python3 << 'PY'
-          import json, os, sys
-          from pathlib import Path
-          pid = os.environ["PID"]
-          jp = Path(os.environ["JP"])
-          if not jp.exists():
-              print("❌ posts.json نیست — اسکرپر پست هدف را جمع نکرد")
-              sys.exit(1)
-          posts = json.loads(jp.read_text(encoding="utf-8"))
-          if not isinstance(posts, list) or not posts:
-              print("❌ posts.json خالی")
-              sys.exit(1)
-          ids = [str(p.get("id") or p.get("message_id") or "") for p in posts]
-          print("collected ids:", ids)
-          if pid not in ids:
-              print(f"❌ پست هدف {pid} در نتایج نیست — قبلی/بعدی گرفته شده: {ids}")
-              sys.exit(1)
-          if any(i and i != pid for i in ids):
-              print(f"❌ پست اضافه غیر از {pid}: {ids}")
-              sys.exit(1)
-          print(f"✅ exact target post {pid} collected")
-          PY
+          BASE="Download/telegram_downloads/${CH}/media"
+          echo "media dir after scrape:"
+          ls -la "$BASE" 2>/dev/null || echo "(empty)"
+          found=$(find "$BASE" -type f -name "${PID}_*" 2>/dev/null | head -5)
+          if [ -n "$found" ]; then
+            echo "✅ media for $PID:"
+            echo "$found"
+          else
+            echo "⚠️ هنوز فایل ${PID}_* نیست — مرحله Collect تصمیم نهایی می‌گیرد"
+          fi
 
       - name: Collect only this post media (exact PID only)
         id: media
