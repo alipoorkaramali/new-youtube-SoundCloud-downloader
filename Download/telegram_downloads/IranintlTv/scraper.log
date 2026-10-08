@@ -39379,3 +39379,104 @@ Call log:
 2026-10-08 14:32:55,222 [INFO] ✅ خروجی‌ها آماده شد.
 2026-10-08 14:32:55,222 [INFO] 📊 تعداد نهایی در آرشیو: 50
 2026-10-08 14:32:55,470 [INFO] ✅ پایان دیباگ
+2026-10-08 15:31:42,314 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTv
+2026-10-08 15:31:42,314 [INFO] 🐞 حالت دیباگ: فعال
+2026-10-08 15:31:42,314 [INFO] 📌 Resume: غیرفعال
+2026-10-08 15:31:42,314 [INFO] 🛑 مرز توقف (stop_before_id): 361306 — پست‌های قدیمی‌تر/مساوی جمع نمی‌شوند
+2026-10-08 15:31:42,314 [INFO] 🧭 جهت اسکرول: up
+2026-10-08 15:31:42,315 [INFO] 🐞 debug screenshots: Download/telegram_downloads/IranintlTv/debug_screenshots
+2026-10-08 15:31:42,315 [INFO] 🐞 حالت دیباگ – بدون دانلود رسانه
+2026-10-08 15:31:42,315 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر/قبلی‌ها)
+2026-10-08 15:31:42,315 [INFO] 🚀 دیباگ @IranintlTv (limit=1000)
+2026-10-08 15:31:42,315 [INFO] 🔄 تا 1000 پست (هر دور از آخرین مرز → قبلی/بعدی)
+2026-10-08 15:31:42,315 [INFO] 📌 دور 1/8 | جمع‌شده 0/1000
+2026-10-08 15:31:42,315 [INFO] 🐞 استخراج جهت=up start_link=False
+2026-10-08 15:31:48,602 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-10-08 15:32:03,609 [ERROR] ❌ کلیک روی نوار جستجو شکست: ElementHandle.click: Timeout 15000ms exceeded.
+Call log:
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="rQsyDQTJ"></div> from <div class="Q8l6Ks2K opacity-transition fast not-open shown closing">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    - waiting for element to be visible, enabled and stable
+    - element is visible, enabled and stable
+    - scrolling into view if needed
+    - done scrolling
+    - <div class="rQsyDQTJ"></div> from <div class="Q8l6Ks2K opacity-transition fast not-open shown closing">…</div> subtree intercepts pointer events
+  2 × retrying click action
+      - waiting 100ms
+      - waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+  26 × retrying click action
+       - waiting 500ms
+       - waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+  - retrying click action
+    - waiting 500ms
+
+2026-10-08 15:32:03,781 [ERROR] 📸 اسکرین‌شات خطا ذخیره شد: Download/telegram_downloads/IranintlTv/debug_screenshots/error_IranintlTv_search_click_blocked.png
+2026-10-08 15:32:03,786 [ERROR] 🧾 UI overlay info: {'backdrop_count': 3, 'portal_html_len': 2086, 'sample_texts': ['AAliAdd AccountMy ProfileSaved MessagesContactsSettingsMore', 'Add Account', 'My Profile', 'Saved Messages', 'Something went wrong\nService Worker is disabled. Streaming media may not be supported. Try reloading the page without ho', 'Something went wrong', 'Service Worker is disabled. Streaming media may not be supported. Try reloading the page without holding <Shift> key\nOK']}
+2026-10-08 15:32:05,171 [ERROR] 📸 اسکرین‌شات خطا ذخیره شد: Download/telegram_downloads/IranintlTv/debug_screenshots/error_IranintlTv_search_click_after_escape.png
+2026-10-08 15:32:05,174 [ERROR] 🧾 UI overlay info: {'backdrop_count': 1, 'portal_html_len': 1503, 'sample_texts': ['AAliAdd AccountMy ProfileSaved MessagesContactsSettingsMore', 'Add Account', 'My Profile', 'Saved Messages']}
+2026-10-08 15:32:05,203 [INFO] ✅ کلیک اجباری روی سرچ بعد از Escape موفق شد
+2026-10-08 15:32:06,596 [INFO] 🔍 در حال جستجوی: @IranintlTv
+2026-10-08 15:32:08,427 [INFO] ⏳ منتظر نتایج...
+2026-10-08 15:32:08,427 [INFO] 🕐 مرحله اول انتظار (10 ثانیه)...
+2026-10-08 15:32:14,619 [INFO]    ✅ عبارت 'IranintlTv' در مرحله اول یافت شد.
+2026-10-08 15:32:14,619 [INFO] ✅ نتایج جستجو ظاهر شدند.
+2026-10-08 15:32:22,272 [INFO] ✅ کانال با موفقیت باز شد (سلکتور div.search-result).
+2026-10-08 15:32:22,272 [INFO] ⬇️ تلاش برای پرش به جدیدترین پست‌ها...
+2026-10-08 15:32:22,364 [INFO]    ✅ دکمه پرش کلیک شد (button[title="Go to bottom"])
+2026-10-08 15:32:30,023 [INFO] ⚠️ ارتفاع صفحه پس از 3 اسکرول تغییر نکرد.
+2026-10-08 15:32:30,026 [INFO] 📌 به بالای صفحه رسیدیم. اسکرول متوقف می‌شود.
+2026-10-08 15:32:30,026 [INFO] 📊 9 پست جمع‌آوری شد.
+2026-10-08 15:32:30,026 [INFO] ⏭️ اسکرین‌شات‌ها غیرفعال هستند.
+2026-10-08 15:32:30,074 [INFO] 📥 9 پست | start_link= | scroll=up
+2026-10-08 15:32:30,106 [INFO] 📈 +9 | مجموع 9/1000
+2026-10-08 15:32:30,108 [INFO] 📌 بالای صفحه – دور بعد
+2026-10-08 15:32:32,310 [INFO] 📌 دور 2/8 | جمع‌شده 9/1000
+2026-10-08 15:32:32,310 [INFO] 🔄 دور 2: از oldest=361307 با scroll=up
+2026-10-08 15:32:32,310 [INFO] 🐞 استخراج جهت=up start_link=True
+2026-10-08 15:32:32,310 [INFO] ♻️ استفاده مجدد از context و page موجود
+2026-10-08 15:32:32,455 [INFO] 🔗 تلاش برای رفتن به لینک: https://t.me/IranintlTv/361307
+2026-10-08 15:32:32,455 [INFO] 🎯 شناسه پیام هدف: 361307
+2026-10-08 15:32:32,931 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-10-08 15:32:37,070 [INFO] 🔍 لینک تایپ شد: https://t.me/IranintlTv/361307
+2026-10-08 15:32:37,073 [INFO] ⏳ منتظر نتایج جستجو...
+2026-10-08 15:32:53,452 [INFO] ✅ روی اولین نتیجه با سلکتور 'div[class*="message"] a' کلیک شد.
+2026-10-08 15:32:53,549 [INFO] ✅ صفحه پیام‌ها با موفقیت بارگذاری شد.
+2026-10-08 15:32:53,550 [INFO] ℹ️ در حالت start_link، پرش به پایین انجام نمی‌شود.
+2026-10-08 15:32:53,550 [INFO] 🎯 پیدا کردن پیام هدف 361307...
+2026-10-08 15:32:57,965 [INFO] ✅ پیام هدف به بالای صفحه منتقل شد.
+2026-10-08 15:32:57,965 [INFO] 🎯 شروع جمع‌آوری از پیام هدف 361307
+2026-10-08 15:32:57,965 [INFO] ⬆️ بارگذاری پست‌های قدیمی‌تر با اسکرول به بالا...
+2026-10-08 15:33:07,120 [INFO] ⚠️ ارتفاع صفحه پس از 3 اسکرول تغییر نکرد.
+2026-10-08 15:33:07,122 [INFO] 📌 به بالای صفحه رسیدیم. اسکرول متوقف می‌شود.
+2026-10-08 15:33:07,122 [INFO] 📊 0 پست جمع‌آوری شد.
+2026-10-08 15:33:07,122 [INFO] ⏭️ اسکرین‌شات‌ها غیرفعال هستند.
+2026-10-08 15:33:07,122 [WARNING] ⚠️ والد پستی تحویل نداد
+2026-10-08 15:33:07,123 [INFO] ℹ️ پست جدید در این دور نبود. پایان.
+2026-10-08 15:33:07,123 [INFO] 📥 9 پست در 2 دور
+2026-10-08 15:33:07,123 [INFO] 🚀 شروع تولید فایل‌های خروجی...
+2026-10-08 15:33:07,123 [INFO] 📊 پست‌های این اجرا: 9
+2026-10-08 15:33:07,123 [INFO] 🪟 keep_latest=50
+2026-10-08 15:33:07,123 [INFO] 📄 50 پست از JSON قبلی: IranintlTv_posts.json
+2026-10-08 15:33:07,124 [INFO] 🔄 ادغام: 50 قبلی + 9 جدید = 59 یکتا (حذف 0 تکراری)
+2026-10-08 15:33:07,124 [INFO] 🪟 پنجره 50تایی: 59 → 50 (حذف 9 قدیمی‌تر؛ run_new=9)
+2026-10-08 15:33:07,125 [INFO] 📄 JSON: IranintlTv_posts.json (50 پست)
+2026-10-08 15:33:07,126 [INFO] 📄 CSV: IranintlTv_posts.csv
+2026-10-08 15:33:07,167 [INFO] 🌐 HTML: IranintlTv_posts.html (50 پست)
+2026-10-08 15:33:07,182 [INFO] 📦 ZIP: IranintlTv_archive.zip
+2026-10-08 15:33:07,182 [INFO] ✅ خروجی‌ها آماده شد.
+2026-10-08 15:33:07,183 [INFO] 📊 تعداد نهایی در آرشیو: 50
+2026-10-08 15:33:07,460 [INFO] ✅ پایان دیباگ
