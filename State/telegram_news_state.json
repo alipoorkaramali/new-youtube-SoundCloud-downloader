@@ -1,7 +1,8 @@
 {
   "channel_list": [
     "IranintlTv",
-    "bbcpersian"
+    "bbcpersian",
+    ""
   ],
   "channels": {
     "bbcpersian": {
@@ -11,6 +12,9 @@
     "IranintlTv": {
       "updated_at": "2026-10-08T06:32:54Z",
       "last_post_id": "361246"
+    },
+    "": {
+      "updated_at": "2026-10-08T07:31:08Z"
     }
   }
 }
