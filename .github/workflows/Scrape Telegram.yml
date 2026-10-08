@@ -218,6 +218,17 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           lfs: true
           fetch-depth: 1
+      - name: Restore scraper.py if placeholder
+        run: |
+          SIZE=$(wc -c < .github/scripts/scraper.py 2>/dev/null || echo 0)
+          HEAD=$(head -c 100 .github/scripts/scraper.py 2>/dev/null || true)
+          if [ "$SIZE" -lt 5000 ] || echo "$HEAD" | grep -qiE 'PLACEHOLDER|RESTORE_FROM'; then
+            echo "⚠️ scraper.py placeholder/corrupt (size=$SIZE) — restoring from known-good commit"
+            curl -fsSL "https://raw.githubusercontent.com/alipoorkaramali/new-youtube-SoundCloud-downloader/e661529e057317dbc1942ed50fd28b891b875950/.github/scripts/scraper.py" -o .github/scripts/scraper.py
+            echo "✅ restored size=$(wc -c < .github/scripts/scraper.py)"
+          else
+            echo "✅ scraper.py OK size=$SIZE"
+          fi
       - name: Patch scraper scroll / jump-to-bottom
         run: python3 .github/scripts/patch_scraper_scroll.py .github/scripts/scraper.py
       - name: Patch scraper stop_before (newest→saved)
@@ -418,7 +429,7 @@ jobs:
         run: |
           mkdir -p State
           STATE=State/telegram_news_state.json
-          [ -f "$STATE" ] || echo '{"channel_list":[],"channels":{}}' > "$STATE"
+          [ -f "$STATE" ] || echo '{\"channel_list\":[],\"channels\":{}}' > "$STATE"
           export STATE JSON_FILE="Download/telegram_downloads/$CHANNEL/${CHANNEL}_posts.json"
           export RESUME_FILE="Download/telegram_downloads/$CHANNEL/resume_state.json"
           python3 << 'PY'
