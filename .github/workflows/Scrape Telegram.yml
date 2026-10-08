@@ -53,7 +53,7 @@ on:
         required: false
         default: false
       save_to:
-        description: 'محل ذخیره'
+        description: 'رسانه/اسکرین‌شات هم در ریپو؟ (نتیجه متنی همیشه کامیت می‌شود)'
         required: true
         type: choice
         default: 'repository'
@@ -289,7 +289,7 @@ jobs:
           if n==0 and cp.exists():
               try:
                   with cp.open(encoding='utf-8') as f:
-                      n=max(0, sum(1 for _ in csv.DictReader(f)))
+                      n=max(0, sum(1 for _ in csv.DictReader(f))
               except Exception:
                   n=0
           print(n)
@@ -485,7 +485,7 @@ jobs:
           state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           PY
       - name: Commit results
-        if: ${{ steps.params.outputs.save_to == 'repository' }}
+        if: always()
         run: |
           set +e
           git config user.name github-actions[bot]
@@ -503,12 +503,25 @@ jobs:
           fi
           git checkout -- config/config.yaml 2>/dev/null || true
           CHANNEL="${{ steps.params.outputs.channel }}"
-          git add -A "Download/telegram_downloads/${CHANNEL}" State/telegram_news_state.json || true
+          OUT="Download/telegram_downloads/${CHANNEL}"
+          # Always commit text results + state (json/csv/html/summary/resume/log)
+          if [ -d "$OUT" ]; then
+            git add -f "$OUT"/*.json "$OUT"/*.csv "$OUT"/*.html "$OUT"/*.zip "$OUT"/*.log 2>/dev/null || true
+            git add -f "$OUT"/resume_state.json "$OUT"/debug_summary.json 2>/dev/null || true
+          fi
+          git add -f State/telegram_news_state.json 2>/dev/null || true
+          # Media / screenshots only when save_to=repository (optional heavy files)
+          if [ "${{ steps.params.outputs.save_to }}" = "repository" ]; then
+            echo "📦 save_to=repository → also committing media/screenshots if present"
+            git add -A "$OUT" 2>/dev/null || true
+          else
+            echo "📝 text-only commit (save_to=${{ steps.params.outputs.save_to }} — media/screenshots skipped)"
+          fi
           git reset HEAD -- config/config.yaml 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No scrape artifacts to commit"
           else
-            git commit -m "📥 news scrape @${CHANNEL}"
+            git commit -m "📥 news scrape @${CHANNEL} (text results)"
             git push origin HEAD:${{ github.ref_name }} || true
           fi
       - name: Upload artifact
