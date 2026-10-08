@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Gitty - GitHub Manager for Termux (TUI) v2.2
-# gitty-patch-id: p23-watcher-catalog-cards
-# BUILD: 2026-10-07-p23-watcher-cards
+# gitty-patch-id: p24-catalog-download-harmonize
+# BUILD: 2026-10-08-p24-catalog-fix
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -584,14 +584,40 @@ browse_issues() {
                 echo -e "${YELLOW}${bot_border}${NC}"
                 echo ""
 
-                local shortcodes=($(echo "$issue_body" | grep -oE '`([A-Za-z0-9_-]+)`' | sed 's/`//g' | sort -u))
+                # Extract shortcodes but exclude reserved download-option keywords
+                # (audio/video/mega/repo appear in help text of Catalog issues)
+                local -a shortcodes=()
+                local _sc
+                while IFS= read -r _sc; do
+                    [[ -z "$_sc" ]] && continue
+                    case "${_sc,,}" in
+                        audio|video|mega|repo|empty|costume|auto) continue ;;
+                    esac
+                    shortcodes+=("$_sc")
+                done < <(echo "$issue_body" | grep -oE '`([A-Za-z0-9_-]+)`' | sed 's/`//g' | sort -u)
+
+                local is_catalog=0
+                local issue_title_now="${issue_titles[$idx]}"
+                if echo "$issue_title_now" | grep -qiE "catalog|channel catalog|download"; then
+                    is_catalog=1
+                fi
+
                 echo -e "${GREEN}${top_border}${NC}"
-                printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "Shortcodes"
-                echo -e "${GREEN}${mid_border}${NC}"
-                if [[ ${#shortcodes[@]} -gt 0 ]]; then
-                    for sc in "${shortcodes[@]}"; do printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "$sc"; done
+                if [[ $is_catalog -eq 1 ]]; then
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "Download options"
+                    echo -e "${GREEN}${mid_border}${NC}"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "audio  → Audio only  (**auto** workflow)"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "video  → Default/manual (**costume**)"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "repo   → Save in downloader **repo**"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "mega   → Upload to **Mega.nz**"
                 else
-                    printf "${GREEN}|${NC} ${YELLOW}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "(none found)"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "Shortcodes"
+                    echo -e "${GREEN}${mid_border}${NC}"
+                    if [[ ${#shortcodes[@]} -gt 0 ]]; then
+                        for sc in "${shortcodes[@]}"; do printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "$sc"; done
+                    else
+                        printf "${GREEN}|${NC} ${YELLOW}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "(none found)"
+                    fi
                 fi
                 echo -e "${GREEN}${bot_border}${NC}"
                 echo ""
@@ -606,10 +632,13 @@ browse_issues() {
                 case "$opt" in
                     1)
                         local target=""
-                        local issue_title_now="${issue_titles[$idx]}"
                         if echo "$issue_title_now" | grep -qi "Telegram"; then
                             echo -e "${CYAN}Telegram: enter catalog number OR t.me URL${NC}"
                             echo -e "${YELLOW}Example: 5   or   https://t.me/bbcpersian/12345${NC}"
+                            echo -ne "${YELLOW}> ${NC}"; read -r target
+                        elif [[ $is_catalog -eq 1 ]]; then
+                            # Catalog issue: always ask for item number first
+                            echo -e "${CYAN}Enter catalog item number (e.g. 5 or 12):${NC}"
                             echo -ne "${YELLOW}> ${NC}"; read -r target
                         elif [[ ${#shortcodes[@]} -gt 0 ]]; then
                             echo -e "${CYAN}Select shortcode number (1-${#shortcodes[@]}) or enter custom:${NC}"
@@ -634,8 +663,8 @@ browse_issues() {
                         else
                         local mode="video"
                         echo -e "${CYAN}Mode:${NC}"
-                        echo "  1) video (default)"
-                        echo "  2) audio"
+                        echo "  1) video (default / costume)"
+                        echo "  2) audio (auto workflow)"
                         echo -ne "${YELLOW}> ${NC}"; read -r mode_choice
                         case "$mode_choice" in
                             2|audio|a|A) mode="audio" ;;
@@ -643,13 +672,15 @@ browse_issues() {
                         esac
                         local dest="repo"
                         echo -e "${CYAN}Destination:${NC}"
-                        echo "  1) repo (save in GitHub repo, default)"
+                        echo "  1) repo (save in GitHub downloader repo, default)"
                         echo "  2) mega (upload to Mega.nz)"
                         echo -ne "${YELLOW}> ${NC}"; read -r dest_choice
                         case "$dest_choice" in
                             2|mega|m|M) dest="mega" ;;
                             *) dest="repo" ;;
                         esac
+                        # Harmonized command format matching watcher README:
+                        # /download <number> [audio|video] [mega|repo]
                         local comment_body="/download $target $mode $dest"
                         echo -e "${CYAN}Posting comment: ${BOLD}$comment_body${NC}"
                         local payload
