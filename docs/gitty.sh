@@ -2624,7 +2624,7 @@ while true; do
     clear
     echo -e "${CYAN}==============================${NC}"
     echo -e "${CYAN}  Gitty - GitHub Manager v2.2${NC}"
-    echo -e "${YELLOW}  BUILD: 2026-10-07-p23-watcher-cards${NC}"
+    echo -e "${YELLOW}  BUILD: 2026-10-08-p24-catalog-download-harmonize${NC}"
     echo -e "${CYAN}==============================${NC}"
     echo -e "${GREEN}Logged in as: ${BOLD}$GITHUB_USER${NC}\n"
     echo "  1) Browse repository"
