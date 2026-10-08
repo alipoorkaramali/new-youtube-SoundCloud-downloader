@@ -38175,3 +38175,103 @@ Call log:
 2026-10-08 03:32:45,233 [INFO] ✅ خروجی‌ها آماده شد.
 2026-10-08 03:32:45,233 [INFO] 📊 تعداد نهایی در آرشیو: 50
 2026-10-08 03:32:45,412 [INFO] ✅ پایان دیباگ
+2026-10-08 04:19:06,919 [INFO] 📁 دایرکتوری خروجی: Download/telegram_downloads/IranintlTv
+2026-10-08 04:19:06,919 [INFO] 🐞 حالت دیباگ: فعال
+2026-10-08 04:19:06,919 [INFO] 📌 Resume: غیرفعال
+2026-10-08 04:19:06,919 [INFO] 🛑 مرز توقف (stop_before_id): 361233 — پست‌های قدیمی‌تر/مساوی جمع نمی‌شوند
+2026-10-08 04:19:06,919 [INFO] 🧭 جهت اسکرول: up
+2026-10-08 04:19:06,919 [INFO] 🐞 debug screenshots: Download/telegram_downloads/IranintlTv/debug_screenshots
+2026-10-08 04:19:06,919 [INFO] 🐞 حالت دیباگ – بدون دانلود رسانه
+2026-10-08 04:19:06,919 [INFO] 🧭 جهت اسکرول: بالا (قدیمی‌تر/قبلی‌ها)
+2026-10-08 04:19:06,919 [INFO] 🚀 دیباگ @IranintlTv (limit=1000)
+2026-10-08 04:19:06,919 [INFO] 🔄 تا 1000 پست (هر دور از آخرین مرز → قبلی/بعدی)
+2026-10-08 04:19:06,919 [INFO] 📌 دور 1/8 | جمع‌شده 0/1000
+2026-10-08 04:19:06,919 [INFO] 🐞 استخراج جهت=up start_link=False
+2026-10-08 04:19:14,132 [INFO] 🔍 نوار جستجو پیدا شد.
+2026-10-08 04:19:44,143 [CRITICAL] ❌ خطای مرگبار در اجرای اصلی: ElementHandle.click: Timeout 30000ms exceeded.
+Call log:
+  - attempting click action
+    - waiting for element to be visible, enabled and stable
+    - element is visible, enabled and stable
+    - scrolling into view if needed
+    - done scrolling
+    - <div class="rQsyDQTJ"></div> from <div class="Q8l6Ks2K opacity-transition fast not-open shown closing">…</div> subtree intercepts pointer events
+  - retrying click action
+    - waiting for element to be visible, enabled and stable
+    - element is visible, enabled and stable
+    - scrolling into view if needed
+    - done scrolling
+    - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+  - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    55 × waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+     - retrying click action
+       - waiting 500ms
+Traceback (most recent call last):
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 209, in run
+    await asyncio.wait_for(self._run_impl(), timeout=timeout)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 148, in _run_impl
+    items, context, page = await self._fetch_posts_from_telegram(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/debug_scraper.py", line 70, in _fetch_posts_from_telegram
+    items, context, page = await super()._fetch_posts_from_telegram(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 605, in _fetch_posts_from_telegram
+    entered = await self._search_and_enter_channel(page)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/new-youtube-SoundCloud-downloader/new-youtube-SoundCloud-downloader/.github/scripts/scraper.py", line 1108, in _search_and_enter_channel
+    await search_input.click()
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 2346, in click
+    await self._impl_obj.click(
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_element_handle.py", line 144, in click
+    await self._channel.send(
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 76, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 632, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: ElementHandle.click: Timeout 30000ms exceeded.
+Call log:
+  - attempting click action
+    - waiting for element to be visible, enabled and stable
+    - element is visible, enabled and stable
+    - scrolling into view if needed
+    - done scrolling
+    - <div class="rQsyDQTJ"></div> from <div class="Q8l6Ks2K opacity-transition fast not-open shown closing">…</div> subtree intercepts pointer events
+  - retrying click action
+    - waiting for element to be visible, enabled and stable
+    - element is visible, enabled and stable
+    - scrolling into view if needed
+    - done scrolling
+    - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+  - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    55 × waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div class="modal-backdrop"></div> from <div id="portals">…</div> subtree intercepts pointer events
+     - retrying click action
+       - waiting 500ms
+
