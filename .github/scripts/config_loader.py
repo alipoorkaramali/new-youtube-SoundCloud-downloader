@@ -22,6 +22,7 @@ class Config:
     timeout_seconds: int = 0           # 0 = نامحدود (از مقدار پیش‌فرض در کد استفاده می‌شود)
     auto_extend_timeout: bool = True   # تمدید خودکار زمان در صورت ادامهٔ موفق اسکرپینگ
     stop_before_id: str = ''           # از جدیدترین به عقب؛ id<=این مقدار جمع نشود
+    include_start_post: bool = False   # دانلود تکی: خود پست start_link را هم جمع کن
 
 def load_config(path: str = "config.yaml") -> Config:
     """بارگذاری تنظیمات از فایل YAML"""
@@ -57,5 +58,6 @@ def load_config(path: str = "config.yaml") -> Config:
         scroll_direction=data.get('scroll_direction', 'up'),
         timeout_seconds=data.get('timeout_seconds', 0),
         auto_extend_timeout=data.get('auto_extend_timeout', True),
-        stop_before_id=str(data.get('stop_before_id') or '')
+        stop_before_id=str(data.get('stop_before_id') or ''),
+        include_start_post=bool(data.get('include_start_post', False)),
     )
