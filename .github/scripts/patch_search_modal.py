@@ -192,7 +192,7 @@ if old_goto in src:
 else:
     print("WARN: goto block not found (maybe already patched)")
 
-# ── 4) search click ──
+# ── 4) search click (channel search path) ──
 new_search = (
     '        if not search_input:\n'
     '            self.logger.error("❌ نوار جستجو پیدا نشد.")\n'
@@ -258,7 +258,55 @@ elif "search_click_blocked" in src:
 else:
     print("WARN: search click block not found")
 
+# ── start_link path (download workflow uses perform_search_and_click) ──
+_old_lc = (
+    "            if not search_input:\n"
+    "                self.logger.error(\"❌ نوار جستجو پیدا نشد.\")\n"
+    "                return False\n"
+    "\n"
+    "            await search_input.click()\n"
+    "            await human_sleep(0.3, 0.2)\n"
+    "            await search_input.fill('')\n"
+    "            await human_sleep(0.2, 0.1)\n"
+    "            await search_input.type(self.start_link, delay=random.randint(80, 150))\n"
+    "            self.logger.info(f\"🔍 لینک تایپ شد: {self.start_link}\")\n"
+)
+_new_lc = (
+    "            if not search_input:\n"
+    "                self.logger.error(\"❌ نوار جستجو پیدا نشد.\")\n"
+    "                return False\n"
+    "\n"
+    "            # START_LINK_MODAL_PATCH: dismiss SW modal before search click\n"
+    "            await self._dismiss_blocking_modals(page, soft_reload=False)\n"
+    "            try:\n"
+    "                await search_input.click(timeout=15000)\n"
+    "            except Exception as e:\n"
+    "                self.logger.warning(f\"⚠️ start_link search click blocked: {e}\")\n"
+    "                await self._force_error_screenshot(page, \"start_link_search_click_blocked\")\n"
+    "                await self._dismiss_blocking_modals(page, soft_reload=True)\n"
+    "                try:\n"
+    "                    await search_input.click(timeout=10000, force=True)\n"
+    "                except Exception as e2:\n"
+    "                    self.logger.error(f\"❌ start_link search click failed: {e2}\")\n"
+    "                    await self._force_error_screenshot(page, \"start_link_search_click_force_failed\")\n"
+    "                    return False\n"
+    "            await human_sleep(0.3, 0.2)\n"
+    "            await search_input.fill('')\n"
+    "            await human_sleep(0.2, 0.1)\n"
+    "            await search_input.type(self.start_link, delay=random.randint(80, 150))\n"
+    "            self.logger.info(f\"🔍 لینک تایپ شد: {self.start_link}\")\n"
+)
+if "START_LINK_MODAL_PATCH" not in src:
+    if _old_lc in src:
+        src = src.replace(_old_lc, _new_lc, 1)
+        changed = True
+        print("OK: start_link search click modal-safe")
+    else:
+        print("WARN: start_link search click block not found")
+else:
+    print("skip: start_link search already patched")
+
 path.write_text(src, encoding="utf-8")
 print("written", path, "changed=", changed)
-for s in ("service_workers", "_dismiss_blocking_modals", "Something went wrong", "search_click_blocked"):
+for s in ("service_workers", "_dismiss_blocking_modals", "Something went wrong", "search_click_blocked", "START_LINK_MODAL_PATCH"):
     print(f"  has {s}: {s in path.read_text(encoding='utf-8')}")
