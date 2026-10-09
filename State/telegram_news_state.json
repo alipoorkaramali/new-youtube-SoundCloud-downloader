@@ -1,7 +1,8 @@
 {
   "channel_list": [
     "IranintlTv",
-    "bbcpersian"
+    "bbcpersian",
+    "rodast_omiddana"
   ],
   "channels": {
     "bbcpersian": {
@@ -11,6 +12,7 @@
     "IranintlTv": {
       "updated_at": "2026-10-09T07:32:51Z",
       "last_post_id": "361404"
-    }
+    },
+    "rodast_omiddana": {}
   }
 }
