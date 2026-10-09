@@ -1,8 +1,8 @@
 {
   "channel": "rodast_omiddana",
-  "limit": 50,
-  "start_link": "https://t.me/rodast_omiddana/82138",
+  "limit": 1000,
+  "start_link": "https://t.me/rodast_omiddana/82168",
   "scroll_direction": "up",
-  "total_posts": 50,
+  "total_posts": 2,
   "debug_mode": true
 }
