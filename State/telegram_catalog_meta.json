@@ -1,7 +1,32 @@
 {
   "github_repo": "alipoorkaramali/new-youtube-SoundCloud-downloader",
-  "issue_number": 14,
-  "issue_url": "https://github.com/alipoorkaramali/new-youtube-SoundCloud-downloader/issues/14",
-  "issue_title": "📱 Telegram Catalog – Download",
-  "updated_at": "2026-10-09T08:50:08Z"
+  "mode": "per_channel",
+  "keep_per_channel": 50,
+  "hub_title": "📱 Telegram Catalog – Channels",
+  "hub_issue_number": 19,
+  "hub_issue_url": "https://github.com/alipoorkaramali/new-youtube-SoundCloud-downloader/issues/19",
+  "channels": {
+    "IranintlTv": {
+      "issue_number": 16,
+      "issue_url": "https://github.com/alipoorkaramali/new-youtube-SoundCloud-downloader/issues/16",
+      "issue_title": "📱 Telegram Catalog – @IranintlTv",
+      "items": 50
+    },
+    "bbcpersian": {
+      "issue_number": 17,
+      "issue_url": "https://github.com/alipoorkaramali/new-youtube-SoundCloud-downloader/issues/17",
+      "issue_title": "📱 Telegram Catalog – @bbcpersian",
+      "items": 50
+    },
+    "rodast_omiddana": {
+      "issue_number": 18,
+      "issue_url": "https://github.com/alipoorkaramali/new-youtube-SoundCloud-downloader/issues/18",
+      "issue_title": "📱 Telegram Catalog – @rodast_omiddana",
+      "items": 50
+    }
+  },
+  "updated_at": "2026-10-09T09:28:47Z",
+  "issue_number": 16,
+  "issue_url": "https://github.com/alipoorkaramali/new-youtube-SoundCloud-downloader/issues/16",
+  "issue_title": "📱 Telegram Catalog – @IranintlTv"
 }
