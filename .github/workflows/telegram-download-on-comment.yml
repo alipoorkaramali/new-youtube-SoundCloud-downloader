@@ -5,12 +5,13 @@ on:
     types: [created]
 
 # /download <number|https://t.me/ch/id> [audio|video] [mega|repo]
+# Issue title must be: 📱 Telegram Catalog – @channel
 
 jobs:
   download:
     if: >
       contains(github.event.comment.body, '/download') &&
-      github.event.issue.title == '📱 Telegram Catalog – Download'
+      startsWith(github.event.issue.title, '📱 Telegram Catalog – @')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -77,6 +78,7 @@ jobs:
           REF_TYPE="${{ steps.parse.outputs.ref_type }}"
           REF="${{ steps.parse.outputs.ref }}"
           NUM="${{ steps.parse.outputs.number }}"
+          ISSUE_TITLE="${{ github.event.issue.title }}"
           python3 << 'PY'
           import json, os, re, sys
           from pathlib import Path
@@ -84,8 +86,64 @@ jobs:
           ref_type = os.environ.get("REF_TYPE", "")
           ref = os.environ.get("REF", "")
           num = os.environ.get("NUM", "")
+          issue_title = os.environ.get("ISSUE_TITLE", "")
+
+          def load_index():
+              path = Path("State/telegram_catalog_index.json")
+              if not path.exists():
+                  return {}
+              try:
+                  return json.loads(path.read_text(encoding="utf-8"))
+              except Exception:
+                  return {}
+
+          def channel_from_title(title: str) -> str:
+              m = re.search(r"@([A-Za-z0-9_]+)\s*$", title or "")
+              if m:
+                  return m.group(1)
+              m = re.search(r"Catalog\s*[–-]\s*@([A-Za-z0-9_]+)", title or "")
+              return m.group(1) if m else ""
+
+          def lookup_by_channel_num(idx, channel, n):
+              if not idx:
+                  return None
+              if channel and isinstance(idx.get(channel), dict):
+                  item = idx[channel].get(str(n))
+                  if isinstance(item, dict) and item.get("id"):
+                      return item
+              item = idx.get(str(n))
+              if isinstance(item, dict) and item.get("id"):
+                  if not channel or str(item.get("channel")) == channel:
+                      return item
+              for ch, bucket in idx.items():
+                  if not isinstance(bucket, dict):
+                      continue
+                  if bucket.get("id") and bucket.get("channel"):
+                      continue
+                  it = bucket.get(str(n))
+                  if isinstance(it, dict) and it.get("id"):
+                      if not channel or str(it.get("channel")) == channel or ch == channel:
+                          return it
+              return None
+
+          def lookup_by_url(idx, channel, pid):
+              for ch, bucket in (idx or {}).items():
+                  if isinstance(bucket, dict) and bucket.get("id") and bucket.get("channel"):
+                      if str(bucket.get("channel")) == channel and str(bucket.get("id")) == pid:
+                          return bucket
+                      continue
+                  if not isinstance(bucket, dict):
+                      continue
+                  for it in bucket.values():
+                      if not isinstance(it, dict):
+                          continue
+                      if str(it.get("channel") or ch) == channel and str(it.get("id")) == pid:
+                          return it
+              return None
 
           channel = pid = url = text = ""
+          idx = load_index()
+          title_ch = channel_from_title(issue_title)
 
           if ref_type == "url" or (ref and "t.me" in ref):
               m = re.search(r"t\.me/([A-Za-z0-9_]+)/([0-9]+)", ref)
@@ -94,27 +152,19 @@ jobs:
                   sys.exit(1)
               channel, pid = m.group(1), m.group(2)
               url = f"https://t.me/{channel}/{pid}"
-              idx_path = Path("State/telegram_catalog_index.json")
-              if idx_path.exists():
-                  try:
-                      idx = json.loads(idx_path.read_text(encoding="utf-8"))
-                      for v in idx.values():
-                          if str(v.get("channel")) == channel and str(v.get("id")) == pid:
-                              text = (v.get("text") or "")[:120]
-                              break
-                  except Exception:
-                      pass
+              found = lookup_by_url(idx, channel, pid)
+              if found:
+                  text = (found.get("text") or "")[:120]
           else:
-              idx_path = Path("State/telegram_catalog_index.json")
-              if not idx_path.exists():
-                  print("❌ catalog index نیست")
+              channel = title_ch
+              if not channel:
+                  print("❌ عنوان ایشو کانال ندارد (📱 Telegram Catalog – @channel)")
                   sys.exit(1)
-              idx = json.loads(idx_path.read_text(encoding="utf-8"))
-              item = idx.get(str(num))
+              item = lookup_by_channel_num(idx, channel, num)
               if not item:
-                  print(f"❌ شماره {num} پیدا نشد")
+                  print(f"❌ شماره {num} در کانال @{channel} پیدا نشد")
                   sys.exit(1)
-              channel = item["channel"]
+              channel = item.get("channel") or channel
               pid = str(item["id"])
               url = item.get("url") or f"https://t.me/{channel}/{pid}"
               text = (item.get("text") or "")[:120]
@@ -130,6 +180,7 @@ jobs:
           REF_TYPE: ${{ steps.parse.outputs.ref_type }}
           REF: ${{ steps.parse.outputs.ref }}
           NUM: ${{ steps.parse.outputs.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
 
       - uses: actions/setup-python@v5
         with:
@@ -156,7 +207,6 @@ jobs:
           python3 .github/scripts/patch_scraper_scroll.py .github/scripts/scraper.py || true
           python3 .github/scripts/patch_stop_before.py .github/scripts/scraper.py || true
           python3 .github/scripts/patch_include_start_post.py .github/scripts/scraper.py || true
-          # همان پچ مدال Service Worker که در اسکرپ ساعتی استفاده می‌شود
           python3 .github/scripts/patch_search_modal.py .github/scripts/scraper.py || true
 
       - name: Write config for single-post media download
@@ -395,7 +445,7 @@ jobs:
           gpg --batch --yes --passphrase "$RCLONE_PASSPHRASE" \
             --output ~/.config/rclone/rclone.conf --decrypt config/rclone_mega.conf.gpg
           chmod 600 ~/.config/rclone/rclone.conf
-          $RCLONE --config ~/.config/rclone/rclone.conf mkdir "$MEGA_PATH" 2>/dev/null || true
+          $RCLONE --config ~/.config/rclone/rclone.conf.mkdir "$MEGA_PATH" 2>/dev/null || true
           $RCLONE --config ~/.config/rclone/rclone.conf copy "$FOLDER" "$MEGA_PATH" --progress \
             --exclude "*screenshot*" --exclude "debug_*" --exclude "post_screenshots/**"
           LINKS=""
