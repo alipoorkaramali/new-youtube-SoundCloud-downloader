@@ -56,9 +56,10 @@ jobs:
           APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
           APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
           APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
+          APIFY_API_TOKEN_6: ${{ secrets.APIFY_API_TOKEN_6 }}
         run: |
           echo "=== Apify secrets status (present / missing) ==="
-          for name in APIFY_API_TOKEN APIFY_API_TOKEN_2 APIFY_API_TOKEN_3 APIFY_API_TOKEN_4 APIFY_API_TOKEN_5; do
+          for name in APIFY_API_TOKEN APIFY_API_TOKEN_2 APIFY_API_TOKEN_3 APIFY_API_TOKEN_4 APIFY_API_TOKEN_5 APIFY_API_TOKEN_6; do
             val="${!name}"
             if [ -n "$val" ]; then
               len=${#val}
@@ -91,6 +92,7 @@ jobs:
           APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
           APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
           APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
+          APIFY_API_TOKEN_6: ${{ secrets.APIFY_API_TOKEN_6 }}
           TOKEN_COUNTER_FILE: State/apify_token_counter.txt
           STATE_FILE: State/instagram_channel_state.json
         run: python .github/scripts/fetch_instagram_apify.py
