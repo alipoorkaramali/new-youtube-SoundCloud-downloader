@@ -2,7 +2,7 @@
 # Gitty - GitHub Manager for Termux (TUI) v2.2
 # Single source for version — change only GITTY_BUILD below
 
-GITTY_BUILD="2026-10-09-p25"
+GITTY_BUILD="2026-10-09-p25c"
 GITTY_PATCH_ID="p25"
 
 DEBUG="${DEBUG:-false}"
@@ -464,15 +464,45 @@ browse_issues() {
             printf "  ${BOLD}%-4s %-6s %s${NC}\n" "#" "State" "Title"
             echo -e "${CYAN}${sep}${NC}"
             for i in "${!issue_numbers[@]}"; do
-                local title_display=$(rtl "${issue_titles[$i]}")
-                local max_title=$((cols - 14)); [[ $max_title -lt 20 ]] && max_title=20
-                if [[ "$title_display" == *"Instagram posts"* ]] || [[ "$title_display" == *"instagram posts"* ]]; then
-                    if [[ "$title_display" == *"@"* ]]; then
-                        local at_part="${title_display##*@}"; at_part="${at_part%%[[:space:]]*}"
-                        title_display="@${at_part}"
-                    else title_display="Instagram"; fi
+                local raw_title="${issue_titles[$i]}"
+                local title_display
+                # Telegram catalog: drop repeated "Telegram Catalog –", keep icon + rest (full, no ...)
+                if [[ "$raw_title" == *"Telegram Catalog"* ]]; then
+                    local rest="$raw_title"
+                    # strip optional emoji prefix then the phrase
+                    rest="${rest#📱 }"
+                    rest="${rest#📱}"
+                    rest="${rest#Telegram Catalog}"
+                    # dash variants: – — - 
+                    rest="${rest# – }"
+                    rest="${rest# –}"
+                    rest="${rest# — }"
+                    rest="${rest# —}"
+                    rest="${rest# - }"
+                    rest="${rest#- }"
+                    rest="${rest#– }"
+                    rest="${rest#— }"
+                    # trim spaces
+                    rest="$(echo "$rest" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+                    if [[ -z "$rest" ]]; then
+                        title_display="📱"
+                    else
+                        title_display="📱 ${rest}"
+                    fi
+                elif [[ "$raw_title" == *"Instagram posts"* ]] || [[ "$raw_title" == *"instagram posts"* ]] \
+                    || [[ "$raw_title" == *"Instagram"* ]] || [[ "$raw_title" == *"instagram"* ]]; then
+                    # Instagram: icon + @channel (or short label), full text no ...
+                    if [[ "$raw_title" == *"@"* ]]; then
+                        local at_part="${raw_title##*@}"; at_part="${at_part%%[[:space:]]*}"
+                        at_part="${at_part%%[^A-Za-z0-9_.]*}"
+                        title_display="📸 @${at_part}"
+                    else
+                        title_display="📸 Instagram"
+                    fi
+                else
+                    title_display=$(rtl "$raw_title")
                 fi
-                if [[ ${#title_display} -gt $max_title ]]; then title_display="${title_display:0:$((max_title-1))}..."; fi
+                # show full title (no middle truncation with ...)
                 printf "  ${YELLOW}%-4s${NC} " "${issue_numbers[$i]}"
                 if [[ "${issue_states[$i]}" == "open" ]]; then printf "${GREEN}%-6s${NC} " "open"
                 else printf "${RED}%-6s${NC} " "closed"; fi
