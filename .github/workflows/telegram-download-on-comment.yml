@@ -445,7 +445,7 @@ jobs:
           gpg --batch --yes --passphrase "$RCLONE_PASSPHRASE" \
             --output ~/.config/rclone/rclone.conf --decrypt config/rclone_mega.conf.gpg
           chmod 600 ~/.config/rclone/rclone.conf
-          $RCLONE --config ~/.config/rclone/rclone.conf.mkdir "$MEGA_PATH" 2>/dev/null || true
+          $RCLONE --config ~/.config/rclone/rclone.conf mkdir "$MEGA_PATH" 2>/dev/null || true
           $RCLONE --config ~/.config/rclone/rclone.conf copy "$FOLDER" "$MEGA_PATH" --progress \
             --exclude "*screenshot*" --exclude "debug_*" --exclude "post_screenshots/**"
           LINKS=""
