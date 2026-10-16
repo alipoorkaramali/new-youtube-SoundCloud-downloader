@@ -2,8 +2,8 @@
 # Gitty - GitHub Manager for Termux (TUI) v2.2
 # Single source for version — change only GITTY_BUILD below
 
-GITTY_BUILD="2026-10-09-p25c"
-GITTY_PATCH_ID="p25"
+GITTY_BUILD="2026-10-16-p26"
+GITTY_PATCH_ID="p26"
 
 DEBUG="${DEBUG:-false}"
 set -eo pipefail
@@ -623,7 +623,7 @@ browse_issues() {
                 while IFS= read -r _sc; do
                     [[ -z "$_sc" ]] && continue
                     case "${_sc,,}" in
-                        audio|video|mega|repo|empty|costume|auto) continue ;;
+                        audio|video|mega|repo|empty|costume|auto|balanced|quality|high_quality|size|ultra|original) continue ;;
                     esac
                     shortcodes+=("$_sc")
                 done < <(echo "$issue_body" | grep -oE '`([A-Za-z0-9_-]+)`' | sed 's/`//g' | sort -u)
@@ -642,6 +642,9 @@ browse_issues() {
                     printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "video  → Default/manual (**costume**)"
                     printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "repo   → Save in downloader **repo**"
                     printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "mega   → Upload to **Mega.nz**"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "Quality (video+mega only):"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "  balanced (default) · quality · high_quality"
+                    printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "  size · ultra · original"
                 else
                     printf "${GREEN}|${NC} ${BOLD}%-*s${NC} ${GREEN}|${NC}\n" $((box_w-2)) "Shortcodes"
                     echo -e "${GREEN}${mid_border}${NC}"
@@ -711,9 +714,33 @@ browse_issues() {
                             2|mega|m|M) dest="mega" ;;
                             *) dest="repo" ;;
                         esac
+                        # Quality only applies to video + mega (costume Mega workflow)
+                        local quality=""
+                        if [[ "$mode" == "video" && "$dest" == "mega" ]]; then
+                            echo -e "${CYAN}Quality (optimization_profile):${NC}"
+                            echo "  1) balanced      ⭐ default, ~50% size, fast"
+                            echo "  2) quality       🎬 high quality, slower"
+                            echo "  3) high_quality  🔥 max quality, long"
+                            echo "  4) size          📱 small size, fast"
+                            echo "  5) ultra         💾 very small, very fast"
+                            echo "  6) original      🔵 no re-encode"
+                            echo -ne "${YELLOW}> ${NC}"; read -r q_choice
+                            case "$q_choice" in
+                                2|quality) quality="quality" ;;
+                                3|high_quality|hq) quality="high_quality" ;;
+                                4|size) quality="size" ;;
+                                5|ultra) quality="ultra" ;;
+                                6|original|orig) quality="original" ;;
+                                *) quality="balanced" ;;
+                            esac
+                        fi
                         # Harmonized command format matching watcher README:
-                        # /download <number> [audio|video] [mega|repo]
-                        local comment_body="/download $target $mode $dest"
+                        # /download <number> [audio|video] [mega|repo] [quality]
+                        if [[ -n "$quality" ]]; then
+                            local comment_body="/download $target $mode $dest $quality"
+                        else
+                            local comment_body="/download $target $mode $dest"
+                        fi
                         echo -e "${CYAN}Posting comment: ${BOLD}$comment_body${NC}"
                         local payload
                         payload=$(jq -n --arg b "$comment_body" '{body:$b}')
@@ -721,7 +748,11 @@ browse_issues() {
                         response=$(api_call "POST" "https://api.github.com/repos/$repo/issues/${issue_numbers[$idx]}/comments" "$payload")
                         if echo "$response" | jq -e '.id' &>/dev/null; then
                             echo -e "${GREEN}✅ Comment posted. Workflow triggered.${NC}"
-                            echo -e "${YELLOW}   mode=$mode  dest=$dest${NC}"
+                            if [[ -n "$quality" ]]; then
+                                echo -e "${YELLOW}   mode=$mode  dest=$dest  quality=$quality${NC}"
+                            else
+                                echo -e "${YELLOW}   mode=$mode  dest=$dest${NC}"
+                            fi
                         else
                             echo -e "${RED}❌ Failed: $(echo "$response" | jq -r '.message // .')${NC}"
                         fi
