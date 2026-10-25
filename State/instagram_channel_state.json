@@ -1,25 +1,25 @@
 {
   "channels": {
     "bbcpersian": {
-      "last_shortcode": "De7BjcTiE1r",
-      "last_fetched_at": "2026-10-25T15:48:40.874478",
-      "last_file": "instagram_data/bbcpersian_20261025_154840.json",
+      "last_shortcode": "De7WKJDDwlo",
+      "last_fetched_at": "2026-10-25T20:30:49.403328",
+      "last_file": "instagram_data/bbcpersian_20261025_203049.json",
       "recent_shortcodes": [
+        "De7WKJDDwlo",
+        "De7TU2PDchZ",
+        "De7P4i_G_X2",
+        "De7PVMkCUoO",
+        "De7HAdgiPIG",
+        "De7FJyqk5sT",
         "De7BjcTiE1r",
         "De7A_C_jVsd",
         "De60-hzCEMs",
-        "De6zXZJFVjS",
-        "De6yJ13IMe3",
-        "De6ve1gCFON",
-        "De6m41CDGsV",
-        "De6eRGmCD-a",
-        "De6bqEdlSEQ",
-        "De6ZtsDCMQB"
+        "De6zXZJFVjS"
       ]
     },
     "mohammadjavadhosseinii": {
       "last_shortcode": "Dem27irt7vZ",
-      "last_fetched_at": "2026-10-25T15:49:13.412678",
+      "last_fetched_at": "2026-10-25T20:31:05.364716",
       "last_file": "instagram_data/mohammadjavadhosseinii_20261021_023135.json",
       "recent_shortcodes": [
         "Dem27irt7vZ",
@@ -36,7 +36,7 @@
     },
     "alireza.mehrabii": {
       "last_shortcode": "De399i3Itql",
-      "last_fetched_at": "2026-10-25T15:49:30.670180",
+      "last_fetched_at": "2026-10-25T20:31:58.197084",
       "last_file": "instagram_data/alireza.mehrabii_20261024_143156.json",
       "recent_shortcodes": [
         "De399i3Itql",
@@ -52,27 +52,28 @@
       ]
     },
     "iranintltv": {
-      "last_shortcode": "De7EQMmicc4",
-      "last_fetched_at": "2026-10-25T15:50:17.041183",
-      "last_file": "instagram_data/iranintltv_20261025_155017.json",
+      "last_shortcode": "De7jZjWCYNv",
+      "last_fetched_at": "2026-10-25T20:32:26.457022",
+      "last_file": "instagram_data/iranintltv_20261025_203226.json",
       "recent_shortcodes": [
-        "De7EQMmicc4",
-        "De7BbOxCnt7",
-        "De7A_w3EYyq",
-        "De6-23iAuhl",
-        "De691skDKXz",
-        "De68Q2ckcVy",
-        "De67S7SAvY8",
-        "De66mg1kTyT",
-        "De639cNCKaH",
-        "De63chjDhgP"
+        "De7jZjWCYNv",
+        "De7hFlIAaDr",
+        "De7hC-TGHI4",
+        "De7eCbxACoA",
+        "De7cx3zD8gU",
+        "De7WeDBkx2R",
+        "De7VYR6josM",
+        "De7TWVYjVk_",
+        "De7SzA5Cok5",
+        "De7Sm_NCd8x"
       ]
     },
     "Risheh84": {
-      "last_shortcode": "De6Xk1TsaaR",
-      "last_fetched_at": "2026-10-25T15:50:31.170936",
-      "last_file": "instagram_data/Risheh84_20261025_155031.json",
+      "last_shortcode": "De7jRGBIuKZ",
+      "last_fetched_at": "2026-10-25T20:32:59.671715",
+      "last_file": "instagram_data/Risheh84_20261025_203259.json",
       "recent_shortcodes": [
+        "De7jRGBIuKZ",
         "De6Xk1TsaaR",
         "De45GOuopUr",
         "De2WEepoj_x",
@@ -81,8 +82,7 @@
         "DeulnBiITPD",
         "DesBChsoJNM",
         "DepjLLpI4X_",
-        "Dem4UYmMURS",
-        "DemI1A7iNA7"
+        "Dem4UYmMURS"
       ]
     }
   }
