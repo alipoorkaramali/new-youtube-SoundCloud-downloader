@@ -1,8 +1,8 @@
 {
   "channel": "bbcpersian",
   "limit": 1000,
-  "start_link": "https://t.me/bbcpersian/295910",
+  "start_link": "https://t.me/bbcpersian/295917",
   "scroll_direction": "up",
-  "total_posts": 7,
+  "total_posts": 10,
   "debug_mode": true
 }
